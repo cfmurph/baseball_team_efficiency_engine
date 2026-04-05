@@ -22,11 +22,16 @@ from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from xgboost import XGBRegressor
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
+
+try:
+    from xgboost import XGBRegressor
+    _XGB_AVAILABLE = True
+except ImportError:
+    _XGB_AVAILABLE = False
 
 from src.baseball_analytics.config import load_settings
 from src.baseball_analytics.io import ensure_dir
@@ -88,6 +93,8 @@ def _make_linear_pipeline(feature_cols: list[str]) -> Pipeline:
 
 
 def _make_xgb_pipeline(feature_cols: list[str], random_state: int) -> Pipeline:
+    if not _XGB_AVAILABLE:
+        raise RuntimeError("xgboost is not installed. Run: pip install xgboost")
     return Pipeline([
         ("preprocessor", _build_preprocessor(feature_cols)),
         ("regressor", XGBRegressor(
@@ -104,15 +111,14 @@ def _make_xgb_pipeline(feature_cols: list[str], random_state: int) -> Pipeline:
 
 def _plot_actual_vs_predicted(
     y_test: np.ndarray,
-    preds_lr: np.ndarray,
-    preds_xgb: np.ndarray,
+    predictions: dict[str, np.ndarray],
     out_path: Path,
 ) -> None:
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-    for ax, preds, label in [
-        (axes[0], preds_lr, "Linear Regression"),
-        (axes[1], preds_xgb, "XGBoost"),
-    ]:
+    items = list(predictions.items())
+    fig, axes = plt.subplots(1, len(items), figsize=(7 * len(items), 6))
+    if len(items) == 1:
+        axes = [axes]
+    for ax, (label, preds) in zip(axes, items):
         ax.scatter(y_test, preds, alpha=0.55, s=22, color="#2a7ae2")
         lo = min(y_test.min(), preds.min()) - 2
         hi = max(y_test.max(), preds.max()) + 2
@@ -197,7 +203,9 @@ def main(config_path: str = "config/settings.yaml") -> None:
     ).fetchdf()
     con.close()
 
-    # Use only features that actually exist in the dataframe
+    if not _XGB_AVAILABLE:
+        log.warning("xgboost not installed — running LinearRegression only. Install with: pip install xgboost")
+
     feature_cols = [c for c in _FEATURES if c in df.columns]
     X = df[feature_cols]
     y = df["wins"]
@@ -209,54 +217,74 @@ def main(config_path: str = "config/settings.yaml") -> None:
         X, y, df[["year_id", "team_name"]], test_size=test_size, random_state=rs
     )
 
+    # ---- LinearRegression (always) ----
     log.info("Training LinearRegression baseline (%d train, %d test)", len(X_train), len(X_test))
     lr_model = _make_linear_pipeline(feature_cols)
     lr_model.fit(X_train, y_train)
     preds_lr = lr_model.predict(X_test)
 
-    log.info("Training XGBoost model")
-    xgb_model = _make_xgb_pipeline(feature_cols, rs)
-    xgb_model.fit(X_train, y_train)
-    preds_xgb = xgb_model.predict(X_test)
+    all_preds: dict[str, np.ndarray] = {"Linear Regression": preds_lr}
+    metrics_rows = [{
+        "model": "LinearRegression",
+        "mae": mean_absolute_error(y_test, preds_lr),
+        "r2": r2_score(y_test, preds_lr),
+    }]
 
-    # ---- Metrics ----
-    metrics = pd.DataFrame([
-        {
-            "model": "LinearRegression",
-            "mae": mean_absolute_error(y_test, preds_lr),
-            "r2": r2_score(y_test, preds_lr),
-        },
-        {
+    # ---- XGBoost (optional) ----
+    preds_xgb: np.ndarray | None = None
+    xgb_model = None
+    if _XGB_AVAILABLE:
+        log.info("Training XGBoost model")
+        xgb_model = _make_xgb_pipeline(feature_cols, rs)
+        xgb_model.fit(X_train, y_train)
+        preds_xgb = xgb_model.predict(X_test)
+        all_preds["XGBoost"] = preds_xgb
+        metrics_rows.append({
             "model": "XGBoost",
             "mae": mean_absolute_error(y_test, preds_xgb),
             "r2": r2_score(y_test, preds_xgb),
-        },
-    ])
+        })
+
+    # ---- Metrics ----
+    metrics = pd.DataFrame(metrics_rows)
     metrics["n_rows"] = len(df)
     metrics.to_csv(artifacts_dir / "win_model_metrics.csv", index=False)
     log.info("Model metrics:\n%s", metrics.to_string(index=False))
 
-    # Use XGBoost as primary (generally better)
+    # ---- Predictions CSV ----
     results = meta_test.copy()
     results["actual_wins"] = y_test.values
     results["predicted_wins_lr"] = preds_lr
-    results["predicted_wins_xgb"] = preds_xgb
-    results["absolute_error_xgb"] = (results["actual_wins"] - results["predicted_wins_xgb"]).abs()
-    results = results.sort_values("absolute_error_xgb", ascending=False)
+    primary_err_col = "absolute_error_lr"
+    if preds_xgb is not None:
+        results["predicted_wins_xgb"] = preds_xgb
+        results["absolute_error_xgb"] = (results["actual_wins"] - preds_xgb).abs()
+        primary_err_col = "absolute_error_xgb"
+    else:
+        results["absolute_error_lr"] = (results["actual_wins"] - preds_lr).abs()
+    results = results.sort_values(primary_err_col, ascending=False)
     results.to_csv(artifacts_dir / "win_model_predictions.csv", index=False)
 
-    # ---- Feature importance (XGBoost) ----
-    xgb_reg = xgb_model.named_steps["regressor"]
-    importances = pd.DataFrame({
-        "feature": feature_cols,
-        "importance": xgb_reg.feature_importances_,
-    }).sort_values("importance", ascending=False)
+    # ---- Feature importance (XGBoost preferred, LR fallback via coef) ----
+    if xgb_model is not None:
+        xgb_reg = xgb_model.named_steps["regressor"]
+        importances = pd.DataFrame({
+            "feature": feature_cols,
+            "importance": xgb_reg.feature_importances_,
+        }).sort_values("importance", ascending=False)
+    else:
+        lr_reg = lr_model.named_steps["regressor"]
+        importances = pd.DataFrame({
+            "feature": feature_cols,
+            "importance": np.abs(lr_reg.coef_),
+        }).sort_values("importance", ascending=False)
     importances.to_csv(artifacts_dir / "win_model_feature_importance.csv", index=False)
     log.info("Top features:\n%s", importances.head(10).to_string(index=False))
 
     # ---- Plots ----
     _plot_actual_vs_predicted(
-        y_test.values, preds_lr, preds_xgb,
+        y_test.values,
+        all_preds,
         artifacts_dir / "win_model_actual_vs_predicted.png",
     )
     log.info("Saved actual vs predicted plot")
