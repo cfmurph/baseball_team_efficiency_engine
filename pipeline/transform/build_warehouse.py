@@ -405,18 +405,24 @@ def main(config_path: str = "config/settings.yaml") -> None:
         "fact_team_season": fact_team_season,
     }
     for table_name, df in tables.items():
-        con.execute(f"DELETE FROM {table_name}")
-        con.register(f"_{table_name}_df", df)
-        try:
-            con.execute(f"INSERT INTO {table_name} SELECT * FROM _{table_name}_df")
-        except Exception as exc:
-            log.warning("Insert into %s failed: %s — attempting column-aligned insert", table_name, exc)
-            # Fall back: insert only matching columns
-            db_cols = [r[0] for r in con.execute(f"PRAGMA table_info('{table_name}')").fetchall()]
-            common = [c for c in df.columns if c in db_cols]
-            tmp = df[common]
-            con.register(f"_{table_name}_df2", tmp)
-            con.execute(f"INSERT INTO {table_name} ({', '.join(common)}) SELECT * FROM _{table_name}_df2")
+        # DDL used CREATE OR REPLACE so the table is always fresh — no DELETE needed.
+        # Use explicit column list to be safe against column order mismatches.
+        # PRAGMA table_info returns (cid, name, type, notnull, dflt_value, pk)
+        db_cols = [r[1] for r in con.execute(f"PRAGMA table_info('{table_name}')").fetchall()]
+        common = [c for c in df.columns if c in db_cols]
+        if not common:
+            log.error(
+                "No overlapping columns between DataFrame (%s) and table %s (%s). Skipping.",
+                list(df.columns),
+                table_name,
+                db_cols,
+            )
+            continue
+        view_name = f"_load_{table_name}"
+        con.register(view_name, df[common])
+        col_list = ", ".join(common)
+        con.execute(f"INSERT INTO {table_name} ({col_list}) SELECT {col_list} FROM {view_name}")
+        con.unregister(view_name)
         log.info("Loaded %d rows into %s", len(df), table_name)
 
     con.close()

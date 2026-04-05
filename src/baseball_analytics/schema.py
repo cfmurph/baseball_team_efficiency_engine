@@ -2,7 +2,7 @@ WAREHOUSE_DDL = """
 -- ----------------------------------------------------------------
 -- Dimension: Team
 -- ----------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS dim_team (
+CREATE OR REPLACE TABLE dim_team (
     team_key    VARCHAR PRIMARY KEY,
     team_id     VARCHAR,
     franchise_id VARCHAR,
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS dim_team (
 -- ----------------------------------------------------------------
 -- Dimension: Season
 -- ----------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS dim_season (
+CREATE OR REPLACE TABLE dim_season (
     season_key  INTEGER PRIMARY KEY,
     year_id     INTEGER
 );
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS dim_season (
 -- ----------------------------------------------------------------
 -- Dimension: Player
 -- ----------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS dim_player (
+CREATE OR REPLACE TABLE dim_player (
     player_id       VARCHAR PRIMARY KEY,
     name_first      VARCHAR,
     name_last       VARCHAR,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS dim_player (
 -- ----------------------------------------------------------------
 -- Fact: Salary (player-season-team)
 -- ----------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS fact_salary (
+CREATE OR REPLACE TABLE fact_salary (
     season_key  INTEGER,
     team_id     VARCHAR,
     player_id   VARCHAR,
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS fact_salary (
 -- ----------------------------------------------------------------
 -- Fact: Player Season (batting + pitching + WAR)
 -- ----------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS fact_player_season (
+CREATE OR REPLACE TABLE fact_player_season (
     player_id       VARCHAR,
     season_key      INTEGER,
     team_id         VARCHAR,
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS fact_player_season (
 -- ----------------------------------------------------------------
 -- Fact: Team Season (team-level aggregated metrics)
 -- ----------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS fact_team_season (
+CREATE OR REPLACE TABLE fact_team_season (
     team_key            VARCHAR,
     season_key          INTEGER,
 
