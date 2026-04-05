@@ -1,0 +1,13 @@
+name: baseball_team_efficiency_engine
+version: '1.0'
+config-version: 2
+profile: baseball_team_efficiency_engine
+model-paths: ["models"]
+macro-paths: ["macros"]
+clean-targets: ["target", "dbt_packages"]
+models:
+  baseball_team_efficiency_engine:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

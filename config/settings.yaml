@@ -1,0 +1,17 @@
+project_name: baseball_team_efficiency_engine
+min_year: 1990
+warehouse_path: data/warehouse/baseball_analytics.duckdb
+raw_dir: data/raw
+staging_dir: data/staging
+artifacts_dir: artifacts
+sources:
+  teams: https://vincentarelbundock.github.io/Rdatasets/csv/Lahman/Teams.csv
+  salaries: https://vincentarelbundock.github.io/Rdatasets/csv/Lahman/Salaries.csv
+  people: https://vincentarelbundock.github.io/Rdatasets/csv/Lahman/People.csv
+  batting: https://vincentarelbundock.github.io/Rdatasets/csv/Lahman/Batting.csv
+  pitching: https://vincentarelbundock.github.io/Rdatasets/csv/Lahman/Pitching.csv
+  fielding: https://vincentarelbundock.github.io/Rdatasets/csv/Lahman/Fielding.csv
+modeling:
+  random_state: 42
+  test_size: 0.2
+  n_clusters: 4

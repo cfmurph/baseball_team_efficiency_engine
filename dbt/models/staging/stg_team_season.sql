@@ -1,0 +1,23 @@
+select
+  team_key,
+  season_key,
+  wins,
+  losses,
+  games,
+  runs_scored,
+  runs_allowed,
+  strikeouts,
+  attendance,
+  run_diff,
+  pythag_wins,
+  payroll,
+  max_salary,
+  median_salary,
+  top_1_salary_share,
+  top_3_salary_share,
+  top_5_salary_share,
+  gini_salary,
+  payroll_per_win,
+  wins_per_10m,
+  run_diff_per_10m
+from fact_team_season
