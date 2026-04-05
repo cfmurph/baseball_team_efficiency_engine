@@ -3,4 +3,6 @@ __all__ = [
     "io",
     "metrics",
     "schema",
+    "war",
+    "validation",
 ]

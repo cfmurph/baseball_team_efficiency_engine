@@ -11,6 +11,13 @@ select
   f.runs_allowed,
   f.run_diff,
   f.pythag_wins,
+  f.pythag_gap,
+  f.base_runs,
+  f.base_runs_gap,
+  f.team_batting_war,
+  f.team_pitching_war,
+  f.team_total_war,
+  f.war_win_gap,
   f.payroll,
   f.max_salary,
   f.median_salary,
@@ -18,10 +25,15 @@ select
   f.top_3_salary_share,
   f.top_5_salary_share,
   f.gini_salary,
+  f.dead_money_share,
   f.payroll_per_win,
   f.wins_per_10m,
   f.run_diff_per_10m,
-  f.wins - f.pythag_wins as pythag_gap
+  f.cost_per_war,
+  f.war_per_1m,
+  f.surplus_value,
+  f.window_phase,
+  f.wins - f.pythag_wins as pythag_gap_check
 from {{ ref('stg_team_season') }} f
 join dim_team t using (team_key)
 join dim_season s using (season_key)
