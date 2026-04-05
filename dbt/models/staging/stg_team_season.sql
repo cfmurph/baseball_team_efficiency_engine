@@ -10,6 +10,13 @@ select
   attendance,
   run_diff,
   pythag_wins,
+  pythag_gap,
+  base_runs,
+  base_runs_gap,
+  team_batting_war,
+  team_pitching_war,
+  team_total_war,
+  war_win_gap,
   payroll,
   max_salary,
   median_salary,
@@ -17,7 +24,12 @@ select
   top_3_salary_share,
   top_5_salary_share,
   gini_salary,
+  dead_money_share,
   payroll_per_win,
   wins_per_10m,
-  run_diff_per_10m
+  run_diff_per_10m,
+  cost_per_war,
+  war_per_1m,
+  surplus_value,
+  window_phase
 from fact_team_season
