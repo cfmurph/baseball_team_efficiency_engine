@@ -1,34 +1,31 @@
 sr_team_id,sr_abbr,sr_market,sr_name,lahman_team_id,lahman_franch_id
+f246a5e5-afdb-479c-9aaa-c68beeda7af6,NYM,New York,Mets,NYN,NYM
+d89bed32-3aee-4407-99e3-4103641b999a,WSH,Washington,Nationals,WAS,WSN
+2142e1ba-3b40-445c-b8bb-f1f8b1054220,PHI,Philadelphia,Phillies,PHI,PHI
+12079497-e414-450a-8bf2-29f91de646bf,ATL,Atlanta,Braves,ATL,ATL
 03556285-bdbb-4576-a06d-42f71f46ddc5,MIA,Miami,Marlins,MIA,FLA
-0bdc547f-5e18-4e44-83f9-7b27b1c9fc2f,CIN,Cincinnati,Reds,CIN,CIN
-12079497-e414-450b-8e15-8173c5a5d851,WAS,Washington,Nationals,WAS,WSN
-1d678440-b4b1-4954-9b39-70afba3927af,NYY,New York,Yankees,NYA,NYY
-29dd9a87-5bcc-4774-80c3-7f50d985068b,MIN,Minnesota,Twins,MIN,MIN
-2f75d968-7b83-4194-a955-4c35e63a8e97,CLE,Cleveland,Guardians,CLE,CLE
+ef64da7f-cfaf-4300-87b0-9313386b977c,LAD,Los Angeles,Dodgers,LAN,LAD
+d52d5339-cbdd-43f3-9dfa-a42fd588b9a3,SD,San Diego,Padres,SDN,SDP
+a7723160-10b7-4277-a309-d8dd95a8ae65,SF,San Francisco,Giants,SFN,SFG
+29dd9a87-5bcc-4774-80c3-7f50d985068b,COL,Colorado,Rockies,COL,COL
+25507be1-6a68-4267-bd82-e097d94b359b,AZ,Arizona,Diamondbacks,ARI,ARI
+dcfd5266-00ce-442c-bc09-264cd20cf455,MIL,Milwaukee,Brewers,MIL,MIL
+c874a065-c115-4e7d-b0f0-235584fb0e6f,CIN,Cincinnati,Reds,CIN,CIN
+55714da8-fcaf-4574-8443-59bfb511a524,CHC,Chicago,Cubs,CHN,CHC
+481dfe7e-5dab-46ab-a49f-9dcc2b6e2cfd,PIT,Pittsburgh,Pirates,PIT,PIT
 44671792-dc02-4fdd-a5ad-f5f17edaa9d7,STL,St. Louis,Cardinals,SLN,STL
-47f490cd-2f58-4ef7-afd7-ab0c3fb44d64,BOS,Boston,Red Sox,BOS,BOS
-481dfe7e-5dab-46ab-a49f-9dcc2b6a4590,HOU,Houston,Astros,HOU,HOU
-4e37b4e7-9e84-4d11-9b5d-ce6e7ae609db,LAD,Los Angeles,Dodgers,LAN,LAD
-54291194-76b6-4c75-ad2d-86a235ed98e3,DET,Detroit,Tigers,DET,DET
-57a29afe-ed50-445e-8ace-f7de00ab52d8,OAK,Oakland,Athletics,OAK,OAK
-583ecfa4-fb46-11e1-82cb-f4ce4684ea4c,CWS,Chicago,White Sox,CHA,CHW
-583ecfda-fb46-11e1-82cb-f4ce4684ea4c,NYM,New York,Mets,NYN,NYM
-583ecfde-fb46-11e1-82cb-f4ce4684ea4c,BAL,Baltimore,Orioles,BAL,BAL
-583ecff6-fb46-11e1-82cb-f4ce4684ea4c,PHI,Philadelphia,Phillies,PHI,PHI
-5e456e1a-8dc0-4e72-a577-28bcb7a48c46,TB,Tampa Bay,Rays,TBA,TBD
-5f0bd8c6-40e3-4e10-ab8c-9e83b0440e2a,COL,Colorado,Rockies,COL,COL
-72ae2e10-c8e4-441a-8c08-e9eefd58059c,KC,Kansas City,Royals,KCA,KCR
-75729d48-c87b-4bc8-9e85-665e749e5dac,TOR,Toronto,Blue Jays,TOR,TOR
-80715d0d-0d2d-49d0-bc5c-8e58a7f9c4dc,ATL,Atlanta,Braves,ATL,ATL
-833a51a9-0d84-410f-bd77-80a1982f77f6,SEA,Seattle,Mariners,SEA,SEA
-a09ec676-f887-43dc-bbb3-cf4bbaee9a18,NYY,New York,Yankees,NYA,NYY
-a7723160-10b7-4461-b3a6-6a2aa835c3c3,ARI,Arizona,Diamondbacks,ARI,ARI
+eb21dadd-8f10-4095-8bf3-dfb3b779f107,HOU,Houston,Astros,HOU,HOU
+d99f919b-1534-4516-8e8a-9cd106c6d8cd,TEX,Texas,Rangers,TEX,TEX
+4f735188-37c8-473d-ae32-1f7e34ccf892,LAA,Los Angeles,Angels,LAA,ANA
+43a39081-52b4-4f93-ad29-da7f329ea960,SEA,Seattle,Mariners,SEA,SEA
+27a59d3b-ff7c-48ea-b016-4798f560f5e1,ATH,Oakland,Athletics,OAK,OAK
+aa34e0ed-f342-4ec6-b774-c79b47b60e2d,MIN,Minnesota,Twins,MIN,MIN
+833a51a9-0d84-410f-bd77-da08c3e5e26e,KC,Kansas City,Royals,KCA,KCR
+80715d0d-0d2a-450f-a970-1b9a3b18c7e7,CLE,Cleveland,Guardians,CLE,CLE
+575c19b7-4052-41c2-9f0a-1c5813d02f99,DET,Detroit,Tigers,DET,DET
+47f490cd-2f58-4ef7-9dfd-2ad6ba6c1ae8,CWS,Chicago,White Sox,CHA,CHW
 bdc11650-6f74-49c4-875e-778aeb7632d9,TB,Tampa Bay,Rays,TBA,TBD
-bfdff9d0-b129-4a82-ac07-c770c7d0a87e,SF,San Francisco,Giants,SFN,SFG
-c86fc1be-aff2-4a59-a7bf-59030f43d597,PIT,Pittsburgh,Pirates,PIT,PIT
-cbbef69e-9b29-4db2-b21c-2ff2d58f2a37,CLE,Cleveland,Guardians,CLE,CLE
-d99f919b-1534-4516-8e8a-9cd106ab6679,SD,San Diego,Padres,SDN,SDP
-dcfd5088-afc3-4b57-b42d-8e393a0a9b9d,CHC,Chicago,Cubs,CHN,CHC
-e6144bec-a4a5-4a4c-aadb-f50e09e91f86,MIL,Milwaukee,Brewers,MIL,MIL
-ef64da7f-cfaf-4300-87b0-9313386b977c,LAA,Los Angeles,Angels,LAA,ANA
-f246a5e5-afdb-479c-9aaa-c68beeda7af6,TEX,Texas,Rangers,TEX,TEX
+a09ec676-f887-43dc-bbb3-cf4bbaee9a18,NYY,New York,Yankees,NYA,NYY
+93941372-eb4c-4c40-aced-fe3267174393,BOS,Boston,Red Sox,BOS,BOS
+75729d34-bca7-4a0f-b3df-6f26c6ad3719,BAL,Baltimore,Orioles,BAL,BAL
+1d678440-b4b1-4954-9b39-70afb3ebbcfa,TOR,Toronto,Blue Jays,TOR,TOR
