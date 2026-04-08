@@ -8,3 +8,6 @@ artifacts/*.png
 artifacts/*.csv
 data/raw/*.csv
 data/staging/*.csv
+data/sr_cache/
+.env
+*.env
