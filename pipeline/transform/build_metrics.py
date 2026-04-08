@@ -57,31 +57,53 @@ ORDER BY s.year_id, t.team_name
 """
 
 _PLAYER_QUERY = """
+-- One row per player per season.
+-- Players who were traded mid-season have their stats summed across teams;
+-- team_name shows the team where they accrued the most WAR.
 SELECT
     p.player_id,
     dp.name_full,
     dp.name_first,
     dp.name_last,
-    p.season_key   AS year_id,
-    p.team_id,
-    t.team_name,
-    p.player_type,
-    p.pa,
-    p.hr,
-    p.woba,
-    p.batting_war,
-    p.ip,
-    p.fip,
-    p.era,
-    p.pitching_war,
-    p.player_war,
-    p.salary,
-    p.surplus_value,
-    p.contract_label
+    p.season_key                        AS year_id,
+
+    -- Primary team = team with highest WAR that season
+    FIRST(p.team_id ORDER BY p.player_war DESC NULLS LAST)  AS team_id,
+    FIRST(t.team_name ORDER BY p.player_war DESC NULLS LAST) AS team_name,
+
+    -- Pick the most specific player type (both > pitcher > batter)
+    CASE
+        WHEN SUM(CASE WHEN p.player_type = 'both'    THEN 1 ELSE 0 END) > 0 THEN 'both'
+        WHEN SUM(CASE WHEN p.player_type = 'pitcher' THEN 1 ELSE 0 END) > 0 THEN 'pitcher'
+        ELSE 'batter'
+    END                                 AS player_type,
+
+    SUM(p.pa)                           AS pa,
+    SUM(p.hr)                           AS hr,
+    SUM(p.bb)                           AS bb,
+    AVG(CASE WHEN p.pa > 0 THEN p.woba END) AS woba,
+
+    SUM(p.batting_war)                  AS batting_war,
+    SUM(p.ip)                           AS ip,
+    AVG(CASE WHEN p.ip > 0 THEN p.fip END) AS fip,
+    AVG(CASE WHEN p.ip > 0 THEN p.era END) AS era,
+    SUM(p.pitching_war)                 AS pitching_war,
+    SUM(p.player_war)                   AS player_war,
+
+    SUM(p.salary)                       AS salary,
+    SUM(p.surplus_value)                AS surplus_value,
+
+    -- Contract label from the stint with the most WAR
+    FIRST(p.contract_label ORDER BY p.player_war DESC NULLS LAST) AS contract_label
+
 FROM fact_player_season p
 LEFT JOIN dim_player dp USING (player_id)
-LEFT JOIN dim_team t   ON t.team_id = p.team_id
-ORDER BY p.season_key, p.player_war DESC
+LEFT JOIN (
+    SELECT DISTINCT team_id, team_name
+    FROM dim_team
+) t ON t.team_id = p.team_id
+GROUP BY p.player_id, dp.name_full, dp.name_first, dp.name_last, p.season_key
+ORDER BY p.season_key, SUM(p.player_war) DESC
 """
 
 # Sportradar enrichment: real WAR + wOBA + wRC+ + FIP/ERA-
