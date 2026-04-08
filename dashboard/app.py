@@ -13,6 +13,7 @@ Sections:
 """
 from __future__ import annotations
 
+import datetime
 from pathlib import Path
 
 import numpy as np
@@ -91,7 +92,9 @@ if metrics is None:
     st.error("No artifacts found. Run the full pipeline first:\n\n```\npython -m pipeline.extract.pull_sources\npython -m pipeline.transform.build_warehouse\npython -m pipeline.transform.build_metrics\npython -m models.train_win_model\npython -m models.cluster_teams\n```")
     st.stop()
 
+_current_year = datetime.date.today().year
 all_years = sorted(metrics["year_id"].dropna().unique().tolist())
+_slider_max = max(int(all_years[-1]), _current_year) if all_years else _current_year
 all_teams = sorted(metrics["team_name"].dropna().unique().tolist())
 
 
@@ -101,7 +104,7 @@ all_teams = sorted(metrics["team_name"].dropna().unique().tolist())
 def section_overview() -> None:
     st.title("Overview — Season Efficiency")
 
-    year = st.sidebar.slider("Season", int(all_years[0]), int(all_years[-1]), int(all_years[-1]))
+    year = st.sidebar.slider("Season", int(all_years[0]), _slider_max, _slider_max)
     league_filter = st.sidebar.selectbox("League", ["Both", "AL", "NL"])
 
     season = metrics[metrics["year_id"] == year].copy()
@@ -231,7 +234,7 @@ def section_compare_teams() -> None:
         st.info("Select at least 2 teams from the sidebar.")
         return
 
-    year_range = st.sidebar.slider("Year range", int(all_years[0]), int(all_years[-1]), (int(all_years[-5]), int(all_years[-1])))
+    year_range = st.sidebar.slider("Year range", int(all_years[0]), _slider_max, (max(int(all_years[0]), _slider_max - 5), _slider_max))
     compare_df = metrics[
         (metrics["team_name"].isin(selected)) &
         (metrics["year_id"] >= year_range[0]) &
@@ -357,10 +360,12 @@ def section_efficiency_frontier() -> None:
     if frontier_data is not None:
         fd = frontier_data.copy()
         fd["above_label"] = fd["above_frontier"].map({True: "Above (Efficient)", False: "Below (Wasteful)"})
+        _fd_min = int(fd["year_id"].min())
+        _fd_max = max(int(fd["year_id"].max()), _current_year)
         year_range = st.sidebar.slider(
             "Year range",
-            int(fd["year_id"].min()), int(fd["year_id"].max()),
-            (int(fd["year_id"].min()), int(fd["year_id"].max())),
+            _fd_min, _fd_max,
+            (_fd_min, _fd_max),
         )
         fd = fd[(fd["year_id"] >= year_range[0]) & (fd["year_id"] <= year_range[1])]
 
