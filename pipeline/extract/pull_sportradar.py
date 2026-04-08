@@ -247,11 +247,15 @@ def main(
         Optional[str], typer.Option(help="Directory to cache raw API responses")
     ] = None,
     dry_run: bool = typer.Option(False, "--dry-run/--no-dry-run", help="Fetch but do not write to warehouse"),
+    api_key: Annotated[
+        Optional[str], typer.Option("--api-key", help="Sportradar API key (overrides SPORTRADAR_API_KEY env var)")
+    ] = None,
 ) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     settings = load_settings(config_path)
 
     client = SportradarClient(
+        api_key=api_key,
         access_level=access_level,
         cache_dir=cache_dir,
     )
