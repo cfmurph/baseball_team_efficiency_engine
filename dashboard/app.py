@@ -311,15 +311,26 @@ def page_player_explorer() -> None:
     # ── Tabs: Batting | Pitching | Contract | All ──────────────────────────
     tab_bat, tab_pit, tab_contract, tab_all = st.tabs(["Batting", "Pitching", "Contract", "All Stats"])
 
-    bat_cols = ["name_full", "team_name", "player_type", "pa", "hr", "bb", "woba", "batting_war"]
-    pit_cols = ["name_full", "team_name", "player_type", "ip", "era", "fip", "pitching_war"]
-    contract_cols = ["name_full", "team_name", "player_type", "player_war", "salary", "surplus_value", "contract_label"]
-    all_cols = [c for c in [
+    # Detect same-name players in the current filtered view so we can show player_id
+    has_name_collision = (
+        "name_full" in filt.columns
+        and filt.duplicated("name_full", keep=False).any()
+    )
+    id_col = ["player_id"] if has_name_collision and "player_id" in filt.columns else []
+    if has_name_collision:
+        st.caption("⚠️ Multiple players share a name in this view — the **Player ID** column distinguishes them.")
+
+    _PLAYER_COL_CFG["player_id"] = st.column_config.TextColumn("Player ID")
+
+    bat_cols = id_col + ["name_full", "team_name", "player_type", "pa", "hr", "bb", "woba", "batting_war"]
+    pit_cols = id_col + ["name_full", "team_name", "player_type", "ip", "era", "fip", "pitching_war"]
+    contract_cols = id_col + ["name_full", "team_name", "player_type", "player_war", "salary", "surplus_value", "contract_label"]
+    all_cols = [c for c in (id_col + [
         "name_full", "team_name", "player_type",
         "pa", "hr", "bb", "woba", "batting_war",
         "ip", "era", "fip", "pitching_war",
         "player_war", "salary", "surplus_value", "contract_label",
-    ] if c in filt.columns]
+    ]) if c in filt.columns]
 
     with tab_bat:
         cols = [c for c in bat_cols if c in filt.columns]
@@ -451,11 +462,12 @@ def page_team_profile() -> None:
         if "team_name" in roster.columns:
             roster = roster[roster["team_name"] == team]
         if not roster.empty:
-            roster_cols = [c for c in [
+            roster_id = ["player_id"] if roster.duplicated("name_full", keep=False).any() and "player_id" in roster.columns else []
+            roster_cols = [c for c in (roster_id + [
                 "name_full", "player_type", "pa", "hr", "bb", "woba", "batting_war",
                 "ip", "era", "fip", "pitching_war",
                 "player_war", "salary", "surplus_value", "contract_label",
-            ] if c in roster.columns]
+            ]) if c in roster.columns]
             _show_table(
                 _scale_payroll(roster[roster_cols]).sort_values("player_war", ascending=False).reset_index(drop=True),
                 _PLAYER_COL_CFG, height=500,
