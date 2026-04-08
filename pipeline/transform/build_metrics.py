@@ -84,6 +84,64 @@ LEFT JOIN dim_team t   ON t.team_id = p.team_id
 ORDER BY p.season_key, p.player_war DESC
 """
 
+# Sportradar enrichment: real WAR + wOBA + wRC+ + FIP/ERA-
+# Only available for seasons/players that have been pulled via pull_sportradar.py
+_SR_PLAYER_QUERY = """
+SELECT
+    sp.sr_player_id,
+    sp.full_name,
+    sp.season_year  AS year_id,
+    sp.sr_team_id,
+    m.lahman_team_id AS team_id,
+    sp.primary_position,
+    sp.pa,
+    sp.hr,
+    sp.woba,
+    sp.wrc_plus,
+    sp.war,
+    sp.bwar,
+    sp.fwar,
+    sp.p_war,
+    COALESCE(sp.war, sp.p_war, 0) AS player_war_sr,
+    sp.ip,
+    sp.era,
+    sp.era_minus,
+    sp.fip,
+    sp.k9,
+    sp.bb9,
+    sp.kbb
+FROM fact_sr_player_season sp
+LEFT JOIN dim_sportradar_team_map m USING (sr_team_id)
+ORDER BY sp.season_year, player_war_sr DESC
+"""
+
+_SR_TRANSACTIONS_QUERY = """
+SELECT
+    t.transaction_id,
+    t.effective_date,
+    t.transaction_type,
+    t.transaction_code,
+    t.description,
+    t.player_name,
+    t.from_team_abbr,
+    t.to_team_abbr
+FROM fact_sr_transactions t
+ORDER BY t.effective_date DESC
+"""
+
+_SR_INJURIES_QUERY = """
+SELECT
+    i.sr_player_id,
+    i.player_name,
+    i.team_abbr,
+    i.injury_desc,
+    i.injury_status,
+    i.start_date,
+    i.end_date
+FROM fact_sr_injuries i
+ORDER BY i.start_date DESC
+"""
+
 
 def _efficiency_labels(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -131,6 +189,15 @@ def _window_summary(team_df: pd.DataFrame) -> pd.DataFrame:
     return latest
 
 
+def _table_has_rows(con: duckdb.DuckDBPyConnection, table: str) -> bool:
+    """Return True if the table exists and has at least one row."""
+    try:
+        n = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        return n > 0
+    except Exception:
+        return False
+
+
 @app.command()
 def main(config_path: str = "config/settings.yaml") -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -143,6 +210,25 @@ def main(config_path: str = "config/settings.yaml") -> None:
 
     log.info("Querying player metrics")
     player_df = con.execute(_PLAYER_QUERY).fetchdf()
+
+    # ---- Sportradar enrichment (only if data was pulled) ----
+    sr_player_df: pd.DataFrame | None = None
+    sr_tx_df: pd.DataFrame | None = None
+    sr_injury_df: pd.DataFrame | None = None
+
+    if _table_has_rows(con, "fact_sr_player_season"):
+        log.info("Sportradar player stats available — exporting")
+        sr_player_df = con.execute(_SR_PLAYER_QUERY).fetchdf()
+    else:
+        log.info("No Sportradar player stats found (run pull_sportradar.py to add them)")
+
+    if _table_has_rows(con, "fact_sr_transactions"):
+        sr_tx_df = con.execute(_SR_TRANSACTIONS_QUERY).fetchdf()
+        log.info("Sportradar transactions: %d rows", len(sr_tx_df))
+
+    if _table_has_rows(con, "fact_sr_injuries"):
+        sr_injury_df = con.execute(_SR_INJURIES_QUERY).fetchdf()
+        log.info("Sportradar injuries: %d rows", len(sr_injury_df))
 
     con.close()
 
@@ -185,6 +271,45 @@ def main(config_path: str = "config/settings.yaml") -> None:
     dead = _dead_money_leaders(player_df)
     dead.to_csv(artifacts_dir / "player_dead_money.csv", index=False)
     log.info("Wrote contract analysis CSVs")
+
+    # ---- Sportradar exports (only if data present) ----
+    if sr_player_df is not None:
+        sr_player_df.to_csv(artifacts_dir / "sr_player_season_metrics.csv", index=False)
+        log.info("Wrote sr_player_season_metrics.csv (%d rows)", len(sr_player_df))
+
+        # WAR leaderboard — real values from Sportradar
+        war_leaders = (
+            sr_player_df[sr_player_df["player_war_sr"] > 0]
+            .nlargest(200, "player_war_sr")
+            .reset_index(drop=True)
+        )
+        war_leaders.to_csv(artifacts_dir / "sr_war_leaders.csv", index=False)
+
+        # wRC+ leaders (quality of contact)
+        if "wrc_plus" in sr_player_df.columns:
+            wrc_leaders = (
+                sr_player_df[sr_player_df["wrc_plus"].notna() & (sr_player_df["pa"] >= 100)]
+                .nlargest(100, "wrc_plus")
+                .reset_index(drop=True)
+            )
+            wrc_leaders.to_csv(artifacts_dir / "sr_wrc_plus_leaders.csv", index=False)
+
+        # ERA- leaders (pitching quality)
+        if "era_minus" in sr_player_df.columns:
+            era_minus_leaders = (
+                sr_player_df[sr_player_df["era_minus"].notna() & (sr_player_df["ip"] >= 20)]
+                .nsmallest(100, "era_minus")
+                .reset_index(drop=True)
+            )
+            era_minus_leaders.to_csv(artifacts_dir / "sr_era_minus_leaders.csv", index=False)
+
+    if sr_tx_df is not None:
+        sr_tx_df.to_csv(artifacts_dir / "sr_transactions.csv", index=False)
+        log.info("Wrote sr_transactions.csv (%d rows)", len(sr_tx_df))
+
+    if sr_injury_df is not None:
+        sr_injury_df.to_csv(artifacts_dir / "sr_injuries.csv", index=False)
+        log.info("Wrote sr_injuries.csv (%d rows)", len(sr_injury_df))
 
     typer.echo(f"Wrote all artifacts to {artifacts_dir}")
 

@@ -128,4 +128,105 @@ CREATE OR REPLACE TABLE fact_team_season (
 
     PRIMARY KEY (team_key, season_key)
 );
+
+-- ----------------------------------------------------------------
+-- Sportradar: Team ID crosswalk  (SR GUID ↔ Lahman teamID)
+-- ----------------------------------------------------------------
+CREATE OR REPLACE TABLE dim_sportradar_team_map (
+    sr_team_id      VARCHAR PRIMARY KEY,
+    sr_abbr         VARCHAR,
+    sr_market       VARCHAR,
+    sr_name         VARCHAR,
+    lahman_team_id  VARCHAR,
+    lahman_franch_id VARCHAR
+);
+
+-- ----------------------------------------------------------------
+-- Sportradar: Player season stats (real WAR, wOBA, wRC+, FIP, ERA-)
+-- Grain: player × year × team (REG season only)
+-- ----------------------------------------------------------------
+CREATE OR REPLACE TABLE fact_sr_player_season (
+    sr_player_id    VARCHAR,
+    sr_team_id      VARCHAR,
+    season_year     INTEGER,
+
+    -- Identity
+    full_name       VARCHAR,
+    position        VARCHAR,
+    primary_position VARCHAR,
+    jersey_number   INTEGER,
+
+    -- Hitting
+    pa              DOUBLE,
+    ab              DOUBLE,
+    hits            DOUBLE,
+    doubles         DOUBLE,
+    triples         DOUBLE,
+    hr              DOUBLE,
+    rbi             DOUBLE,
+    bb              DOUBLE,
+    ibb             DOUBLE,
+    hbp             DOUBLE,
+    sb              DOUBLE,
+    avg             DOUBLE,
+    obp             DOUBLE,
+    slg             DOUBLE,
+    ops             DOUBLE,
+    woba            DOUBLE,
+    wraa            DOUBLE,
+    wrc             DOUBLE,
+    wrc_plus        DOUBLE,
+    war             DOUBLE,
+    bwar            DOUBLE,
+    brwar           DOUBLE,
+    fwar            DOUBLE,
+
+    -- Pitching
+    ip              DOUBLE,
+    era             DOUBLE,
+    era_minus       DOUBLE,
+    fip             DOUBLE,
+    whip            DOUBLE,
+    k9              DOUBLE,
+    bb9             DOUBLE,
+    hr9             DOUBLE,
+    kbb             DOUBLE,
+    p_war           DOUBLE,
+
+    PRIMARY KEY (sr_player_id, season_year, sr_team_id)
+);
+
+-- ----------------------------------------------------------------
+-- Sportradar: Transactions log
+-- ----------------------------------------------------------------
+CREATE OR REPLACE TABLE fact_sr_transactions (
+    transaction_id      VARCHAR PRIMARY KEY,
+    effective_date      DATE,
+    last_modified       TIMESTAMP,
+    transaction_type    VARCHAR,
+    transaction_code    VARCHAR,
+    description         VARCHAR,
+    sr_player_id        VARCHAR,
+    player_name         VARCHAR,
+    from_team_abbr      VARCHAR,
+    to_team_abbr        VARCHAR,
+    from_sr_team_id     VARCHAR,
+    to_sr_team_id       VARCHAR
+);
+
+-- ----------------------------------------------------------------
+-- Sportradar: Injuries
+-- ----------------------------------------------------------------
+CREATE OR REPLACE TABLE fact_sr_injuries (
+    sr_player_id    VARCHAR,
+    player_name     VARCHAR,
+    sr_team_id      VARCHAR,
+    team_abbr       VARCHAR,
+    injury_desc     VARCHAR,
+    injury_status   VARCHAR,
+    start_date      DATE,
+    end_date        DATE,
+    fetched_at      TIMESTAMP,
+    PRIMARY KEY (sr_player_id, start_date)
+);
 """
