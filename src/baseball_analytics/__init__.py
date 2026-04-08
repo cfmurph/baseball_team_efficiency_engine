@@ -3,6 +3,7 @@ __all__ = [
     "io",
     "metrics",
     "schema",
+    "sportradar",
     "war",
     "validation",
 ]
