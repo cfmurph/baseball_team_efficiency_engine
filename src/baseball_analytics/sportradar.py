@@ -26,6 +26,12 @@ from pathlib import Path
 from typing import Any
 
 import requests
+from dotenv import load_dotenv
+
+# Load .env from the project root (or any parent directory).
+# This is a no-op if the variable is already set in the environment,
+# so shell exports and Cursor Cloud Secrets always take precedence.
+load_dotenv(override=False)
 
 log = logging.getLogger(__name__)
 
