@@ -154,8 +154,11 @@ def _parse_player_season(team_stats: dict, sr_team_id: str, year: int) -> pd.Dat
 
         rows.append(base)
 
+    if not rows:
+        return pd.DataFrame()
     df = pd.DataFrame(rows)
-    # Filter out rows with no player ID
+    if "sr_player_id" not in df.columns:
+        return pd.DataFrame()
     return df[df["sr_player_id"].notna()].reset_index(drop=True)
 
 
@@ -295,7 +298,8 @@ def main(
                 try:
                     data = client.seasonal_stats(sr_team_id, yr, season_type)
                     team_df = _parse_player_season(data, sr_team_id, yr)
-                    all_players.append(team_df)
+                    if not team_df.empty:
+                        all_players.append(team_df)
                     log.info("  %s %s (%d players)", row.get("sr_abbr", "?"), yr, len(team_df))
                 except SportradarError as exc:
                     log.warning("  Skipping %s %d: %s", row.get("sr_abbr", sr_team_id), yr, exc)
