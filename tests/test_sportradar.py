@@ -48,11 +48,12 @@ HIERARCHY_FIXTURE = {
 }
 
 SEASONAL_STATS_FIXTURE = {
-    "team": {
-        "id": "nyr-guid",
-        "market": "New York",
-        "name": "Yankees",
-        "players": [
+    "id": "nyr-guid",
+    "market": "New York",
+    "name": "Yankees",
+    "abbr": "NYY",
+    "season": {"year": 2024, "type": "REG"},
+    "players": [
             {
                 "id": "player-a",
                 "full_name": "Aaron Judge",
@@ -113,7 +114,6 @@ SEASONAL_STATS_FIXTURE = {
                 },
             },
         ],
-    }
 }
 
 TX_FIXTURE = {
@@ -223,8 +223,8 @@ def test_raises_on_404(client):
 def test_seasonal_stats(client):
     with patch.object(client._session, "get", return_value=_mock_response(SEASONAL_STATS_FIXTURE)):
         result = client.seasonal_stats("nyr-guid", 2024)
-    assert "team" in result
-    assert len(result["team"]["players"]) == 2
+    assert "players" in result
+    assert len(result["players"]) == 2
 
 
 def test_transactions(client):

@@ -79,10 +79,13 @@ def _parse_player_season(team_stats: dict, sr_team_id: str, year: int) -> pd.Dat
     """
     Flatten Sportradar seasonal_stats response into a player-season DataFrame.
     Handles both hitters and pitchers; missing fields become NaN.
+
+    The v8 seasonal stats response has players at the top level of the response
+    dict (not nested under a 'team' key).
     """
     rows = []
-    team = team_stats.get("team", {})
-    players = team.get("players", [])
+    # Players are at the top level in v8
+    players = team_stats.get("players", [])
 
     for p in players:
         base = {
