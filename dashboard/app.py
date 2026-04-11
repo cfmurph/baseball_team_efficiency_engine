@@ -32,6 +32,286 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ── Baseball Savant–style CSS ──────────────────────────────────────────────────
+st.markdown("""
+<style>
+/* ── Google Font ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ── Global background ── */
+.stApp {
+    background-color: #0d1117;
+}
+
+/* ── Sidebar ── */
+[data-testid="stSidebar"] {
+    background-color: #0d1117;
+    border-right: 1px solid #21262d;
+}
+[data-testid="stSidebar"] .stRadio label {
+    color: #8b949e;
+    font-size: 0.82rem;
+    letter-spacing: 0.02em;
+    padding: 4px 0;
+    transition: color 0.15s;
+}
+[data-testid="stSidebar"] .stRadio label:hover {
+    color: #e6edf3;
+}
+[data-testid="stSidebar"] .stRadio [aria-checked="true"] + label,
+[data-testid="stSidebar"] .stRadio [data-checked="true"] + label {
+    color: #bf1c20 !important;
+    font-weight: 600;
+}
+
+/* ── Sidebar brand ── */
+.sidebar-brand {
+    padding: 1rem 0.5rem 1.5rem;
+    border-bottom: 1px solid #21262d;
+    margin-bottom: 1rem;
+}
+.sidebar-brand h1 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #e6edf3;
+    letter-spacing: -0.02em;
+    margin: 0;
+    line-height: 1.3;
+}
+.sidebar-brand span {
+    color: #bf1c20;
+}
+.sidebar-brand small {
+    display: block;
+    color: #8b949e;
+    font-size: 0.72rem;
+    margin-top: 2px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+/* ── Page titles ── */
+h1 {
+    font-size: 1.6rem !important;
+    font-weight: 700 !important;
+    color: #e6edf3 !important;
+    letter-spacing: -0.03em !important;
+    border-bottom: 2px solid #bf1c20;
+    padding-bottom: 0.4rem;
+    margin-bottom: 0.2rem !important;
+}
+h2 {
+    font-size: 1.05rem !important;
+    font-weight: 600 !important;
+    color: #c9d1d9 !important;
+    letter-spacing: -0.01em !important;
+    margin-top: 1.2rem !important;
+}
+h3 {
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    color: #8b949e !important;
+    text-transform: uppercase;
+    letter-spacing: 0.08em !important;
+}
+
+/* ── Caption / subtext ── */
+.stCaption, [data-testid="stCaptionContainer"] {
+    color: #8b949e !important;
+    font-size: 0.78rem !important;
+}
+
+/* ── KPI metric cards ── */
+[data-testid="stMetric"] {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+}
+[data-testid="stMetricLabel"] {
+    color: #8b949e !important;
+    font-size: 0.72rem !important;
+    font-weight: 600 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+}
+[data-testid="stMetricValue"] {
+    color: #e6edf3 !important;
+    font-size: 1.55rem !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.03em;
+    line-height: 1.2;
+}
+[data-testid="stMetricDelta"] {
+    font-size: 0.78rem !important;
+    font-weight: 600;
+}
+
+/* ── Dataframe / table ── */
+[data-testid="stDataFrame"] {
+    border: 1px solid #21262d;
+    border-radius: 6px;
+    overflow: hidden;
+}
+/* header row */
+[data-testid="stDataFrame"] th,
+.dvn-scroller .col-header-cell {
+    background-color: #161b22 !important;
+    color: #8b949e !important;
+    font-size: 0.72rem !important;
+    font-weight: 700 !important;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid #21262d !important;
+}
+/* rows */
+[data-testid="stDataFrame"] td {
+    background-color: #0d1117;
+    color: #e6edf3;
+    font-size: 0.84rem;
+    border-bottom: 1px solid #161b22 !important;
+}
+/* hover row highlight */
+[data-testid="stDataFrame"] tr:hover td {
+    background-color: #161b22 !important;
+}
+
+/* ── Tabs ── */
+[data-testid="stTabs"] [role="tablist"] {
+    border-bottom: 1px solid #21262d;
+    gap: 0;
+}
+[data-testid="stTabs"] [role="tab"] {
+    color: #8b949e !important;
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.02em;
+    padding: 0.5rem 1.1rem !important;
+    border-radius: 0 !important;
+    border-bottom: 2px solid transparent !important;
+    background: transparent !important;
+    transition: color 0.15s, border-color 0.15s;
+}
+[data-testid="stTabs"] [role="tab"]:hover {
+    color: #e6edf3 !important;
+}
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] {
+    color: #bf1c20 !important;
+    border-bottom-color: #bf1c20 !important;
+}
+
+/* ── Selectbox / input ── */
+[data-testid="stSelectbox"] > div > div,
+[data-testid="stTextInput"] > div > div > input {
+    background-color: #161b22 !important;
+    border-color: #21262d !important;
+    color: #e6edf3 !important;
+    font-size: 0.85rem !important;
+}
+[data-testid="stSelectbox"] svg { color: #8b949e; }
+
+/* ── Buttons ── */
+.stButton > button {
+    background: #21262d;
+    color: #e6edf3;
+    border: 1px solid #30363d;
+    font-size: 0.82rem;
+    font-weight: 600;
+    border-radius: 5px;
+    transition: background 0.15s, border-color 0.15s;
+}
+.stButton > button:hover {
+    background: #30363d;
+    border-color: #8b949e;
+}
+
+/* ── Slider ── */
+[data-testid="stSlider"] [data-baseweb="slider"] [role="slider"] {
+    background: #bf1c20 !important;
+}
+[data-testid="stSlider"] [data-baseweb="slider"] div[class*="Track"] {
+    background: #21262d;
+}
+
+/* ── Expander ── */
+[data-testid="stExpander"] {
+    border: 1px solid #21262d !important;
+    border-radius: 6px !important;
+    background: #161b22 !important;
+}
+[data-testid="stExpander"] summary {
+    color: #8b949e !important;
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+}
+
+/* ── Alert / info boxes ── */
+[data-testid="stAlert"] {
+    border-radius: 6px !important;
+    font-size: 0.83rem !important;
+}
+
+/* ── Divider ── */
+hr {
+    border-color: #21262d !important;
+    margin: 1rem 0 !important;
+}
+
+/* ── Multiselect tags ── */
+[data-testid="stMultiSelect"] span[data-baseweb="tag"] {
+    background: #21262d !important;
+    color: #e6edf3 !important;
+    border-radius: 4px !important;
+    font-size: 0.78rem !important;
+}
+
+/* ── Section label / nav pills ── */
+.nav-pill {
+    display: inline-block;
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 0.5rem;
+}
+
+/* ── Stat badge (inline) ── */
+.stat-badge {
+    display: inline-block;
+    background: #21262d;
+    color: #e6edf3;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.stat-badge.red { background: rgba(191,28,32,0.2); color: #f85149; }
+.stat-badge.green { background: rgba(46,160,67,0.2); color: #3fb950; }
+
+/* ── Page header strip ── */
+.page-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+.page-header .icon {
+    font-size: 1.4rem;
+    line-height: 1;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ── Artifact paths ─────────────────────────────────────────────────────────────
 ARTIFACTS = Path("artifacts")
 _FILES = {
@@ -145,6 +425,35 @@ def _show_table(df: pd.DataFrame, col_cfg: dict | None = None, height: int = 600
     st.dataframe(df, column_config=cfg, use_container_width=True, height=height, **kwargs)
 
 
+# ── Plotly dark theme matching Baseball Savant palette ────────────────────────
+_PLOTLY_LAYOUT = dict(
+    template="plotly_dark",
+    paper_bgcolor="#0d1117",
+    plot_bgcolor="#0d1117",
+    font=dict(family="Inter, -apple-system, sans-serif", color="#e6edf3", size=12),
+    title_font=dict(size=14, color="#e6edf3", family="Inter, sans-serif"),
+    xaxis=dict(gridcolor="#21262d", linecolor="#30363d", tickcolor="#30363d", tickfont=dict(color="#8b949e", size=11)),
+    yaxis=dict(gridcolor="#21262d", linecolor="#30363d", tickcolor="#30363d", tickfont=dict(color="#8b949e", size=11)),
+    legend=dict(bgcolor="#161b22", bordercolor="#21262d", borderwidth=1, font=dict(size=11, color="#c9d1d9")),
+    margin=dict(t=40, b=30, l=10, r=10),
+    colorway=["#bf1c20", "#1f6feb", "#3fb950", "#d29922", "#a371f7", "#f78166", "#58a6ff"],
+)
+
+_SCATTER_MARKER = dict(size=7, opacity=0.75, line=dict(width=0.5, color="#0d1117"))
+
+
+def _apply_layout(fig) -> None:
+    """Apply the Baseball Savant dark layout to any Plotly figure."""
+    fig.update_layout(**_PLOTLY_LAYOUT)
+
+
+def _chart(fig, height: int = 400) -> None:
+    """Apply dark layout and render a Plotly chart."""
+    _apply_layout(fig)
+    fig.update_layout(height=height)
+    _chart(fig)
+
+
 # ── Global state ───────────────────────────────────────────────────────────────
 metrics = _load("metrics")
 if metrics is None:
@@ -195,7 +504,12 @@ PAGES = [
     "🤖  Model Insights",
 ]
 
-st.sidebar.title("⚾ MLB Efficiency Engine")
+st.sidebar.markdown("""
+<div class="sidebar-brand">
+  <h1>⚾ MLB <span>Efficiency</span></h1>
+  <small>Team &amp; Player Analytics</small>
+</div>
+""", unsafe_allow_html=True)
 page = st.sidebar.radio("", PAGES, label_visibility="collapsed")
 
 
@@ -247,18 +561,19 @@ def page_league_snapshot() -> None:
 
     # Chart (collapsible)
     with st.expander("Payroll vs Wins scatter", expanded=False):
-        if season["payroll"].notna().any():
-            fig = px.scatter(
-                season.dropna(subset=["payroll", "wins"]),
-                x="payroll", y="wins",
-                color="window_phase" if "window_phase" in season.columns else "league_id",
-                size="run_diff" if "run_diff" in season.columns else None,
-                size_max=30,
-                hover_name="team_name",
-                labels={"payroll": "Payroll ($)", "wins": "Wins"},
-                title=f"{year} — Payroll vs Wins",
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            if season["payroll"].notna().any():
+                fig = px.scatter(
+                    season.dropna(subset=["payroll", "wins"]),
+                    x="payroll", y="wins",
+                    color="window_phase" if "window_phase" in season.columns else "league_id",
+                    size="run_diff" if "run_diff" in season.columns else None,
+                    size_max=30,
+                    hover_name="team_name",
+                    labels={"payroll": "Payroll ($)", "wins": "Wins"},
+                    title=f"{year} — Payroll vs Wins",
+                )
+                fig.update_traces(marker=_SCATTER_MARKER)
+                _chart(fig, height=460)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -442,17 +757,16 @@ def page_team_profile() -> None:
                 fig_w.add_scatter(x=team_history["year_id"], y=team_history["pythag_wins"],
                                   mode="lines", name="Pythag W", line=dict(dash="dash", color="gray"))
             fig_w.update_layout(height=280, margin=dict(t=40, b=20))
-            st.plotly_chart(fig_w, use_container_width=True)
+            _chart(fig_w, height=280)
         with ch2:
             if team_history["payroll"].notna().any():
                 fig_p = px.bar(team_history, x="year_id", y="payroll", title="Payroll ($M)",
-                               color_discrete_sequence=["#2a7ae2"])
+                               color_discrete_sequence=["#bf1c20"])
                 fig_p.update_yaxes(tickprefix="$", ticksuffix="M", tickformat=".0f",
                                    labelalias={"payroll": "Payroll ($M)"})
                 fig_p.update_traces(customdata=team_history[["payroll"]].values / 1e6,
                                     hovertemplate="Year: %{x}<br>Payroll: $%{customdata[0]:.1f}M")
-                fig_p.update_layout(height=280, margin=dict(t=40, b=20))
-                st.plotly_chart(fig_p, use_container_width=True)
+                _chart(fig_p, height=280)
 
     # Roster for selected year
     st.subheader(f"Roster — {year}")
@@ -540,8 +854,7 @@ def page_season_compare() -> None:
     fig = px.line(plot_df, x="year_id", y=y_metric, color="team_name",
                   markers=True, title=f"{y_label} — {year_range[0]}–{year_range[1]}",
                   labels={y_metric: y_label})
-    fig.update_layout(height=380)
-    st.plotly_chart(fig, use_container_width=True)
+    _chart(fig, height=380)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -618,12 +931,12 @@ def page_contract_analysis() -> None:
                 hover_name="name_full" if "name_full" in plot_f.columns else None,
                 hover_data=["year_id", "team_name"] if "team_name" in plot_f.columns else [],
                 labels={"salary": "Salary ($M)", "player_war": "WAR"},
-                color_discrete_map={"surplus_value": "#2ca02c", "fair_value": "#1f77b4",
-                                    "overpaid": "#ff7f0e", "dead_money": "#d62728"},
+                color_discrete_map={"surplus_value": "#3fb950", "fair_value": "#58a6ff",
+                                    "overpaid": "#d29922", "dead_money": "#f85149"},
             )
-            fig.add_hline(y=0, line_dash="dash", line_color="gray")
-            fig.update_layout(height=450)
-            st.plotly_chart(fig, use_container_width=True)
+            fig.add_hline(y=0, line_dash="dash", line_color="#30363d")
+            fig.update_traces(marker=_SCATTER_MARKER)
+            _chart(fig, height=450)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -671,14 +984,14 @@ def page_efficiency_frontier() -> None:
                 fig = px.scatter(fd, x="payroll_m", y="wins", color="above_label",
                                  hover_name="team_name", hover_data=["year_id"],
                                  labels={"payroll_m": "Payroll ($M)", "wins": "Wins"},
-                                 color_discrete_map={"Above (Efficient)": "#2ca02c", "Below (Wasteful)": "#d62728"})
+                                 color_discrete_map={"Above (Efficient)": "#3fb950", "Below (Wasteful)": "#f85149"})
                 if "frontier_pred" in fd.columns:
                     fl = fd.sort_values("payroll_m")[["payroll_m", "frontier_pred"]].drop_duplicates()
                     fig.add_trace(go.Scatter(x=fl["payroll_m"], y=fl["frontier_pred"],
-                                            mode="lines", line=dict(color="#1f77b4", dash="dash", width=2),
+                                            mode="lines", line=dict(color="#58a6ff", dash="dash", width=2),
                                             name="Frontier"))
-                fig.update_layout(height=480)
-                st.plotly_chart(fig, use_container_width=True)
+                fig.update_traces(marker=_SCATTER_MARKER)
+                _chart(fig, height=480)
 
     with cluster_tab:
         if clusters is None:
@@ -700,8 +1013,7 @@ def page_efficiency_frontier() -> None:
                 fig = px.scatter(clusters.dropna(subset=["payroll", "wins"]),
                                  x="payroll", y="wins", color="cluster_label",
                                  hover_name="team_name", hover_data=["year_id"])
-                fig.update_layout(height=460)
-                st.plotly_chart(fig, use_container_width=True)
+                _chart(fig, height=460)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -814,8 +1126,7 @@ def page_whatif() -> None:
     fig.add_scatter(x=[int(r["year_id"]) + 1], y=[projected_wins],
                     mode="markers+text", marker=dict(color="orange", size=14, symbol="star"),
                     text=["Projected"], textposition="top center", name="Projection")
-    fig.update_layout(height=320)
-    st.plotly_chart(fig, use_container_width=True)
+    _chart(fig, height=320)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -848,10 +1159,9 @@ def page_model_insights() -> None:
             }
             _show_table(importance.sort_values("importance", ascending=False).reset_index(drop=True), cfg, height=450)
             fig = px.bar(importance.head(15), x="importance", y="feature", orientation="h",
-                         color="importance", color_continuous_scale="Blues",
+                         color="importance", color_continuous_scale=[[0, "#21262d"], [1, "#bf1c20"]],
                          title="Top 15 Features")
-            fig.update_layout(height=420, yaxis={"autorange": "reversed"})
-            st.plotly_chart(fig, use_container_width=True)
+            _chart(fig, height=420)
 
     with pred_tab:
         if preds is not None:
@@ -878,9 +1188,8 @@ def page_model_insights() -> None:
                     lo = preds[["actual_wins", "predicted_wins_xgb"]].min().min() - 2
                     hi = preds[["actual_wins", "predicted_wins_xgb"]].max().max() + 2
                     fig.add_trace(go.Scatter(x=[lo, hi], y=[lo, hi], mode="lines",
-                                            line=dict(dash="dash", color="red"), name="Perfect"))
-                    fig.update_layout(height=400)
-                    st.plotly_chart(fig, use_container_width=True)
+                                            line=dict(dash="dash", color="#30363d"), name="Perfect"))
+                    _chart(fig, height=400)
 
 
 # ── Routing ────────────────────────────────────────────────────────────────────
