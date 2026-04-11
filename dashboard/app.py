@@ -469,7 +469,7 @@ if metrics is None:
 
 _current_year = datetime.date.today().year
 all_years = sorted(metrics["year_id"].dropna().astype(int).unique().tolist())
-_slider_max = max(all_years[-1], _current_year)
+_slider_max = max(all_years[-1], _current_year) if all_years else _current_year
 all_teams = sorted(metrics["team_name"].dropna().unique().tolist())
 
 
