@@ -451,7 +451,7 @@ def _chart(fig, height: int = 400) -> None:
     """Apply dark layout and render a Plotly chart."""
     _apply_layout(fig)
     fig.update_layout(height=height)
-    _chart(fig)
+    st.plotly_chart(fig, use_container_width=True)
 
 
 # ── Global state ───────────────────────────────────────────────────────────────
