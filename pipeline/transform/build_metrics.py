@@ -98,10 +98,8 @@ SELECT
 
 FROM fact_player_season p
 LEFT JOIN dim_player dp USING (player_id)
-LEFT JOIN (
-    SELECT DISTINCT team_id, team_name
-    FROM dim_team
-) t ON t.team_id = p.team_id
+LEFT JOIN dim_team t
+    ON t.team_key = p.team_id || '_' || CAST(p.season_key AS VARCHAR)
 GROUP BY p.player_id, dp.name_full, dp.name_first, dp.name_last, p.season_key
 ORDER BY p.season_key, SUM(p.player_war) DESC
 """
