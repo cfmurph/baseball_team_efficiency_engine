@@ -24,6 +24,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.baseball_analytics.dashboard_utils import (
+    PLOTLY_LAYOUT as _PLOTLY_LAYOUT,
+    apply_plotly_layout,
+    compute_slider_max,
+    render_plotly_chart,
+)
+
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="MLB Efficiency Engine",
@@ -425,33 +432,17 @@ def _show_table(df: pd.DataFrame, col_cfg: dict | None = None, height: int = 600
     st.dataframe(df, column_config=cfg, use_container_width=True, height=height, **kwargs)
 
 
-# ── Plotly dark theme matching Baseball Savant palette ────────────────────────
-_PLOTLY_LAYOUT = dict(
-    template="plotly_dark",
-    paper_bgcolor="#0d1117",
-    plot_bgcolor="#0d1117",
-    font=dict(family="Inter, -apple-system, sans-serif", color="#e6edf3", size=12),
-    title_font=dict(size=14, color="#e6edf3", family="Inter, sans-serif"),
-    xaxis=dict(gridcolor="#21262d", linecolor="#30363d", tickcolor="#30363d", tickfont=dict(color="#8b949e", size=11)),
-    yaxis=dict(gridcolor="#21262d", linecolor="#30363d", tickcolor="#30363d", tickfont=dict(color="#8b949e", size=11)),
-    legend=dict(bgcolor="#161b22", bordercolor="#21262d", borderwidth=1, font=dict(size=11, color="#c9d1d9")),
-    margin=dict(t=40, b=30, l=10, r=10),
-    colorway=["#bf1c20", "#1f6feb", "#3fb950", "#d29922", "#a371f7", "#f78166", "#58a6ff"],
-)
-
 _SCATTER_MARKER = dict(size=7, opacity=0.75, line=dict(width=0.5, color="#0d1117"))
 
 
 def _apply_layout(fig) -> None:
     """Apply the Baseball Savant dark layout to any Plotly figure."""
-    fig.update_layout(**_PLOTLY_LAYOUT)
+    apply_plotly_layout(fig)
 
 
 def _chart(fig, height: int = 400) -> None:
     """Apply dark layout and render a Plotly chart."""
-    _apply_layout(fig)
-    fig.update_layout(height=height)
-    st.plotly_chart(fig, use_container_width=True)
+    render_plotly_chart(fig, st, height=height)
 
 
 # ── Global state ───────────────────────────────────────────────────────────────
@@ -469,7 +460,7 @@ if metrics is None:
 
 _current_year = datetime.date.today().year
 all_years = sorted(metrics["year_id"].dropna().astype(int).unique().tolist())
-_slider_max = max(all_years[-1], _current_year) if all_years else _current_year
+_slider_max = compute_slider_max(all_years, _current_year)
 all_teams = sorted(metrics["team_name"].dropna().unique().tolist())
 
 
