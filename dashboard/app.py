@@ -24,6 +24,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.baseball_analytics.dashboard_utils import (
+    columns_with_player_id_for_collisions,
+    compute_slider_max,
+    has_player_name_collision,
+    render_plotly_chart,
+)
+
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="MLB Efficiency Engine",
@@ -385,6 +392,7 @@ _TEAM_COL_CFG = {
 
 # Shared column config for player tables
 _PLAYER_COL_CFG = {
+    "player_id":       st.column_config.TextColumn("Player ID"),
     "name_full":       st.column_config.TextColumn("Player"),
     "year_id":         st.column_config.NumberColumn("Year", format="%d"),
     "team_name":       st.column_config.TextColumn("Team"),
@@ -449,9 +457,7 @@ def _apply_layout(fig) -> None:
 
 def _chart(fig, height: int = 400) -> None:
     """Apply dark layout and render a Plotly chart."""
-    _apply_layout(fig)
-    fig.update_layout(height=height)
-    st.plotly_chart(fig, use_container_width=True)
+    render_plotly_chart(fig, st, _PLOTLY_LAYOUT, height=height)
 
 
 # ── Global state ───────────────────────────────────────────────────────────────
@@ -469,7 +475,7 @@ if metrics is None:
 
 _current_year = datetime.date.today().year
 all_years = sorted(metrics["year_id"].dropna().astype(int).unique().tolist())
-_slider_max = max(all_years[-1], _current_year) if all_years else _current_year
+_slider_max = compute_slider_max(all_years, _current_year)
 all_teams = sorted(metrics["team_name"].dropna().unique().tolist())
 
 
@@ -626,16 +632,10 @@ def page_player_explorer() -> None:
     # ── Tabs: Batting | Pitching | Contract | All ──────────────────────────
     tab_bat, tab_pit, tab_contract, tab_all = st.tabs(["Batting", "Pitching", "Contract", "All Stats"])
 
-    # Detect same-name players in the current filtered view so we can show player_id
-    has_name_collision = (
-        "name_full" in filt.columns
-        and filt.duplicated("name_full", keep=False).any()
-    )
-    id_col = ["player_id"] if has_name_collision and "player_id" in filt.columns else []
+    has_name_collision = has_player_name_collision(filt)
+    id_col = columns_with_player_id_for_collisions(filt, [])
     if has_name_collision:
         st.caption("⚠️ Multiple players share a name in this view — the **Player ID** column distinguishes them.")
-
-    _PLAYER_COL_CFG["player_id"] = st.column_config.TextColumn("Player ID")
 
     bat_cols = id_col + ["name_full", "team_name", "player_type", "pa", "hr", "bb", "woba", "batting_war"]
     pit_cols = id_col + ["name_full", "team_name", "player_type", "ip", "era", "fip", "pitching_war"]
@@ -776,12 +776,12 @@ def page_team_profile() -> None:
         if "team_name" in roster.columns:
             roster = roster[roster["team_name"] == team]
         if not roster.empty:
-            roster_id = ["player_id"] if roster.duplicated("name_full", keep=False).any() and "player_id" in roster.columns else []
-            roster_cols = [c for c in (roster_id + [
+            roster_cols = columns_with_player_id_for_collisions(roster, [
                 "name_full", "player_type", "pa", "hr", "bb", "woba", "batting_war",
                 "ip", "era", "fip", "pitching_war",
                 "player_war", "salary", "surplus_value", "contract_label",
-            ]) if c in roster.columns]
+            ])
+            roster_cols = [c for c in roster_cols if c in roster.columns]
             _show_table(
                 _scale_payroll(roster[roster_cols]).sort_values("player_war", ascending=False).reset_index(drop=True),
                 _PLAYER_COL_CFG, height=500,
