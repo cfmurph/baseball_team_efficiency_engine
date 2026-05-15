@@ -24,6 +24,14 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.baseball_analytics.dashboard_utils import (
+    compute_slider_max,
+    frontier_line_points,
+    has_duplicate_player_names,
+    player_id_columns_for_name_collision,
+    render_plotly_chart,
+)
+
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="MLB Efficiency Engine",
@@ -449,9 +457,7 @@ def _apply_layout(fig) -> None:
 
 def _chart(fig, height: int = 400) -> None:
     """Apply dark layout and render a Plotly chart."""
-    _apply_layout(fig)
-    fig.update_layout(height=height)
-    st.plotly_chart(fig, use_container_width=True)
+    render_plotly_chart(fig, st, layout=_PLOTLY_LAYOUT, height=height)
 
 
 # ── Global state ───────────────────────────────────────────────────────────────
@@ -469,7 +475,7 @@ if metrics is None:
 
 _current_year = datetime.date.today().year
 all_years = sorted(metrics["year_id"].dropna().astype(int).unique().tolist())
-_slider_max = max(all_years[-1], _current_year) if all_years else _current_year
+_slider_max = compute_slider_max(all_years, _current_year)
 all_teams = sorted(metrics["team_name"].dropna().unique().tolist())
 
 
@@ -627,11 +633,8 @@ def page_player_explorer() -> None:
     tab_bat, tab_pit, tab_contract, tab_all = st.tabs(["Batting", "Pitching", "Contract", "All Stats"])
 
     # Detect same-name players in the current filtered view so we can show player_id
-    has_name_collision = (
-        "name_full" in filt.columns
-        and filt.duplicated("name_full", keep=False).any()
-    )
-    id_col = ["player_id"] if has_name_collision and "player_id" in filt.columns else []
+    has_name_collision = has_duplicate_player_names(filt)
+    id_col = player_id_columns_for_name_collision(filt)
     if has_name_collision:
         st.caption("⚠️ Multiple players share a name in this view — the **Player ID** column distinguishes them.")
 
@@ -776,7 +779,7 @@ def page_team_profile() -> None:
         if "team_name" in roster.columns:
             roster = roster[roster["team_name"] == team]
         if not roster.empty:
-            roster_id = ["player_id"] if roster.duplicated("name_full", keep=False).any() and "player_id" in roster.columns else []
+            roster_id = player_id_columns_for_name_collision(roster)
             roster_cols = [c for c in (roster_id + [
                 "name_full", "player_type", "pa", "hr", "bb", "woba", "batting_war",
                 "ip", "era", "fip", "pitching_war",
@@ -986,7 +989,7 @@ def page_efficiency_frontier() -> None:
                                  labels={"payroll_m": "Payroll ($M)", "wins": "Wins"},
                                  color_discrete_map={"Above (Efficient)": "#3fb950", "Below (Wasteful)": "#f85149"})
                 if "frontier_pred" in fd.columns:
-                    fl = fd.sort_values("payroll_m")[["payroll_m", "frontier_pred"]].drop_duplicates()
+                    fl = frontier_line_points(fd)
                     fig.add_trace(go.Scatter(x=fl["payroll_m"], y=fl["frontier_pred"],
                                             mode="lines", line=dict(color="#58a6ff", dash="dash", width=2),
                                             name="Frontier"))
