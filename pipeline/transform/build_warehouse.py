@@ -261,6 +261,14 @@ def build_fact_team_season(
     ).rename(columns={"pitching_war": "player_war"})
     all_players = pd.concat([bat_war_merged, pit_war_merged], ignore_index=True)
     all_players["salary"] = all_players["salary"].fillna(0)
+    all_players = (
+        all_players
+        .groupby(["yearID", "teamID", "playerID"], as_index=False)
+        .agg(
+            salary=("salary", "max"),
+            player_war=("player_war", "sum"),
+        )
+    )
 
     dead_money = (
         all_players
