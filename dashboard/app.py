@@ -24,6 +24,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from src.baseball_analytics.dashboard_utils import (
+    apply_plotly_layout,
+    compute_slider_max,
+    disambiguating_player_id_columns,
+    render_plotly_chart,
+)
+
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="MLB Efficiency Engine",
@@ -444,14 +451,12 @@ _SCATTER_MARKER = dict(size=7, opacity=0.75, line=dict(width=0.5, color="#0d1117
 
 def _apply_layout(fig) -> None:
     """Apply the Baseball Savant dark layout to any Plotly figure."""
-    fig.update_layout(**_PLOTLY_LAYOUT)
+    apply_plotly_layout(fig, _PLOTLY_LAYOUT)
 
 
 def _chart(fig, height: int = 400) -> None:
     """Apply dark layout and render a Plotly chart."""
-    _apply_layout(fig)
-    fig.update_layout(height=height)
-    st.plotly_chart(fig, use_container_width=True)
+    render_plotly_chart(fig, st, _PLOTLY_LAYOUT, height=height)
 
 
 # ── Global state ───────────────────────────────────────────────────────────────
@@ -469,7 +474,7 @@ if metrics is None:
 
 _current_year = datetime.date.today().year
 all_years = sorted(metrics["year_id"].dropna().astype(int).unique().tolist())
-_slider_max = max(all_years[-1], _current_year) if all_years else _current_year
+_slider_max = compute_slider_max(all_years, _current_year)
 all_teams = sorted(metrics["team_name"].dropna().unique().tolist())
 
 
@@ -627,12 +632,8 @@ def page_player_explorer() -> None:
     tab_bat, tab_pit, tab_contract, tab_all = st.tabs(["Batting", "Pitching", "Contract", "All Stats"])
 
     # Detect same-name players in the current filtered view so we can show player_id
-    has_name_collision = (
-        "name_full" in filt.columns
-        and filt.duplicated("name_full", keep=False).any()
-    )
-    id_col = ["player_id"] if has_name_collision and "player_id" in filt.columns else []
-    if has_name_collision:
+    id_col = disambiguating_player_id_columns(filt)
+    if id_col:
         st.caption("⚠️ Multiple players share a name in this view — the **Player ID** column distinguishes them.")
 
     _PLAYER_COL_CFG["player_id"] = st.column_config.TextColumn("Player ID")
@@ -776,7 +777,7 @@ def page_team_profile() -> None:
         if "team_name" in roster.columns:
             roster = roster[roster["team_name"] == team]
         if not roster.empty:
-            roster_id = ["player_id"] if roster.duplicated("name_full", keep=False).any() and "player_id" in roster.columns else []
+            roster_id = disambiguating_player_id_columns(roster)
             roster_cols = [c for c in (roster_id + [
                 "name_full", "player_type", "pa", "hr", "bb", "woba", "batting_war",
                 "ip", "era", "fip", "pitching_war",
