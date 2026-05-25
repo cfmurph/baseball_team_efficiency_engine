@@ -29,7 +29,7 @@ def _connect_with_player_fixtures() -> duckdb.DuckDBPyConnection:
         ],
     )
     con.executemany(
-        "INSERT INTO fact_player_season VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO fact_player_season VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             (
                 "traded01",
