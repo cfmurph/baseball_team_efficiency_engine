@@ -81,12 +81,15 @@ SELECT
     SUM(p.pa)                           AS pa,
     SUM(p.hr)                           AS hr,
     SUM(p.bb)                           AS bb,
-    AVG(CASE WHEN p.pa > 0 THEN p.woba END) AS woba,
+    SUM(CASE WHEN p.pa > 0 THEN p.woba * p.pa ELSE 0 END)
+        / NULLIF(SUM(CASE WHEN p.pa > 0 THEN p.pa ELSE 0 END), 0) AS woba,
 
     SUM(p.batting_war)                  AS batting_war,
     SUM(p.ip)                           AS ip,
-    AVG(CASE WHEN p.ip > 0 THEN p.fip END) AS fip,
-    AVG(CASE WHEN p.ip > 0 THEN p.era END) AS era,
+    SUM(CASE WHEN p.ip > 0 THEN p.fip * p.ip ELSE 0 END)
+        / NULLIF(SUM(CASE WHEN p.ip > 0 THEN p.ip ELSE 0 END), 0) AS fip,
+    SUM(CASE WHEN p.ip > 0 THEN p.era * p.ip ELSE 0 END)
+        / NULLIF(SUM(CASE WHEN p.ip > 0 THEN p.ip ELSE 0 END), 0) AS era,
     SUM(p.pitching_war)                 AS pitching_war,
     SUM(p.player_war)                   AS player_war,
 
@@ -99,8 +102,9 @@ SELECT
 FROM fact_player_season p
 LEFT JOIN dim_player dp USING (player_id)
 LEFT JOIN (
-    SELECT DISTINCT team_id, team_name
+    SELECT team_id, FIRST(team_name ORDER BY team_name) AS team_name
     FROM dim_team
+    GROUP BY team_id
 ) t ON t.team_id = p.team_id
 GROUP BY p.player_id, dp.name_full, dp.name_first, dp.name_last, p.season_key
 ORDER BY p.season_key, SUM(p.player_war) DESC
