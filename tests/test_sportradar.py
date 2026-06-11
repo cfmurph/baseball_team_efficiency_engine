@@ -268,6 +268,16 @@ def test_parse_player_season_team_id():
     assert (df["season_year"] == 2024).all()
 
 
+def test_parse_player_season_empty_player_list():
+    df = _parse_player_season({"players": []}, "nyr-guid", 2024)
+    assert df.empty
+
+
+def test_parse_player_season_missing_players_key():
+    df = _parse_player_season({}, "nyr-guid", 2024)
+    assert df.empty
+
+
 def test_parse_transactions():
     df = _parse_transactions(TX_FIXTURE)
     assert len(df) == 1
