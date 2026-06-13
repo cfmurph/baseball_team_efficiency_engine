@@ -13,7 +13,9 @@ from src.baseball_analytics.validation import (
     check_no_duplicate_pk,
     check_referential_integrity,
     validate_fact_team_season,
+    validate_fact_player_season,
     validate_dim_team,
+    validate_all,
 )
 
 
@@ -157,3 +159,59 @@ def test_validate_dim_team_passes():
     })
     report = validate_dim_team(df)
     assert report.passed
+
+
+def test_validate_fact_player_season_passes():
+    df = pd.DataFrame({
+        "player_id": ["judgeaa01", "colege01"],
+        "season_key": [2024, 2024],
+        "team_id": ["NYA", "NYA"],
+        "salary": [40_000_000, 36_000_000],
+    })
+    report = validate_fact_player_season(df)
+    assert report.passed, report.summary()
+
+
+def test_validate_fact_player_season_catches_duplicate_player_team_season():
+    df = pd.DataFrame({
+        "player_id": ["judgeaa01", "judgeaa01"],
+        "season_key": [2024, 2024],
+        "team_id": ["NYA", "NYA"],
+        "salary": [40_000_000, 40_000_000],
+    })
+    report = validate_fact_player_season(df)
+    assert not report.passed
+    assert any("PK unique" in result.name for result in report.results if not result.passed)
+
+
+def test_validate_all_aggregates_fact_and_dimension_reports():
+    fact_team = pd.DataFrame({
+        "team_key": ["NYA_2024"],
+        "season_key": [2024],
+        "wins": [94],
+        "losses": [68],
+        "payroll": [300_000_000],
+        "pythag_wins": [91.5],
+        "gini_salary": [0.42],
+    })
+    fact_player = pd.DataFrame({
+        "player_id": ["judgeaa01"],
+        "season_key": [2024],
+        "team_id": ["NYA"],
+        "salary": [40_000_000],
+    })
+    dim_team = pd.DataFrame({
+        "team_key": ["NYA_2024"],
+        "team_id": ["NYA"],
+        "franchise_id": ["NYY"],
+        "team_name": ["New York Yankees"],
+        "league_id": ["AL"],
+    })
+
+    report = validate_all(fact_team, fact_player, dim_team)
+
+    assert report.passed, report.summary()
+    result_names = {result.name for result in report.results}
+    assert "fact_team_season PK unique" in result_names
+    assert "fact_player_season PK unique" in result_names
+    assert "dim_team PK unique" in result_names
