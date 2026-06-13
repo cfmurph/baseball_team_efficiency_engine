@@ -21,7 +21,8 @@ def test_render_plotly_chart_applies_layout_and_calls_streamlit_renderer():
     render_plotly_chart(fig, plotly_chart, height=512)
 
     assert fig.layout.height == 512
-    assert fig.layout.template.layout.paper_bgcolor == "#0d1117"
+    assert fig.layout.paper_bgcolor == "#0d1117"
+    assert fig.layout.plot_bgcolor == "#0d1117"
     plotly_chart.assert_called_once_with(fig, use_container_width=True)
 
 
