@@ -268,6 +268,27 @@ def test_parse_player_season_team_id():
     assert (df["season_year"] == 2024).all()
 
 
+def test_parse_player_season_empty_players_payload():
+    df = _parse_player_season({"players": []}, "nyr-guid", 2024)
+
+    assert df.empty
+
+
+def test_parse_player_season_filters_players_without_ids():
+    fixture = {
+        "players": [
+            {
+                "full_name": "Mystery Player",
+                "statistics": {"hitting": {"overall": {"ap": 10}}},
+            }
+        ]
+    }
+
+    df = _parse_player_season(fixture, "nyr-guid", 2024)
+
+    assert df.empty
+
+
 def test_parse_transactions():
     df = _parse_transactions(TX_FIXTURE)
     assert len(df) == 1
