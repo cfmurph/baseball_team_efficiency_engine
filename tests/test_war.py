@@ -143,3 +143,12 @@ def test_batting_war_handles_missing_columns():
     })
     result = batting_war(minimal)
     assert "batting_war" in result.columns
+
+
+def test_batting_war_accepts_lahman_x2b_x3b_aliases(sample_batting):
+    alias_batting = sample_batting.rename(columns={"2B": "X2B", "3B": "X3B"})
+
+    result_with_standard_names = batting_war(sample_batting).sort_values(["playerID", "teamID"]).reset_index(drop=True)
+    result_with_alias_names = batting_war(alias_batting).sort_values(["playerID", "teamID"]).reset_index(drop=True)
+
+    pd.testing.assert_frame_equal(result_with_alias_names, result_with_standard_names)

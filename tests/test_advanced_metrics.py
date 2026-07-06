@@ -15,6 +15,7 @@ from src.baseball_analytics.metrics import (
     surplus_value_team,
     pythag_gap,
     war_win_gap,
+    war_concentration,
     player_surplus_value,
     classify_contract,
     payroll_underperformer_share,
@@ -134,6 +135,23 @@ def test_classify_contract_overpaid():
     war = pd.Series([1.0])
     result = classify_contract(surplus, war)
     assert result[0] == "overpaid"
+
+
+def test_classify_contract_fair_value_band():
+    surplus = pd.Series([-2_000_000.0, 0.0, 2_000_000.0])
+    war = pd.Series([1.0, 2.0, 3.0])
+    result = classify_contract(surplus, war)
+    assert result.tolist() == ["fair_value", "fair_value", "fair_value"]
+
+
+def test_war_concentration_returns_top_n_share():
+    df = pd.DataFrame({"player_war": [5.0, 3.0, 2.0, 1.0]})
+    assert war_concentration(df, top_n=2) == pytest.approx(8.0 / 11.0)
+
+
+def test_war_concentration_returns_nan_when_team_war_non_positive():
+    df = pd.DataFrame({"player_war": [0.0, -1.0]})
+    assert np.isnan(war_concentration(df))
 
 
 def test_payroll_underperformer_share():
