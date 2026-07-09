@@ -268,6 +268,35 @@ def test_parse_player_season_team_id():
     assert (df["season_year"] == 2024).all()
 
 
+def test_parse_player_season_empty_players_does_not_raise():
+    df = _parse_player_season({"players": []}, "nyr-guid", 2024)
+
+    assert df.empty
+
+
+def test_parse_player_season_filters_players_without_ids():
+    payload = {
+        "players": [
+            {
+                "full_name": "Anonymous Player",
+                "statistics": {"hitting": {"overall": {"ap": 12}}},
+            }
+        ]
+    }
+
+    df = _parse_player_season(payload, "nyr-guid", 2024)
+
+    assert df.empty
+
+
+def test_parse_player_season_ignores_legacy_nested_team_players_shape():
+    legacy_payload = {"team": {"players": SEASONAL_STATS_FIXTURE["players"]}}
+
+    df = _parse_player_season(legacy_payload, "nyr-guid", 2024)
+
+    assert df.empty
+
+
 def test_parse_transactions():
     df = _parse_transactions(TX_FIXTURE)
     assert len(df) == 1
