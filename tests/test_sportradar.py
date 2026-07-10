@@ -268,6 +268,47 @@ def test_parse_player_season_team_id():
     assert (df["season_year"] == 2024).all()
 
 
+def test_parse_player_season_empty_top_level_players():
+    df = _parse_player_season({"players": []}, "nyr-guid", 2024)
+
+    assert df.empty
+
+
+def test_parse_player_season_ignores_players_without_id():
+    df = _parse_player_season(
+        {
+            "players": [
+                {
+                    "full_name": "Anonymous Player",
+                    "statistics": {
+                        "hitting": {"overall": {"ap": 100, "onbase": {"hr": 12}}},
+                    },
+                }
+            ]
+        },
+        "nyr-guid",
+        2024,
+    )
+
+    assert df.empty
+
+
+def test_parse_player_season_legacy_nested_team_players_returns_empty_frame():
+    df = _parse_player_season(
+        {
+            "team": {
+                "players": [
+                    {"id": "legacy-player", "full_name": "Legacy Player"},
+                ]
+            }
+        },
+        "nyr-guid",
+        2024,
+    )
+
+    assert df.empty
+
+
 def test_parse_transactions():
     df = _parse_transactions(TX_FIXTURE)
     assert len(df) == 1
