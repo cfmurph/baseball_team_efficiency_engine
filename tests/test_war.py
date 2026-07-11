@@ -143,3 +143,30 @@ def test_batting_war_handles_missing_columns():
     })
     result = batting_war(minimal)
     assert "batting_war" in result.columns
+
+
+def test_batting_war_accepts_lahman_x2b_x3b_columns():
+    lahman_aliases = pd.DataFrame({
+        "playerID": ["alias"],
+        "yearID": [2010],
+        "teamID": ["NYA"],
+        "AB": [500],
+        "H": [160],
+        "X2B": [35],
+        "X3B": [5],
+        "HR": [25],
+        "BB": [60],
+        "IBB": [5],
+        "HBP": [4],
+        "SF": [3],
+        "SH": [1],
+    })
+    singles_only = lahman_aliases.assign(X2B=0, X3B=0)
+
+    alias_result = batting_war(lahman_aliases).iloc[0]
+    singles_result = batting_war(singles_only).iloc[0]
+
+    assert np.isfinite(alias_result["batting_war"])
+    assert alias_result["hr"] == 25
+    assert alias_result["pa"] == 568
+    assert alias_result["batting_war"] > singles_result["batting_war"]
