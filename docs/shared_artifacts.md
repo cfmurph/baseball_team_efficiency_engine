@@ -55,7 +55,8 @@ layout. See [mlb_stats.md](mlb_stats.md) and
 ```
 
 `current/` is the published SoT. `latest/` is a deprecated one-release
-read-only fallback and is not used for Stats API raw.
+read-only fallback and will be dropped next release. Stats API raw does
+not use `latest/`.
 
 ## Configuration
 
