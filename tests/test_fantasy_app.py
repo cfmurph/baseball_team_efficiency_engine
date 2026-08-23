@@ -8,11 +8,14 @@ from pathlib import Path
 
 from fantasy.cards import CARD_LAKE_KEY, OPTIONAL_CARD_KEY
 from fantasy.copy import (
+    COPY_TEXT,
     CTA,
+    DOWNLOAD_IMAGE,
     EMPTY_BODY,
     EMPTY_TITLE,
     FOOTER,
     HEADLINE,
+    INVITE_CHIP,
     MICROCOPY,
     PRODUCT_NAME,
     SUBHEAD,

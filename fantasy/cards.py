@@ -19,7 +19,11 @@ import re
 from typing import Any, Mapping
 
 from src.baseball_analytics.config import ArtifactSettings, load_artifact_settings
-from src.baseball_analytics.storage import resolve_artifact_hit, resolve_named_artifacts
+from src.baseball_analytics.storage import (
+    default_run_date,
+    resolve_artifact_hit,
+    resolve_named_artifacts,
+)
 
 from fantasy.copy import EARLY_MODEL_BADGE, PROMPT_LINE
 
@@ -175,12 +179,36 @@ def resolve_card_feed(
     environ: Mapping[str, str] | None = None,
     now: datetime | None = None,
 ) -> tuple[Path | None, str, str | None]:
-    """Return ``(path, source, key)`` for jsonl, then dated ``fantasy_cards_*.json``."""
+    """Prefer ``current/fantasy/cards.jsonl``. Dated JSON is read-only fallback."""
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
-    for key in (*CARD_FEED_KEYS, *dated_card_keys(cfg, environ=environ, now=now)):
-        hit = resolve_artifact_hit(key, cfg, backend=backend, environ=environ)
-        if hit is not None:
-            return hit.path, hit.source, key
+    current_local = cfg.local_dir / "current" / "fantasy" / "cards.jsonl"
+    if current_local.is_file() and current_local.stat().st_size > 0:
+        return current_local, "local", CARD_LAKE_KEY
+    if cfg.uri:
+        hit = resolve_artifact_hit(CARD_LAKE_KEY, cfg, backend=backend, environ=environ)
+        if hit is not None and hit.source == "remote":
+            return hit.path, hit.source, CARD_LAKE_KEY
+        if backend is not None:
+            data = backend.get(OPTIONAL_CARD_KEY)
+            if data:
+                dest = cfg.cache_dir / OPTIONAL_CARD_KEY
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(data)
+                return dest, "remote", OPTIONAL_CARD_KEY
+    optional_local = cfg.local_dir / "fantasy" / "cards.jsonl"
+    if optional_local.is_file() and optional_local.stat().st_size > 0:
+        return optional_local, "local", OPTIONAL_CARD_KEY
+    for key in dated_card_keys(cfg, environ=environ, now=now):
+        for candidate in (cfg.local_dir / key, cfg.local_dir / Path(key).name):
+            if candidate.is_file() and candidate.stat().st_size > 0:
+                return candidate, "local", Path(key).name
+        if backend is not None:
+            data = backend.get(key)
+            if data:
+                dest = cfg.cache_dir / key
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(data)
+                return dest, "remote", key
     return None, SOURCE_MISSING, None
 
 

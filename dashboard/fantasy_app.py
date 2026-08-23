@@ -5,9 +5,8 @@ Separate entrypoint from the front-office GM dashboard::
     streamlit run dashboard/fantasy_app.py
 
 Reads locked ``current/fantasy/cards.jsonl`` (schema 1.0) via
-``resolve_artifact`` / ``ARTIFACTS_URI``. ``fantasy_cards_*.json`` is
-fallback only. Missing feeds show an empty state plus labeled stubs.
-This entrypoint is not a page in the FO GM app.
+``resolve_artifact`` / ``ARTIFACTS_URI``. Missing feeds show an empty
+state plus labeled stubs. This entrypoint is not a page in the FO GM app.
 """
 from __future__ import annotations
 
@@ -27,6 +26,7 @@ from src.baseball_analytics.storage import resolve_artifact
 
 from fantasy.card_image import render_share_card_png
 from fantasy.cards import (
+    OPTIONAL_CARD_KEY,
     SOURCE_MISSING,
     load_share_cards,
     load_stub_cards,
@@ -38,7 +38,9 @@ from fantasy.copy import (
     COPIED,
     COPY_TEXT,
     CTA,
+    DOWNLOAD_IMAGE,
     EMPTY_BODY,
+    EMPTY_TAB,
     EMPTY_TITLE,
     FOOTER,
     HEADLINE,
@@ -49,6 +51,7 @@ from fantasy.copy import (
     SUBHEAD,
     SUCCESS,
     TAB_ALL,
+    TAB_LABELS,
 )
 from fantasy.waitlist import capture_signup
 
