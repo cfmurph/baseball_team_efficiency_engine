@@ -29,9 +29,14 @@ run tree plus a single mutable pointer:
 
 ## Load order and badge
 
-1. If `ARTIFACTS_URI` is set, load `current/`.
-2. On any failure or timeout, fall back to local `artifacts/`.
-3. If neither has data, render the empty state.
+Write `runs/{run_id}/` first; promote `current/` only after a full success.
+
+Read order:
+
+1. `{ARTIFACTS_URI}/current/`
+2. Deprecated `#109` `{league}/{level}/latest/` (one release, then dropped)
+3. Local `artifacts/`
+4. Empty state
 
 The dashboard Source badge is exactly `remote` | `local` | `missing`.
 
@@ -43,10 +48,10 @@ The dashboard Source badge is exactly `remote` | `local` | `missing`.
 
 ## Fantasy cards
 
-Path is `fantasy/cards.jsonl` under both `runs/{run_id}/` and `current/`.
-`as_of_date` and `schema_version` belong on `manifest.json` and on each JSONL
-record. `edge.war_source` is `bbref` | `approx` only. A small schema-valid
-sample (start / sit / pickup / stream) ships until the #111 emitter.
+Path is **only** `fantasy/cards.jsonl` under `runs/{run_id}/` and `current/`.
+Format is JSONL `schema_version` 1.0. `as_of_date` lives on each record and
+on `manifest.json`, never in the filename. `edge.war_source` is `bbref` |
+`approx` only. An empty stub is OK until the #111 emitter.
 
 ## Interface
 

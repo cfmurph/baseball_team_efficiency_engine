@@ -10,8 +10,8 @@ Locked lake layout (``docs/adr/0001-shared-artifact-contract.md``)::
         fantasy/cards.jsonl
       current/                       # latest fully successful nightly
 
-Dashboard load order: ``ARTIFACTS_URI`` → ``current/``; on failure, local
-``artifacts/``; else empty. Source badge: ``remote`` | ``local`` | ``missing``.
+Dashboard load order: ``current/`` → deprecated ``latest/`` (one release) →
+local ``artifacts/`` → empty. Source badge: ``remote`` | ``local`` | ``missing``.
 
 A brief read-only compat bridge still accepts the #109
 ``{league}/{level}/latest/`` prefix so already-published objects keep working.

@@ -6,8 +6,6 @@ from pathlib import Path
 from src.baseball_analytics.config import ArtifactSettings
 from src.baseball_analytics.fantasy import (
     FANTASY_CARDS_RELPATH,
-    RECOMMENDATION_TYPES,
-    SAMPLE_STUB_CARDS,
     VOID_DATED_CARDS_PREFIX,
     map_card_war_source,
     render_cards_jsonl,
@@ -60,23 +58,11 @@ def test_emitter_path_is_jsonl_not_dated_filename() -> None:
     assert VOID_DATED_CARDS_PREFIX not in FANTASY_CARDS_RELPATH
 
 
-def test_sample_stub_is_schema_valid_and_uses_locked_path(tmp_path: Path) -> None:
+def test_empty_stub_is_valid_and_uses_locked_path(tmp_path: Path) -> None:
     dest = write_fantasy_cards_stub(tmp_path, as_of_date="2026-08-23")
     assert dest == tmp_path / "fantasy" / "cards.jsonl"
-    assert not (tmp_path / "fantasy" / "fantasy_cards_2026-08-23.json").exists()
-    rows = [json.loads(line) for line in dest.read_text(encoding="utf-8").splitlines()]
-    assert {row["recommendation_type"] for row in rows} == set(RECOMMENDATION_TYPES)
-    assert len(rows) == len(SAMPLE_STUB_CARDS)
-    for row in rows:
-        assert row["schema_version"] == "1.0"
-        assert row["as_of_date"] == "2026-08-23"
-        source = row["edge"]["war_source"]
-        assert source in {"bbref", "approx"}
-        assert row["edge"]["is_approx"] is (source == "approx")
-        assert "player_id" in row["player"]
-        assert row["reason"]
-        assert "vs_replacement" in row["edge"]
-        assert "fangraphs" not in source
+    assert dest.read_text(encoding="utf-8") == ""
+    assert not any(tmp_path.joinpath("fantasy").glob("fantasy_cards_*.json"))
 
 
 def test_records_carry_as_of_date_schema_and_edge_war_source() -> None:

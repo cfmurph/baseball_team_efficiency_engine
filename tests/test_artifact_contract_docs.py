@@ -15,8 +15,11 @@ def test_adr_layout_uses_runs_current_and_cards_jsonl() -> None:
     assert "current/" in adr
     assert FANTASY_CARDS_RELPATH in adr
     assert "edge.war_source" in adr
+    assert "schema_version" in adr
+    assert "empty stub" in adr.lower()
     assert "deprecated" in adr.lower()
     assert "dropped next release" in adr
+    assert "{league}/{level}/latest/" in adr
     for field in REQUIRED_MANIFEST_FIELDS:
         assert field in adr
     assert "remote" in adr and "local" in adr and "missing" in adr

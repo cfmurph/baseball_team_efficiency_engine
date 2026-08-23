@@ -34,9 +34,7 @@ Same relative file under a dated run:
 runs/{run_id}/fantasy/cards.jsonl
 ```
 
-`fantasy_cards_{as_of_date}.json` is retired — do not emit or load it.
-
-Until #111 publishes `current/fantasy/cards.jsonl`, the shell renders bundled stubs in `fantasy/stub_cards.jsonl` (pickup / stream / start / sit). `edge.war_source` is `bbref` or `approx` only. `approx` rows set `is_approx: true` and show an **early model** badge.
+JSONL schema 1.0. `as_of_date` is on each record and `manifest.json`. `edge.war_source` is `bbref` or `approx` only. The lake file may be an empty stub until #111. Until that emitter publishes cards, the shell renders bundled stubs in `fantasy/stub_cards.jsonl` (pickup / stream / start / sit). `approx` rows set `is_approx: true` and show an **early model** badge.
 
 Local fallback path: `artifacts/current/fantasy/cards.jsonl`.
 
