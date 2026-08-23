@@ -42,3 +42,14 @@ Lahman-only wOBA batting WAR and FIP pitching WAR in `src/baseball_analytics/war
 `war_source` on `fact_team_season` is `real`, `approx`, or `mixed`.
 
 Cost-per-WAR, surplus value, dead money, and `team_total_war` all use the **effective** WAR (real when present).
+
+## Golden fixtures (CI)
+
+`tests/fixtures/war/` pins Judge 2022, Trout 2012, deGrom 2018, and Ohtani 2023. CI loads those files through `load_real_war` / `apply_real_war` and asserts `war_source=real` plus the expected rWAR. No live Baseball-Reference download.
+
+If a BR revision nudges a pinned season:
+
+1. Run `python3 -m pipeline.extract.pull_war` locally.
+2. Copy the updated player-season rows into `tests/fixtures/war/war_daily_bat.txt` and/or `war_daily_pitch.txt`.
+3. Update the matching `player_war` / component fields in `tests/fixtures/war/expected.json`.
+4. Re-run `python3 -m pytest tests/test_golden_war.py -v`.

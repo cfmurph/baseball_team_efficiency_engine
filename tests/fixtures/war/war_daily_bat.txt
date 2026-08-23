@@ -1,0 +1,4 @@
+name_common,player_ID,year_ID,team_ID,stint_ID,WAR
+Aaron Judge,judgeaa01,2022,NYY,1,10.8
+Mike Trout,troutmi01,2012,LAA,1,10.5
+Shohei Ohtani,ohtansh01,2023,LAA,1,6.0

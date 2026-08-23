@@ -1,0 +1,38 @@
+name: CI smoke
+
+on:
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ci-smoke-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Dashboard + pipeline + golden WAR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run CI smokes
+        run: >
+          python3 -m pytest
+          tests/test_dashboard_apptest.py
+          tests/test_run_nightly.py
+          tests/test_golden_war.py
+          -v
