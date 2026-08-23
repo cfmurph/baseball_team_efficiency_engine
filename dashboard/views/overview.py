@@ -17,6 +17,7 @@ from dashboard.helpers import (
     scale_money_columns,
     top_n_by,
 )
+from dashboard.theme import AMBER, CRIMSON, GREEN
 from dashboard.ui import (
     SCATTER_MARKER,
     chart as _chart,
@@ -57,7 +58,7 @@ def page_league_snapshot() -> None:
         return
 
     with st.container():
-        col_nav, col_lg = st.columns([3, 1])
+        col_nav, col_lg = st.columns([5, 2])
         with col_nav:
             year = _season_picker_impl()
         with col_lg:
@@ -132,7 +133,7 @@ def page_league_snapshot() -> None:
                     "wins_per_10m": "W/$10M",
                     "cost_per_war_m": "$/WAR ($M)",
                 },
-                color_continuous_scale=["#e11d2e", "#f59e0b", "#22c55e"] if color_col == "surplus_m" else None,
+                color_continuous_scale=[CRIMSON, AMBER, GREEN] if color_col == "surplus_m" else None,
             )
             fig.update_traces(marker=SCATTER_MARKER)
             fig.update_layout(coloraxis_colorbar_title="Surplus ($M)" if color_col == "surplus_m" else None)

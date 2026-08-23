@@ -8,15 +8,17 @@ import pandas as pd
 import streamlit as st
 
 from dashboard.helpers import (
+    app_frame_html,
     artifact_status,
     empty_state_copy,
+    masthead_html,
     nav_groups,
     nav_page,
     salary_coverage_note,
     year_span_label,
 )
 from dashboard.state import NAV_PAGE, SEASON_YEAR, SELECTED_LEAGUE, SELECTED_TEAM
-from dashboard.theme import APP_CSS, PLOTLY_CONFIG, PLOTLY_LAYOUT, SCATTER_MARKER
+from dashboard.theme import APP_CSS, PLOTLY_CONFIG, PLOTLY_LAYOUT, SCATTER_MARKER, TOKENS
 from src.baseball_analytics.dashboard_utils import apply_plotly_layout, scale_payroll_for_display
 
 
@@ -25,12 +27,7 @@ def inject_theme() -> None:
 
 
 def page_header(label: str, extra_caption: str | None = None) -> None:
-    meta = nav_page(label)
-    st.markdown(f'<div class="page-kicker">{html.escape(meta["kicker"])}</div>', unsafe_allow_html=True)
-    st.title(meta["label"])
-    st.caption(meta["blurb"])
-    if extra_caption:
-        st.markdown(f'<p class="war-note">{html.escape(extra_caption)}</p>', unsafe_allow_html=True)
+    st.markdown(masthead_html(label, extra_caption), unsafe_allow_html=True)
 
 
 def empty_state(kind: str) -> None:
@@ -75,7 +72,7 @@ def apply_chart_layout(fig: Any, layout: dict | None = None) -> None:
 
 def chart(fig: Any, height: int = 400) -> None:
     apply_chart_layout(fig)
-    fig.update_layout(height=height)
+    fig.update_layout(height=height, title_text="")
     st.plotly_chart(fig, use_container_width=True, config=PLOTLY_CONFIG)
 
 
@@ -126,18 +123,26 @@ def league_select() -> str:
     return str(st.selectbox("League", options, key=SELECTED_LEAGUE))
 
 
+def render_app_frame(*, all_years: list[int], status: dict, source: str, page: str) -> None:
+    """Top command strip: seasons, artifacts, source, active desk."""
+    st.markdown(
+        app_frame_html(
+            seasons=year_span_label(all_years),
+            artifacts=f"{status['n_present']}/{status['n_total']}",
+            source=source,
+            page=page,
+        ),
+        unsafe_allow_html=True,
+    )
+
+
 def render_sidebar(*, all_years: list[int], status: dict, source: str = "local") -> str:
-    """Product nav with grouped sections. Returns the selected page label."""
+    """Numbered rail nav. Returns the selected page label."""
     st.sidebar.markdown(
         """
         <div class="sidebar-brand">
-          <div class="mark">
-            <div class="glyph">⚾</div>
-            <div>
-              <h1>Efficiency <em>Engine</em></h1>
-              <small>MLB front office</small>
-            </div>
-          </div>
+          <div class="wordmark">Efficiency<em>Engine</em></div>
+          <small>Front office · MLB</small>
         </div>
         """,
         unsafe_allow_html=True,
@@ -150,9 +155,10 @@ def render_sidebar(*, all_years: list[int], status: dict, source: str = "local")
         st.sidebar.markdown(f'<div class="nav-group">{html.escape(group_name)}</div>', unsafe_allow_html=True)
         for page in pages:
             label = page["label"]
+            index = page.get("index", "")
             selected = st.session_state[NAV_PAGE] == label
             if st.sidebar.button(
-                label,
+                f"{index}  {label}",
                 key=f"nav_{page['key']}",
                 use_container_width=True,
                 type="primary" if selected else "secondary",
@@ -236,6 +242,7 @@ def player_column_config() -> dict:
 # Re-export marker so views can import from one place
 __all__ = [
     "SCATTER_MARKER",
+    "TOKENS",
     "artifact_status",
     "apply_chart_layout",
     "chart",
@@ -244,6 +251,7 @@ __all__ = [
     "page_header",
     "panel_head",
     "player_column_config",
+    "render_app_frame",
     "render_sidebar",
     "salary_note",
     "scale_payroll",

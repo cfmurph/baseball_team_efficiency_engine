@@ -11,6 +11,8 @@ from dashboard.data import (
     load_win_model_metrics,
     load_win_model_predictions,
 )
+from dashboard.helpers import scoreboard_html
+from dashboard.theme import CRIMSON, SURFACE, TEXT_DIM
 from dashboard.ui import (
     SCATTER_MARKER as _SCATTER_MARKER,
     chart as _chart,
@@ -36,12 +38,17 @@ def page_model_insights() -> None:
         if model_metrics_df is None:
             _empty("models")
         else:
-            cards = st.columns(min(len(model_metrics_df), 4) or 1)
-            for col, (_, row) in zip(cards, model_metrics_df.iterrows()):
+            board = []
+            for _, row in model_metrics_df.iterrows():
                 name = str(row.get("model", "Model"))
                 mae = row.get("mae")
                 r2 = row.get("r2")
-                col.metric(name, f"MAE {mae:.2f}" if pd.notna(mae) else "—", delta=f"R² {r2:.3f}" if pd.notna(r2) else None)
+                value = f"MAE {mae:.2f}" if pd.notna(mae) else "—"
+                if pd.notna(r2):
+                    value = f"{value} · R² {r2:.3f}"
+                board.append((name, value))
+            if board:
+                st.markdown(scoreboard_html(board), unsafe_allow_html=True)
             cfg = {
                 "model": st.column_config.TextColumn("Model"),
                 "mae": st.column_config.NumberColumn("MAE (wins)", format="%.2f"),
@@ -67,7 +74,7 @@ def page_model_insights() -> None:
                 y="feature",
                 orientation="h",
                 color="importance",
-                color_continuous_scale=[[0, "#17202c"], [1, "#e11d2e"]],
+                color_continuous_scale=[[0, SURFACE], [1, CRIMSON]],
                 labels={"importance": "Importance", "feature": "Feature"},
             )
             fig.update_layout(yaxis={"categoryorder": "total ascending"})
@@ -104,6 +111,6 @@ def page_model_insights() -> None:
                 )
                 lo = preds[["actual_wins", "predicted_wins_xgb"]].min().min() - 2
                 hi = preds[["actual_wins", "predicted_wins_xgb"]].max().max() + 2
-                fig.add_trace(go.Scatter(x=[lo, hi], y=[lo, hi], mode="lines", line=dict(dash="dash", color="#243044"), name="Perfect"))
+                fig.add_trace(go.Scatter(x=[lo, hi], y=[lo, hi], mode="lines", line=dict(dash="dash", color=TEXT_DIM), name="Perfect"))
                 fig.update_traces(marker=_SCATTER_MARKER, selector=dict(mode="markers"))
                 _chart(fig, height=400)

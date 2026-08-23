@@ -99,7 +99,7 @@ def page_player_explorer() -> None:
                 labels={"salary": "Salary ($M)", "player_war": "WAR", "contract_label": "Contract"},
                 color_discrete_map=CONTRACT_COLORS,
             )
-            fig.add_hline(y=0, line_dash="dash", line_color="#243044")
+            fig.add_hline(y=0, line_dash="dash", line_color="#1e2836")
             fig.update_traces(marker=_SCATTER_MARKER)
             _chart(fig, height=420)
 

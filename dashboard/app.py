@@ -22,7 +22,7 @@ import pandas as pd
 import streamlit as st
 
 st.set_page_config(
-    page_title="Efficiency Engine",
+    page_title="EE · Front Office",
     page_icon="⚾",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -68,8 +68,9 @@ _PLOTLY_LAYOUT = dict(
     template="plotly_dark",
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
-    font=dict(family="IBM Plex Sans, Plus Jakarta Sans, sans-serif", color="#94a3b8", size=12),
-    margin=dict(t=56, b=40, l=48, r=20),
+    font=dict(family="IBM Plex Sans, sans-serif", color="#9aa4b2", size=11),
+    margin=dict(t=20, b=36, l=44, r=12),
+    colorway=["#ff2d3a", "#6ecbff", "#3ee08f", "#f5c518", "#b794f6", "#ff7a59"],
 )
 _SCATTER_MARKER = ui.SCATTER_MARKER
 
@@ -191,6 +192,7 @@ _PAGES = {
 }
 
 page = ui.render_sidebar(all_years=all_years, status=_status, source=_source_label)
+ui.render_app_frame(all_years=all_years, status=_status, source=_source_label, page=page)
 # nav_labels() is the product section list; keep it imported for tests/helpers.
 assert page in nav_labels() or page in _PAGES
 _PAGES[page]()

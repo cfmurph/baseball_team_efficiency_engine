@@ -96,13 +96,13 @@ def page_compare_teams() -> None:
     if y_metric in {"payroll", "cost_per_war", "surplus_value"}:
         plot_df[y_metric] = plot_df[y_metric] / 1_000_000
     y_label = metric_label(y_metric)
+    panel_head(f"{y_label}", f"{year_range[0]}–{year_range[1]}")
     fig = px.line(
         plot_df,
         x="year_id",
         y=y_metric,
         color="team_name",
         markers=True,
-        title=f"{y_label} — {year_range[0]}–{year_range[1]}",
         labels={y_metric: y_label, "year_id": "Season", "team_name": "Team"},
     )
     _chart(fig, height=380)

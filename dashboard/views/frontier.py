@@ -9,6 +9,7 @@ import streamlit as st
 
 from dashboard.data import load_cluster_summary, load_frontier_data, load_team_clusters
 from dashboard.helpers import add_payroll_millions, scale_money_columns
+from dashboard.theme import CRIMSON, CYAN, GREEN
 from dashboard.state import SEASON_YEAR
 from dashboard.ui import (
     SCATTER_MARKER as _SCATTER_MARKER,
@@ -55,7 +56,7 @@ def page_efficiency_frontier() -> None:
                 hover_name="team_name",
                 hover_data=["year_id"],
                 labels={"payroll_m": "Payroll ($M)", "wins": "Wins", "above_label": "Status"},
-                color_discrete_map={"Above (efficient)": "#22c55e", "Below (wasteful)": "#e11d2e"},
+                color_discrete_map={"Above (efficient)": GREEN, "Below (wasteful)": CRIMSON},
             )
             if "frontier_pred" in fd.columns:
                 fl = fd.sort_values("payroll_m")[["payroll_m", "frontier_pred"]].drop_duplicates()
@@ -63,7 +64,7 @@ def page_efficiency_frontier() -> None:
                     x=fl["payroll_m"],
                     y=fl["frontier_pred"],
                     mode="lines",
-                    line=dict(color="#38bdf8", dash="dash", width=2),
+                    line=dict(color=CYAN, dash="dash", width=2),
                     name="Frontier",
                 ))
             fig.update_traces(marker=_SCATTER_MARKER, selector=dict(mode="markers"))

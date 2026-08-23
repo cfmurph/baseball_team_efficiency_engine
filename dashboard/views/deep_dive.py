@@ -8,11 +8,14 @@ import streamlit as st
 from dashboard.data import load_player_season_metrics
 from dashboard.helpers import (
     add_payroll_millions,
+    dossier_html,
     format_money_millions,
     format_signed_int,
     format_war,
     scale_money_columns,
+    scoreboard_html,
 )
+from dashboard.theme import CRIMSON, TEXT_DIM
 from dashboard.ui import (
     SCATTER_MARKER as _SCATTER_MARKER,
     chart as _chart,
@@ -60,11 +63,15 @@ def page_team_deep_dive() -> None:
 
     season_row = team_history[team_history["year_id"] == year] if year is not None else team_history.iloc[0:0]
     phase = ""
-    if not season_row.empty and "window_phase" in season_row.columns:
-        phase = str(season_row.iloc[0].get("window_phase") or "")
-    badge = f'<span class="phase-badge">{phase.title()}</span>' if phase and phase != "nan" else ""
+    wins = losses = None
+    if not season_row.empty:
+        r0 = season_row.iloc[0]
+        if "window_phase" in season_row.columns:
+            phase = str(r0.get("window_phase") or "")
+        wins = r0.get("wins")
+        losses = r0.get("losses")
     st.markdown(
-        f'<div class="dossier-title"><h2>{team} — {year if year is not None else "—"}</h2>{badge}</div>',
+        dossier_html(team=team, year=year, wins=wins, losses=losses, phase=phase),
         unsafe_allow_html=True,
     )
     if year is not None:
@@ -72,19 +79,19 @@ def page_team_deep_dive() -> None:
 
     if not season_row.empty:
         r = season_row.iloc[0]
-        kpis = [
-            ("Wins", int(r["wins"]) if pd.notna(r.get("wins")) else "—"),
-            ("Losses", int(r["losses"]) if pd.notna(r.get("losses")) else "—"),
-            ("Run Diff", format_signed_int(r.get("run_diff"))),
-            ("Payroll", format_money_millions(r.get("payroll"))),
-            ("Team WAR", format_war(r.get("team_total_war"))),
-            ("Surplus", format_money_millions(r.get("surplus_value"))),
-            ("$/WAR", format_money_millions(r.get("cost_per_war"), decimals=1)),
-            ("Phase", str(r.get("window_phase", "—")).title()),
-        ]
-        cols = st.columns(len(kpis))
-        for col, (label, value) in zip(cols, kpis):
-            col.metric(label, value)
+        st.markdown(
+            scoreboard_html([
+                ("Wins", int(r["wins"]) if pd.notna(r.get("wins")) else "—"),
+                ("Losses", int(r["losses"]) if pd.notna(r.get("losses")) else "—"),
+                ("Run Diff", format_signed_int(r.get("run_diff"))),
+                ("Payroll", format_money_millions(r.get("payroll"))),
+                ("Team WAR", format_war(r.get("team_total_war"))),
+                ("Surplus", format_money_millions(r.get("surplus_value"))),
+                ("$/WAR", format_money_millions(r.get("cost_per_war"), decimals=1)),
+                ("Phase", str(r.get("window_phase", "—")).title()),
+            ]),
+            unsafe_allow_html=True,
+        )
     else:
         st.info(f"No row for {team} in {year}. History for other seasons is below.")
 
@@ -104,21 +111,23 @@ def page_team_deep_dive() -> None:
     panel_head("Trajectory", "Wins vs Pythagorean, payroll, and WAR")
     ch1, ch2, ch3 = st.columns(3)
     with ch1:
-        fig_w = px.line(team_history, x="year_id", y="wins", markers=True, title="Wins")
+        panel_head("Wins", "Solid = actual · dashed = Pythag")
+        fig_w = px.line(team_history, x="year_id", y="wins", markers=True)
         if "pythag_wins" in team_history.columns:
             fig_w.add_scatter(
                 x=team_history["year_id"],
                 y=team_history["pythag_wins"],
                 mode="lines",
                 name="Pythag W",
-                line=dict(dash="dash", color="#64748b"),
+                line=dict(dash="dash", color=TEXT_DIM),
             )
         fig_w.update_layout(xaxis_title="Season", yaxis_title="Wins")
         _chart(fig_w, height=280)
     with ch2:
         if team_history["payroll"].notna().any():
+            panel_head("Payroll", "$M")
             pay = add_payroll_millions(team_history)
-            fig_p = px.bar(pay, x="year_id", y="payroll_m", title="Payroll ($M)", color_discrete_sequence=["#e11d2e"])
+            fig_p = px.bar(pay, x="year_id", y="payroll_m", color_discrete_sequence=[CRIMSON])
             fig_p.update_layout(xaxis_title="Season", yaxis_title="Payroll ($M)")
             fig_p.update_traces(hovertemplate="Year: %{x}<br>Payroll: $%{y:.1f}M<extra></extra>")
             _chart(fig_p, height=280)
@@ -126,16 +135,17 @@ def page_team_deep_dive() -> None:
             st.caption("No payroll history for this franchise.")
     with ch3:
         if "team_total_war" in team_history.columns and team_history["team_total_war"].notna().any():
-            fig_war = px.line(team_history, x="year_id", y="team_total_war", markers=True, title="Team WAR")
+            panel_head("Team WAR", "rWAR rollup")
+            fig_war = px.line(team_history, x="year_id", y="team_total_war", markers=True)
             fig_war.update_layout(xaxis_title="Season", yaxis_title="Team WAR")
             _chart(fig_war, height=280)
         elif "window_phase" in team_history.columns:
+            panel_head("Window phase")
             fig_ph = px.scatter(
                 team_history,
                 x="year_id",
                 y="window_phase",
                 color="window_phase",
-                title="Window phase",
             )
             fig_ph.update_layout(xaxis_title="Season", yaxis_title="Phase")
             fig_ph.update_traces(marker=_SCATTER_MARKER)

@@ -6,7 +6,8 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from dashboard.helpers import format_money_millions, format_ratio, format_war, scale_money_columns
+from dashboard.helpers import format_money_millions, format_ratio, format_war, scale_money_columns, scoreboard_html
+from dashboard.theme import AMBER
 from dashboard.ui import (
     chart as _chart,
     empty_state as _empty,
@@ -57,11 +58,15 @@ def page_whatif() -> None:
     _salary_note(int(r["year_id"]))
 
     panel_head(f"{team} — {int(r['year_id'])} baseline")
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Payroll", format_money_millions(current_payroll))
-    k2.metric("Wins", int(current_wins))
-    k3.metric("W/$10M", format_ratio(r.get("wins_per_10m")))
-    k4.metric("Team WAR", format_war(current_war))
+    st.markdown(
+        scoreboard_html([
+            ("Payroll", format_money_millions(current_payroll)),
+            ("Wins", int(current_wins)),
+            ("W/$10M", format_ratio(r.get("wins_per_10m"))),
+            ("Team WAR", format_war(current_war)),
+        ]),
+        unsafe_allow_html=True,
+    )
 
     st.divider()
     payroll_delta_m = st.slider("Payroll change ($M)", -50, 150, 20, step=5, key="whatif_payroll_delta")
@@ -74,10 +79,14 @@ def page_whatif() -> None:
         win_gain = 0.0
     projected_wins = current_wins + win_gain
 
-    k1, k2, k3 = st.columns(3)
-    k1.metric("New payroll", format_money_millions(new_payroll), delta=f"{payroll_delta_m:+.0f}M")
-    k2.metric("Projected wins", f"{projected_wins:.0f}", delta=f"{win_gain:+.1f}")
-    k3.metric("New $/win", format_money_millions(new_payroll / max(projected_wins, 1), decimals=2) if projected_wins > 0 else "—")
+    st.markdown(
+        scoreboard_html([
+            ("New payroll", f"{format_money_millions(new_payroll)}  ({payroll_delta_m:+.0f}M)"),
+            ("Projected wins", f"{projected_wins:.0f}  ({win_gain:+.1f})"),
+            ("New $/win", format_money_millions(new_payroll / max(projected_wins, 1), decimals=2) if projected_wins > 0 else "—"),
+        ]),
+        unsafe_allow_html=True,
+    )
     st.caption("Linear regression on all historical team-seasons. Actual results depend on how the extra payroll is allocated.")
 
     panel_head("Historical record")
@@ -87,12 +96,13 @@ def page_whatif() -> None:
         _TEAM_COL_CFG,
         height=350,
     )
-    fig = px.line(team_history, x="year_id", y="wins", markers=True, title=f"{team} — win history")
+    panel_head("Win history", "Star = projected season")
+    fig = px.line(team_history, x="year_id", y="wins", markers=True)
     fig.add_scatter(
         x=[int(r["year_id"]) + 1],
         y=[projected_wins],
         mode="markers+text",
-        marker=dict(color="#f59e0b", size=14, symbol="star"),
+        marker=dict(color=AMBER, size=14, symbol="star"),
         text=["Projected"],
         textposition="top center",
         name="Projection",
