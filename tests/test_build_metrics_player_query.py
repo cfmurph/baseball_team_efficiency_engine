@@ -25,6 +25,7 @@ def _register_player_query_tables(con: duckdb.DuckDBPyConnection) -> None:
                 "era": None,
                 "pitching_war": 0.0,
                 "player_war": 1.5,
+                "war_source": "approx",
                 "salary": 1_000_000,
                 "surplus_value": 11_000_000,
                 "contract_label": "surplus_value",
@@ -44,6 +45,7 @@ def _register_player_query_tables(con: duckdb.DuckDBPyConnection) -> None:
                 "era": None,
                 "pitching_war": 0.0,
                 "player_war": 0.5,
+                "war_source": "approx",
                 "salary": 500_000,
                 "surplus_value": 3_500_000,
                 "contract_label": "fair_value",
@@ -63,6 +65,7 @@ def _register_player_query_tables(con: duckdb.DuckDBPyConnection) -> None:
                 "era": 2.70,
                 "pitching_war": 0.7,
                 "player_war": 0.7,
+                "war_source": "approx",
                 "salary": 900_000,
                 "surplus_value": 4_700_000,
                 "contract_label": "fair_value",
@@ -82,6 +85,7 @@ def _register_player_query_tables(con: duckdb.DuckDBPyConnection) -> None:
                 "era": 3.60,
                 "pitching_war": 0.1,
                 "player_war": 0.3,
+                "war_source": "approx",
                 "salary": 100_000,
                 "surplus_value": 2_300_000,
                 "contract_label": "surplus_value",
@@ -168,7 +172,7 @@ def test_player_query_preserves_both_player_type_and_pitching_rates() -> None:
     assert two_way["player_type"] == "both"
     assert two_way["pa"] == 30
     assert two_way["ip"] == 15.0
-    assert two_way["fip"] == 3.5
-    assert two_way["era"] == pytest.approx(3.15)
+    assert two_way["fip"] == pytest.approx(10 / 3)
+    assert two_way["era"] == pytest.approx(3.0)
     assert two_way["pitching_war"] == pytest.approx(0.8)
     assert two_way["player_war"] == 1.0

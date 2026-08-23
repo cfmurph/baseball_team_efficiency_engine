@@ -1,38 +1,69 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
-from typing import Any, Callable
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 import pandas as pd
 
 
-def slider_max(years: Iterable[int], current_year: int) -> int:
-    """Return a safe max year for Streamlit sliders, even with no data."""
-    year_list = list(years)
-    return max(year_list[-1], current_year) if year_list else current_year
+_PAYROLL_DISPLAY_COLUMNS = (
+    "payroll",
+    "max_salary",
+    "median_salary",
+    "payroll_per_win",
+    "cost_per_war",
+    "surplus_value",
+)
+_SALARY_DISPLAY_COLUMNS = ("salary",)
 
 
-def has_name_collision(df: pd.DataFrame, name_col: str = "name_full") -> bool:
-    """Detect whether a filtered table contains multiple rows with the same name."""
-    return name_col in df.columns and bool(df.duplicated(name_col, keep=False).any())
+def calculate_slider_max(years: Iterable[int], current_year: int) -> int:
+    """Return a safe max value for year sliders."""
+    year_list = [int(year) for year in years]
+    if not year_list:
+        return int(current_year)
+    return max(max(year_list), int(current_year))
 
 
-def collision_id_columns(
+def scale_payroll_for_display(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert raw dollar and share columns to dashboard display units."""
+    display = df.copy()
+    for col in _PAYROLL_DISPLAY_COLUMNS:
+        if col in display.columns:
+            display[col] = display[col] / 1_000_000
+    for col in _SALARY_DISPLAY_COLUMNS:
+        if col in display.columns:
+            display[col] = display[col] / 1_000_000
+    if "dead_money_share" in display.columns:
+        display["dead_money_share"] = display["dead_money_share"] * 100
+    return display
+
+
+def player_id_columns_for_duplicate_names(
     df: pd.DataFrame,
     name_col: str = "name_full",
     id_col: str = "player_id",
 ) -> list[str]:
-    """Return the ID column prefix needed to disambiguate same-name players."""
-    return [id_col] if has_name_collision(df, name_col) and id_col in df.columns else []
+    """Show player IDs only when same-name rows would otherwise be ambiguous."""
+    if name_col not in df.columns or id_col not in df.columns:
+        return []
+    if not df.duplicated(name_col, keep=False).any():
+        return []
+    return [id_col]
+
+
+def apply_plotly_layout(fig: Any, layout: Mapping[str, Any]) -> None:
+    """Apply shared Plotly layout settings in-place."""
+    fig.update_layout(**layout)
 
 
 def render_plotly_chart(
     fig: Any,
-    plotly_chart: Callable[..., Any],
-    layout: dict[str, Any],
+    streamlit_module: Any,
+    layout: Mapping[str, Any],
     height: int = 400,
-) -> Any:
-    """Apply dashboard layout and render the figure through Streamlit."""
-    fig.update_layout(**layout)
+) -> None:
+    """Apply layout/height, then delegate rendering to Streamlit exactly once."""
+    apply_plotly_layout(fig, layout)
     fig.update_layout(height=height)
-    return plotly_chart(fig, use_container_width=True)
+    streamlit_module.plotly_chart(fig, use_container_width=True)
