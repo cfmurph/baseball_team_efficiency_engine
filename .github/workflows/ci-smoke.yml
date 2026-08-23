@@ -29,6 +29,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # SPORTSDATAIO_API_KEY is intentionally unset so forks / PR checks
+      # stay green. Nightly and sdio-probe.yml inject the secret.
       - name: Run CI smokes
         run: >
           python3 -m pytest
