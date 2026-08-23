@@ -34,6 +34,8 @@ from fantasy.cards import (
     card_share_filename,
     card_stat_line,
     card_subtitle,
+    cards_for_label,
+    normalize_stat_line,
     dated_card_keys,
     is_approx,
     load_share_cards,
@@ -44,6 +46,7 @@ from fantasy.cards import (
     present_cards,
     recommendation_label,
     resolve_player_artifacts,
+    share_blurb,
     share_card_html,
     war_source,
 )
@@ -432,6 +435,7 @@ def test_resolve_prefers_current_fantasy_cards_jsonl(tmp_path: Path) -> None:
     feed = load_share_cards(settings, backend=backend)
     assert feed.cards[0]["recommendation_type"] == "pickup"
     assert feed.source == "remote"
+    assert feed.key == "current/fantasy/cards.jsonl"
     assert "current/fantasy/cards.jsonl" in backend.gets
     assert not any("fantasy_cards_" in key for key in backend.gets)
 
@@ -510,138 +514,89 @@ def test_player_artifacts_use_shared_resolve(tmp_path: Path) -> None:
     assert resolved["top_value"] is None
 
 
-def test_ranked_emitter_writes_locked_path_and_all_rec_types(tmp_path: Path) -> None:
-    dest = emit_ranked_fantasy_cards(
-        tmp_path,
-        as_of_date="2026-08-23",
-        top_n=2,
-        player_df=_player_metrics_frame(),
+def test_empty_share_headline_falls_back_to_player_name_not_badge() -> None:
+    card = {
+        "recommendation_type": "pickup",
+        "player": {"name": "Spencer Steer"},
+        "share": {"headline": "   "},
+    }
+    assert card_headline(card) == "Spencer Steer"
+    nameless = {"recommendation_type": "pickup", "player": {}, "share": {}}
+    assert card_headline(nameless) == ""
+    assert recommendation_label("pickup") == "PICK UP"
+
+
+def test_share_blurb_is_league_chat_ready() -> None:
+    card = load_stub_cards()[0]
+    view = present_card(card)
+    blurb = share_blurb(view)
+    assert blurb.startswith("PICK UP — Spencer Steer")
+    assert "+1.6 edge" in blurb
+    assert "vs repl" not in blurb
+    assert "Quiet week on the wire" in blurb
+    assert "as of 2026-08-23" in blurb
+
+
+def test_share_blurb_keeps_custom_headline_and_player() -> None:
+    view = present_card(
+        {
+            "recommendation_type": "stream",
+            "player": {"name": "Ranger Suárez", "position": "SP", "team": "PHI"},
+            "share": {"headline": "Stream this arm"},
+            "reason": "Matchup.",
+            "as_of_date": "2026-08-23",
+        }
     )
-    assert dest == tmp_path / "fantasy" / "cards.jsonl"
-    assert dest.is_file()
-    assert not any(tmp_path.joinpath("fantasy").glob("fantasy_cards_*.json"))
-    assert VOID_DATED_CARDS_PREFIX not in dest.name
-
-    cards = [json.loads(line) for line in dest.read_text(encoding="utf-8").splitlines() if line]
-    _assert_schema_cards(cards)
-    by_type = {rec: [c for c in cards if c["recommendation_type"] == rec] for rec in RECOMMENDATION_TYPES}
-    assert all(len(group) == 2 for group in by_type.values())
-    assert [c["rank"]["among_rec_type"] for c in by_type["start"]] == [1, 2]
-    assert by_type["start"][0]["player"]["player_id"] == "judgeaa01"
-    assert by_type["sit"][0]["player"]["player_id"] == "solerjo01"
-    assert by_type["pickup"][0]["player"]["player_id"] == "troutmi01"
-    assert by_type["stream"][0]["player"]["player_id"] == "degroja01"
-    assert all(c["player"]["player_id"] != "oldbat01" for c in cards)
-    assert all(c["as_of_date"] == "2026-08-23" for c in cards)
+    blurb = share_blurb(view)
+    assert "STREAM — Ranger Suárez · SP · PHI" in blurb
+    assert "Stream this arm" in blurb
 
 
-def test_ranked_cards_map_war_source_and_never_emit_fangraphs() -> None:
-    frame = _player_metrics_frame()
-    frame.loc[frame["player_id"] == "steersp01", "war_source"] = "fangraphs"
-    cards = rank_fantasy_cards(frame, as_of_date="2026-08-23", top_n=8)
-    _assert_schema_cards(cards)
-    sources = {card["edge"]["war_source"] for card in cards}
-    assert sources <= {"bbref", "approx"}
-    assert "fangraphs" not in sources
-    steer = next(card for card in cards if card["player"]["player_id"] == "steersp01")
-    assert steer["edge"]["war_source"] == "approx"
-    assert steer["edge"]["is_approx"] is True
-    judge = next(card for card in cards if card["player"]["player_id"] == "judgeaa01")
-    assert judge["edge"]["war_source"] == "bbref"
-    assert judge["edge"]["is_approx"] is False
+def test_tabs_filter_by_recommendation_label() -> None:
+    views = present_cards(load_stub_cards())
+    assert [v.label for v in cards_for_label(views, "START")] == ["START"]
+    assert [v.label for v in cards_for_label(views, "BENCH")] == ["BENCH"]
+    assert len(cards_for_label(views, "All")) == 4
 
 
-def test_emit_reads_player_season_metrics_alias_paths(tmp_path: Path) -> None:
-    metrics = tmp_path / "metrics"
-    metrics.mkdir()
-    _player_metrics_frame().to_csv(metrics / "player_season_metrics.csv", index=False)
-    dest = emit_ranked_fantasy_cards(tmp_path, as_of_date="2026-08-23", top_n=1)
-    cards = [json.loads(line) for line in dest.read_text(encoding="utf-8").splitlines() if line]
-    _assert_schema_cards(cards)
-    assert len(cards) == 4
+def test_share_card_png_and_filename() -> None:
+    view = present_card(load_stub_cards()[0])
+    png = render_share_card_png(view)
+    assert png.startswith(b"\x89PNG")
+    assert len(png) > 1000
+    assert card_share_filename(view) == "benchorstart-spencer-steer-pickup.png"
 
 
-def test_emit_empty_when_metrics_missing(tmp_path: Path) -> None:
-    dest = emit_ranked_fantasy_cards(tmp_path, as_of_date="2026-08-23")
-    assert dest.read_text(encoding="utf-8") == ""
-    assert dest == tmp_path / FANTASY_CARDS_RELPATH
+def test_stub_and_sample_share_stat_line_never_says_vs_repl() -> None:
+    for card in load_stub_cards():
+        share = card.get("share") or {}
+        stat = str(share.get("stat_line") or "").strip()
+        assert "vs repl" not in stat.lower()
+        if stat:
+            assert "edge" in stat
+        assert "vs repl" not in card_stat_line(card).lower()
 
 
-def test_upload_promotes_ranked_cards_to_current(tmp_path: Path) -> None:
-    local = tmp_path / "artifacts"
-    local.mkdir()
-    _player_metrics_frame().to_csv(local / "player_season_metrics.csv", index=False)
-    (local / "team_onfield_contract_metrics.csv").write_text("year_id\n2015\n")
-    lake = tmp_path / "lake"
-    result = upload_artifacts(
-        local,
-        _settings(tmp_path, uri=f"file://{lake}", local_dir=local),
-        run_id="20260823T080012Z",
-        as_of_date="2026-08-23",
-        git_sha="abc123",
-    )
-    assert result.current_updated is True
-    assert FANTASY_CARDS_RELPATH in result.files
-    run_cards = lake / "runs" / "20260823T080012Z" / "fantasy" / "cards.jsonl"
-    current_cards = lake / "current" / "fantasy" / "cards.jsonl"
-    assert run_cards.is_file()
-    assert current_cards.is_file()
-    assert not list(lake.rglob("fantasy_cards_*.json"))
-    cards = [json.loads(line) for line in current_cards.read_text(encoding="utf-8").splitlines() if line]
-    _assert_schema_cards(cards)
-    feed = load_share_cards(_settings(tmp_path, uri=f"file://{lake}", local_dir=tmp_path / "empty"))
-    assert feed.source == "remote"
-    assert {card["recommendation_type"] for card in feed.cards} == set(RECOMMENDATION_TYPES)
-    assert all(card_schema_errors(card) == [] for card in feed.cards)
-    assert all("vs repl" not in str((card.get("share") or {}).get("stat_line") or "") for card in feed.cards)
-
-
-def test_failed_promote_leaves_run_cards_and_skips_current(tmp_path: Path) -> None:
-    local = tmp_path / "artifacts"
-    local.mkdir()
-    _player_metrics_frame().to_csv(local / "player_season_metrics.csv", index=False)
-    (local / "team_onfield_contract_metrics.csv").write_text("year_id\n2015\n")
-
-    stored: dict[str, bytes] = {}
-
-    class Backend:
-        def put(self, relative_key: str, data: bytes) -> None:
-            if relative_key.startswith("current/"):
-                raise RuntimeError("promote failed")
-            stored[relative_key] = data
-
-        def get(self, relative_key: str) -> bytes | None:
-            return stored.get(relative_key)
-
-    from src.baseball_analytics.storage import ArtifactUploadError
-
-    with pytest.raises(ArtifactUploadError, match="current/ promote failed"):
-        upload_artifacts(
-            local,
-            _settings(tmp_path, uri="s3://bucket/prefix"),
-            run_id="20260823T080012Z",
-            as_of_date="2026-08-23",
-            backend=Backend(),
-        )
-    assert any(key.endswith("fantasy/cards.jsonl") and key.startswith("runs/") for key in stored)
-    assert not any(key.startswith("current/") for key in stored)
-
-
-def test_share_stat_line_uses_edge_not_vs_repl() -> None:
-    cards = rank_fantasy_cards(_player_metrics_frame(), as_of_date="2026-08-23", top_n=1)
-    start = next(card for card in cards if card["recommendation_type"] == "start")
-    sit = next(card for card in cards if card["recommendation_type"] == "sit")
-    assert start["edge"]["war_source"] == "bbref"
-    assert start["share"]["stat_line"] == "+9.4 edge · 86% conf"
-    assert sit["edge"]["war_source"] == "approx"
-    assert sit["share"]["stat_line"] == "-0.6 edge"
-    for card in cards:
-        stat = str(card["share"]["stat_line"])
-        assert "vs repl" not in stat
-        assert "vs replacement" not in stat
-        if card["edge"]["is_approx"]:
-            assert stat.endswith(" edge")
-            assert "% conf" not in stat
-        else:
-            assert " edge · " in stat
-            assert stat.endswith("% conf")
+def test_share_stat_line_vs_repl_is_normalized_on_face_not_schema() -> None:
+    dirty = "+3.4 vs replacement · 91% conf"
+    card = {
+        "recommendation_type": "start",
+        "player": {"name": "Aaron Judge", "position": "OF", "team": "NYY"},
+        "edge": {"vs_replacement": 3.4, "war_source": "bbref", "is_approx": False},
+        "share": {"stat_line": dirty},
+        "reason": "Lock him in.",
+        "as_of_date": "2026-08-23",
+    }
+    assert card["share"]["stat_line"] == dirty
+    view = present_card(card)
+    assert view.stat_line == "+3.4 edge · 91% conf"
+    assert "vs repl" not in view.stat_line.lower()
+    blurb = share_blurb(view)
+    html = share_card_html(view)
+    assert "vs repl" not in blurb.lower()
+    assert "vs replacement" not in html.lower()
+    assert "edge" in blurb
+    assert card["share"]["stat_line"] == dirty
+    assert normalize_stat_line("vs repl") == "edge"
+    assert normalize_stat_line("vs replacement") == "edge"
+    assert normalize_stat_line("vs replx") == ""

@@ -136,7 +136,7 @@ vars above from repository secrets. It still uploads a 14-day
 
 1. Fresh disk cache under `artifacts/.remote_cache/` (TTL)
 2. `{ARTIFACTS_URI}/current/<metrics\|models\|fantasy>/<file>`
-3. Compat (deprecated, one release): `{league}/{level}/latest/<file>` from #109
+3. Compat (deprecated, dropped next release): `{league}/{level}/latest/<file>` from #109
 4. Stale remote cache (remote unreachable)
 5. Local `artifacts/<file>` (or `artifacts/fantasy/cards.jsonl`)
 6. Missing → empty state

@@ -28,10 +28,15 @@ from fantasy.card_image import render_share_card_png
 from fantasy.cards import (
     OPTIONAL_CARD_KEY,
     SOURCE_MISSING,
+    TAB_LABELS,
+    ShareCardView,
+    card_share_filename,
+    cards_for_label,
     load_share_cards,
     load_stub_cards,
     present_cards,
     resolve_player_artifacts,
+    share_blurb,
     share_card_html,
 )
 from fantasy.copy import (
@@ -385,7 +390,21 @@ st.markdown(
 )
 
 cards, source = _load_cards()
-views = present_cards(cards)
+live_cards = [] if source == SOURCE_MISSING else cards
+views = present_cards(live_cards)
+showing_stubs = False
+if not views:
+    st.markdown(
+        f"""
+        <div class="bos-empty" role="status">
+          <h2>{html.escape(EMPTY_TITLE)}</h2>
+          <p>{html.escape(EMPTY_BODY)}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    views = present_cards(load_stub_cards())
+    showing_stubs = True
 
 if views:
     tab_labels = [TAB_ALL, *TAB_LABELS]
@@ -395,7 +414,7 @@ if views:
     for tab, label in zip(tabs[1:], TAB_LABELS):
         with tab:
             _render_card_list(cards_for_label(views, label), tab=label)
-    if source == "stub":
+    if showing_stubs:
         st.markdown(f'<p class="bos-caption">{html.escape(STUB_CAPTION)}</p>', unsafe_allow_html=True)
 
 with st.form("waitlist", clear_on_submit=False):
@@ -409,30 +428,5 @@ with st.form("waitlist", clear_on_submit=False):
             message = result.error or "Enter a valid email."
             st.markdown(f'<div class="bos-error">{html.escape(message)}</div>', unsafe_allow_html=True)
 st.markdown(f'<p class="bos-micro">{html.escape(MICROCOPY)}</p>', unsafe_allow_html=True)
-
-cards, source = _load_cards()
-live_cards = [] if source == SOURCE_MISSING else cards
-views = present_cards(live_cards)
-
-if not views:
-    st.markdown(
-        f"""
-        <div class="bos-empty" role="status">
-          <h2>{html.escape(EMPTY_TITLE)}</h2>
-          <p>{html.escape(EMPTY_BODY)}</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    views = present_cards(load_stub_cards())
-    if views:
-        st.markdown(share_card_html(views[0], featured=True), unsafe_allow_html=True)
-        for view in views[1:]:
-            st.markdown(share_card_html(view), unsafe_allow_html=True)
-        st.markdown(f'<p class="bos-caption">{html.escape(STUB_CAPTION)}</p>', unsafe_allow_html=True)
-else:
-    st.markdown(share_card_html(views[0], featured=True), unsafe_allow_html=True)
-    for view in views[1:]:
-        st.markdown(share_card_html(view), unsafe_allow_html=True)
 
 st.markdown(f'<p class="bos-foot">{html.escape(FOOTER)}</p>', unsafe_allow_html=True)

@@ -37,7 +37,7 @@ Recommendation labels (schema v1.0): `start` → START, `sit` → BENCH, `pickup
 - **Invite-only** chip sits next to the BenchOrStart wordmark.
 - Share cards render **above** the waitlist form, tabbed by **All / START / BENCH / PICK UP / STREAM**.
 - When `share.headline` is empty, the card H2 is the **player name** (`player.name`). The START/BENCH/PICK UP/STREAM badge stays a separate pill — do not reuse the recommendation label as the title.
-- Face copy says **edge** for `edge.vs_replacement` (for example `+1.6 edge`). The schema field name is unchanged.
+- Face copy says **edge** for `edge.vs_replacement` (for example `+1.6 edge`). The schema field name is unchanged. Stub / sample `share.stat_line` should be empty or use **edge**. If an emitter still sends `vs repl` / `vs replacement`, render (card face, Copy text, Download image) rewrites it to **edge** or omits the line.
 - Each card has **Copy text** (league-chat blurb: decision + player + stat line + reason + as-of) and **Download image** (PNG via Pillow, already a Streamlit/matplotlib dependency).
 
 ## Waitlist hook (marketing)

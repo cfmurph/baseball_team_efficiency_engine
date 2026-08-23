@@ -65,6 +65,7 @@ LABEL_TONES = {
 
 SOURCE_STUB = "stub"
 SOURCE_MISSING = "missing"
+TAB_LABELS = ("START", "BENCH", "PICK UP", "STREAM")
 EDGE_UNIT = "edge"
 
 
@@ -179,37 +180,52 @@ def resolve_card_feed(
     environ: Mapping[str, str] | None = None,
     now: datetime | None = None,
 ) -> tuple[Path | None, str, str | None]:
-    """Prefer ``current/fantasy/cards.jsonl``. Dated JSON is read-only fallback."""
+    """Return ``(path, source, key)``. SoT is ``current/fantasy/cards.jsonl`` first."""
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
-    current_local = cfg.local_dir / "current" / "fantasy" / "cards.jsonl"
-    if current_local.is_file() and current_local.stat().st_size > 0:
-        return current_local, "local", CARD_LAKE_KEY
-    if cfg.uri:
-        hit = resolve_artifact_hit(CARD_LAKE_KEY, cfg, backend=backend, environ=environ)
-        if hit is not None and hit.source == "remote":
-            return hit.path, hit.source, CARD_LAKE_KEY
-        if backend is not None:
-            data = backend.get(OPTIONAL_CARD_KEY)
-            if data:
-                dest = cfg.cache_dir / OPTIONAL_CARD_KEY
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_bytes(data)
-                return dest, "remote", OPTIONAL_CARD_KEY
-    optional_local = cfg.local_dir / "fantasy" / "cards.jsonl"
-    if optional_local.is_file() and optional_local.stat().st_size > 0:
-        return optional_local, "local", OPTIONAL_CARD_KEY
-    for key in dated_card_keys(cfg, environ=environ, now=now):
-        for candidate in (cfg.local_dir / key, cfg.local_dir / Path(key).name):
-            if candidate.is_file() and candidate.stat().st_size > 0:
-                return candidate, "local", Path(key).name
-        if backend is not None:
-            data = backend.get(key)
-            if data:
-                dest = cfg.cache_dir / key
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                dest.write_bytes(data)
-                return dest, "remote", key
+    for key in (*CARD_FEED_KEYS, *dated_card_keys(cfg, environ=environ, now=now)):
+        exact = cfg.local_dir / key
+        if exact.is_file():
+            return exact, "local", key
+        literal = _literal_backend_card(key, backend, cfg)
+        if literal is not None:
+            return literal, "remote", key
+        hit = resolve_artifact_hit(key, cfg, backend=backend, environ=environ)
+        if hit is not None and _path_matches_feed_key(hit.path, key):
+            return hit.path, hit.source, key
     return None, SOURCE_MISSING, None
+
+
+def _literal_backend_card(
+    key: str,
+    backend: object | None,
+    settings: ArtifactSettings,
+) -> Path | None:
+    """Read an exact lake key from the test/remote backend (no latest/ remap)."""
+    getter = getattr(backend, "get", None)
+    if getter is None:
+        return None
+    data = getter(key)
+    if not data:
+        return None
+    dest = settings.cache_dir / key
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    return dest
+
+
+def _path_matches_feed_key(path: Path, key: str) -> bool:
+    """Accept a resolve hit only when it is actually this feed key.
+
+    ``resolve_artifact_hit`` remaps ``current/fantasy/cards.jsonl`` onto
+    ``fantasy/cards.jsonl``. Keep the locked key first without treating the
+    optional sibling as the SoT file.
+    """
+    posix = path.as_posix().replace("\\", "/")
+    if not (posix.endswith("/" + key) or posix.endswith(key)):
+        return False
+    if key != CARD_LAKE_KEY and posix.endswith("/" + CARD_LAKE_KEY):
+        return False
+    return True
 
 
 def load_share_cards(
@@ -325,10 +341,28 @@ def _format_confidence(value: Any) -> str | None:
     return f"{int(round(pct))}% conf"
 
 
+def normalize_stat_line(text: str | None) -> str:
+    """Rewrite leftover ``vs repl`` copy to ``edge``. Schema fields stay unchanged.
+
+    Prefer omitting the line if jargon still remains after rewrite.
+    """
+    if text in (None, ""):
+        return ""
+    out = str(text)
+    if not re.search(r"(?i)vs\s+repl", out):
+        return " ".join(out.split())
+    out = re.sub(r"(?i)vs\s+replacement", EDGE_UNIT, out)
+    out = re.sub(r"(?i)vs\s+repl\b", EDGE_UNIT, out)
+    cleaned = " ".join(out.split())
+    if re.search(r"(?i)vs\s+repl", cleaned):
+        return ""
+    return cleaned
+
+
 def card_stat_line(card: Mapping[str, Any]) -> str:
     stat_line = _share_map(card).get("stat_line")
     if stat_line is not None and str(stat_line).strip():
-        return str(stat_line).strip()
+        return normalize_stat_line(str(stat_line).strip())
     bits: list[str] = []
     edge_line = _format_edge(_edge_map(card).get("vs_replacement"))
     if edge_line:
@@ -338,7 +372,7 @@ def card_stat_line(card: Mapping[str, Any]) -> str:
         conf_line = _format_confidence(_confidence_value(card))
         if conf_line:
             bits.append(conf_line)
-    return " · ".join(bits)
+    return normalize_stat_line(" · ".join(bits))
 
 
 def card_reason(card: Mapping[str, Any]) -> str:
@@ -390,7 +424,7 @@ def present_card(card: Mapping[str, Any]) -> ShareCardView:
         label=recommendation_label(rec_type),
         headline=card_headline(card),
         subtitle=card_subtitle(card),
-        stat_line=card_stat_line(card),
+        stat_line=normalize_stat_line(card_stat_line(card)),
         reason=card_reason(card),
         as_of_date=card_as_of(card),
         rank_line=card_rank_line(card),
@@ -430,8 +464,9 @@ def share_blurb(view: ShareCardView) -> str:
         and view.headline not in identity
     ):
         lines.append(view.headline)
-    if view.stat_line:
-        lines.append(view.stat_line)
+    stat = normalize_stat_line(view.stat_line)
+    if stat:
+        lines.append(stat)
     if view.reason:
         lines.append(view.reason)
     if view.as_of_date:
@@ -459,9 +494,10 @@ def share_card_html(view: ShareCardView, *, featured: bool = False) -> str:
         if view.rank_line
         else ""
     )
+    stat_line = normalize_stat_line(view.stat_line)
     stat = (
-        f'<div class="bos-stat">{html.escape(view.stat_line)}</div>'
-        if view.stat_line
+        f'<div class="bos-stat">{html.escape(stat_line)}</div>'
+        if stat_line
         else ""
     )
     reason = (
