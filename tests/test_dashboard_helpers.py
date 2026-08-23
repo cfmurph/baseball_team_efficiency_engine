@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import pandas as pd
@@ -65,6 +66,8 @@ def test_nav_has_eight_product_sections() -> None:
 def test_format_money_and_war() -> None:
     assert format_money_millions(98_400_000) == "$98M"
     assert format_money_millions(2_500_000, decimals=1) == "$2.5M"
+    assert format_money_millions(-30_400_000) == "-$30M"
+    assert format_money_millions(-2_500_000, decimals=1) == "-$2.5M"
     assert format_money_millions(None) == "—"
     assert format_money_millions(float("nan")) == "—"
     assert format_war(32.46) == "32.5"
@@ -208,3 +211,23 @@ def test_year_span_label() -> None:
     assert year_span_label([]) == "No seasons loaded"
     assert year_span_label([2015]) == "2015"
     assert year_span_label([1990, 2016]) == "1990–2016"
+
+
+def test_app_bootstraps_sys_path_before_package_imports() -> None:
+    """Streamlit adds dashboard/ (not the repo root) to sys.path first."""
+    app_path = Path(__file__).resolve().parents[1] / "dashboard" / "app.py"
+    tree = ast.parse(app_path.read_text())
+    saw_root_bootstrap = False
+    package_imports: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            if "_ROOT" in targets:
+                saw_root_bootstrap = True
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if node.module == "dashboard" or node.module.startswith(("dashboard.", "src.")):
+                package_imports.append(node.module)
+                assert saw_root_bootstrap, f"{node.module} imported before _ROOT sys.path bootstrap"
+    assert saw_root_bootstrap
+    assert "dashboard.helpers" in package_imports
+    assert not any(mod.startswith("src.") for mod in package_imports)

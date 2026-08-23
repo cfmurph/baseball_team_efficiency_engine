@@ -19,15 +19,18 @@ import html
 import sys
 from pathlib import Path
 
+# Streamlit runs this file as a script, so sys.path often starts as
+# dashboard/ (or the shell CWD) — not the repo root. Prepend the root
+# before any dashboard.* / src.* imports.
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-
-_ROOT = Path(__file__).resolve().parents[1]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
 
 from dashboard.helpers import (
     CONTRACT_COLORS,
