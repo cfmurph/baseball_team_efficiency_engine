@@ -1,6 +1,7 @@
 """Tests for the nightly refresh orchestrator."""
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -82,3 +83,11 @@ def test_run_pipeline_stops_after_first_failure(tmp_path) -> None:
         "pipeline.transform.build_metrics",
     ]
     assert "Not run: train_win_model, cluster_teams" in str(err)
+
+
+def test_workflow_schedules_2am_mountain_and_manual_trigger() -> None:
+    text = Path(".github/workflows/nightly-refresh.yml").read_text(encoding="utf-8")
+    assert 'cron: "0 8 * * *"' in text
+    assert "workflow_dispatch:" in text
+    assert "python3 -m pipeline.run_nightly" in text
+    assert "actions/upload-artifact" in text
