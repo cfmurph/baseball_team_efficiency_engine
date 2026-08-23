@@ -56,6 +56,9 @@ schema, marketing fields, and dashboard fantasy UI are out of scope here.
 ## Consequences
 
 - Extra published files do not force a lake redesign.
+- Dashboard pages call `dashboard.data` named loaders only. `ARTIFACTS_URI`
+  is a swap inside that module (`resolve_artifact`); Streamlit views do
+  not import S3 or storage.
 - Dashboard #105 loaders stay on existing metric CSV names.
 - A consumer that wants cards asks for `fantasy/cards.jsonl` the same way
   it asks for `team_onfield_contract_metrics.csv`.
