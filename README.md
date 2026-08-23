@@ -126,14 +126,14 @@ streamlit run dashboard/app.py
 
 ## Nightly refresh
 
-The five pipeline steps above are also wrapped by a fail-fast orchestrator:
+The six pipeline steps above are also wrapped by a fail-fast orchestrator:
 
 ```bash
 python3 -m pipeline.run_nightly
 # optional: --config-path config/settings.yaml
 ```
 
-That command runs extract → warehouse → metrics → win model → clustering in order, logs timing for each step, and **stops on the first non-zero exit** (later steps are named in the error and are not run). Use the same command locally whenever you want a full refresh.
+That command runs extract → rWAR extract → warehouse → metrics → win model → clustering in order, logs timing for each step, and **stops on the first non-zero exit** (later steps are named in the error and are not run). Use the same command locally whenever you want a full refresh.
 
 GitHub Actions runs it overnight via `.github/workflows/nightly-refresh.yml`:
 
