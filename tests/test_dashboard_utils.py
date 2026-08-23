@@ -76,6 +76,17 @@ def test_player_id_columns_omitted_without_collision_or_id_column() -> None:
     assert player_id_columns_for_duplicate_names(missing_id) == []
 
 
+def test_player_id_columns_stay_hidden_for_duplicate_rows_of_same_player() -> None:
+    same_player_repeated = pd.DataFrame(
+        {
+            "player_id": ["youngch03", "youngch03"],
+            "name_full": ["Chris Young", "Chris Young"],
+        }
+    )
+
+    assert player_id_columns_for_duplicate_names(same_player_repeated) == []
+
+
 def test_render_plotly_chart_applies_layout_height_and_delegates_once() -> None:
     fig = go.Figure(data=go.Scatter(x=[1, 2], y=[3, 4]))
     recorder = RecordingStreamlit()

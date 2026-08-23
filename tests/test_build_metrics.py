@@ -74,10 +74,10 @@ def test_player_query_collapses_traded_player_stints_without_team_fanout() -> No
         "dim_team",
         pd.DataFrame(
             [
-                {"team_id": "AAA", "team_name": "Alpha Aces"},
-                {"team_id": "AAA", "team_name": "Alpha Aces"},
-                {"team_id": "BBB", "team_name": "Beta Bears"},
-                {"team_id": "BBB", "team_name": "Beta Bears"},
+                {"team_key": "AAA_2024", "team_id": "AAA", "team_name": "Alpha Aces"},
+                {"team_key": "AAA_2023", "team_id": "AAA", "team_name": "Alpha Aces"},
+                {"team_key": "BBB_2024", "team_id": "BBB", "team_name": "Beta Bears"},
+                {"team_key": "BBB_2023", "team_id": "BBB", "team_name": "Beta Bears"},
             ]
         ),
     )
@@ -167,8 +167,8 @@ def test_player_query_weights_pitching_rate_stats_and_preserves_two_way_type() -
         "dim_team",
         pd.DataFrame(
             [
-                {"team_id": "AAA", "team_name": "Alpha Aces"},
-                {"team_id": "BBB", "team_name": "Beta Bears"},
+                {"team_key": "AAA_2024", "team_id": "AAA", "team_name": "Alpha Aces"},
+                {"team_key": "BBB_2024", "team_id": "BBB", "team_name": "Beta Bears"},
             ]
         ),
     )

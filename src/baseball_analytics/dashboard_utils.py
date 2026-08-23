@@ -47,9 +47,14 @@ def player_id_columns_for_duplicate_names(
     """Show player IDs only when same-name rows would otherwise be ambiguous."""
     if name_col not in df.columns or id_col not in df.columns:
         return []
-    if not df.duplicated(name_col, keep=False).any():
-        return []
-    return [id_col]
+    collision_counts = (
+        df[[name_col, id_col]]
+        .dropna(subset=[name_col, id_col])
+        .drop_duplicates()
+        .groupby(name_col)[id_col]
+        .nunique()
+    )
+    return [id_col] if (collision_counts > 1).any() else []
 
 
 def apply_plotly_layout(fig: Any, layout: Mapping[str, Any]) -> None:
