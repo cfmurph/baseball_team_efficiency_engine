@@ -37,7 +37,8 @@ pipeline/
   transform/build_warehouse.py  Build star schema + WAR + metrics + validation
   transform/build_metrics.py    Export CSVs for team, player, contract analysis
 src/baseball_analytics/
-  config.py                     Settings loader
+  config.py                     Settings loader + ARTIFACTS_URI resolution
+  storage.py                    S3-compatible artifact upload + local fallback
   io.py                         CSV I/O helpers
   metrics.py                    All metric functions (Pythag, Gini, WAR efficiency, contract labels)
   war.py                        rWAR overlay + Lahman approx (wOBA / FIP) + BaseRuns
@@ -48,8 +49,8 @@ models/
   cluster_teams.py              KMeans team archetype clustering
 dbt/                            dbt scaffold (staging + mart SQL models)
 dashboard/app.py                Streamlit multi-section dashboard
-docs/                           Architecture, schema, metrics framework, roadmap, product brief
-tests/                          53 unit tests covering metrics, WAR, validation
+docs/                           Architecture, schema, metrics framework, shared artifacts, roadmap
+tests/                          Unit tests covering metrics, WAR, validation, artifact storage
 artifacts/                      Output CSVs and plots (gitignored, generated at runtime)
 ```
 
@@ -140,8 +141,26 @@ GitHub Actions runs it overnight via `.github/workflows/nightly-refresh.yml`:
 - **Schedule:** `0 8 * * *` UTC = **2:00 AM America/Edmonton during MDT** (UTC-6). During MST (UTC-7) that is 1:00 AM local. Actions cron is UTC-only and cannot follow DST.
 - **Manual trigger:** Actions → **Nightly data refresh** → **Run workflow** (`workflow_dispatch`).
 - **Outputs:** CSVs, plots, and the DuckDB warehouse stay gitignored. The workflow uploads them as the `nightly-artifacts` run artifact (14-day retention) instead of committing generated files.
+- **Shared storage (optional):** when `ARTIFACTS_URI` is set, the orchestrator also uploads `artifacts/` to an S3-compatible prefix (`{league}/{level}/{run_date}` plus `latest/`). The dashboard reads `latest/` and falls back to local `artifacts/` if the URI is unset or unreachable. See [docs/shared_artifacts.md](docs/shared_artifacts.md) for the layout and AWS S3 vs Cloudflare R2 (`AWS_ENDPOINT_URL`) setup.
 
 Optional Sportradar pulls are not part of this job; they still require `SPORTRADAR_API_KEY` and `python3 -m pipeline.extract.pull_sportradar`.
+
+### Shared artifact storage
+
+```bash
+# AWS S3
+export ARTIFACTS_URI=s3://my-bucket/baseball-analytics
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_DEFAULT_REGION=us-east-1
+
+# Cloudflare R2 — same s3:// URI, plus the account endpoint
+export ARTIFACTS_URI=s3://my-r2-bucket/baseball-analytics
+export AWS_ENDPOINT_URL=https://<accountid>.r2.cloudflarestorage.com
+export AWS_DEFAULT_REGION=auto
+```
+
+Leave `ARTIFACTS_URI` empty for local-only. GitHub Actions reads these from repository secrets (never commit keys). Full variable list and QA steps: [docs/shared_artifacts.md](docs/shared_artifacts.md).
 
 ## Dashboard sections
 
