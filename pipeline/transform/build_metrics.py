@@ -60,7 +60,8 @@ ORDER BY s.year_id, t.team_name
 _PLAYER_QUERY = """
 -- One row per player per season.
 -- Players who were traded mid-season have their stats summed across teams;
--- team_name shows the team where they accrued the most WAR.
+-- rate stats are weighted by playing time, and team_name shows the team
+-- where they accrued the most WAR.
 SELECT
     p.player_id,
     dp.name_full,
@@ -82,12 +83,15 @@ SELECT
     SUM(p.pa)                           AS pa,
     SUM(p.hr)                           AS hr,
     SUM(p.bb)                           AS bb,
-    AVG(CASE WHEN p.pa > 0 THEN p.woba END) AS woba,
+    SUM(CASE WHEN p.pa > 0 AND p.woba IS NOT NULL THEN p.woba * p.pa END)
+        / NULLIF(SUM(CASE WHEN p.pa > 0 AND p.woba IS NOT NULL THEN p.pa ELSE 0 END), 0) AS woba,
 
     SUM(p.batting_war)                  AS batting_war,
     SUM(p.ip)                           AS ip,
-    AVG(CASE WHEN p.ip > 0 THEN p.fip END) AS fip,
-    AVG(CASE WHEN p.ip > 0 THEN p.era END) AS era,
+    SUM(CASE WHEN p.ip > 0 AND p.fip IS NOT NULL THEN p.fip * p.ip END)
+        / NULLIF(SUM(CASE WHEN p.ip > 0 AND p.fip IS NOT NULL THEN p.ip ELSE 0 END), 0) AS fip,
+    SUM(CASE WHEN p.ip > 0 AND p.era IS NOT NULL THEN p.era * p.ip END)
+        / NULLIF(SUM(CASE WHEN p.ip > 0 AND p.era IS NOT NULL THEN p.ip ELSE 0 END), 0) AS era,
     SUM(p.pitching_war)                 AS pitching_war,
     SUM(p.player_war)                   AS player_war,
     CASE
