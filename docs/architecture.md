@@ -57,7 +57,7 @@ This is where metric logic becomes standardized and reusable:
 - Local batch pipeline
 - Fail-fast nightly orchestrator (`python3 -m pipeline.run_nightly`)
 - GitHub Actions schedule at 08:00 UTC (2:00 AM Mountain Daylight Time)
-- Optional S3-compatible artifact publish (`ARTIFACTS_URI`) with dashboard remote load + local fallback
+- Optional shared-lake publish (`ARTIFACTS_URI`) to `runs/{run_id}/` + `current/` with dashboard remote load + local fallback
 - File-based configuration
 - Dashboard pages call `dashboard.data` named loaders; ARTIFACTS_URI is a loader swap, not a page rewrite
 

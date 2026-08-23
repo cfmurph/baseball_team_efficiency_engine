@@ -135,7 +135,7 @@ _EMPTY_COPY = {
     "metrics": {
         "title": "No team metrics yet",
         "body": (
-            "The dashboard reads CSVs from shared storage when ARTIFACTS_URI is set, "
+            "The dashboard reads CSVs from ARTIFACTS_URI/current/ when set, "
             "otherwise from artifacts/. Run the pipeline to generate team-season "
             "metrics, then refresh this page."
         ),

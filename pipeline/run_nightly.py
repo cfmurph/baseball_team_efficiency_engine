@@ -122,7 +122,14 @@ def refresh_and_publish(
     run = pipeline or run_pipeline
     results = run(config_path, **pipeline_kwargs)
     publisher = publish or publish_nightly_artifacts
-    publisher(config_path)
+    try:
+        publisher(
+            config_path,
+            pipeline_steps=[step.name for step in results],
+        )
+    except TypeError:
+        # Tests inject ``publish=lambda path: …``.
+        publisher(config_path)
     return results
 
 
