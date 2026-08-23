@@ -165,7 +165,7 @@ GitHub Actions runs it overnight via `.github/workflows/nightly-refresh.yml`:
 
 - **Schedule:** `0 8 * * *` UTC = **2:00 AM America/Edmonton during MDT** (UTC-6). During MST (UTC-7) that is 1:00 AM local. Actions cron is UTC-only and cannot follow DST.
 - **Manual trigger:** Actions → **Nightly data refresh** → **Run workflow** (`workflow_dispatch`).
-- **SportsDataIO auth proof:** Actions → **SportsDataIO auth probe** → **Run workflow**. Missing secret soft-fails; 401/403 exits non-zero with the status code only. Never logs the key. CI smoke does not inject the secret.
+- **SportsDataIO auth proof:** Actions → **SportsDataIO auth probe** → **Run workflow**. This job is separate from nightly: missing key or non-2xx **hard-fails**. Nightly ingest still soft-fails without the secret. Never logs the key. CI smoke does not inject the secret.
 - **Outputs:** CSVs, plots, and the DuckDB warehouse stay gitignored. The workflow uploads them as the `nightly-artifacts` run artifact (14-day retention) instead of committing generated files.
 - **Shared storage (optional):** when `ARTIFACTS_URI` is set, the orchestrator uploads `artifacts/` to immutable `runs/{run_id}/` and promotes `current/` only after a full success. The dashboard reads `current/` and falls back to local `artifacts/` if the URI is unset or unreachable. Source badge: `remote` | `local` | `missing`. See [docs/adr/0001-shared-artifact-contract.md](docs/adr/0001-shared-artifact-contract.md) and [docs/shared_artifacts.md](docs/shared_artifacts.md).
 

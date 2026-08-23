@@ -407,8 +407,9 @@ def test_sdio_probe_workflow_is_dispatch_only() -> None:
     assert "pull_request:" not in text
     assert "SPORTSDATAIO_API_KEY: ${{ secrets.SPORTSDATAIO_API_KEY }}" in text
     assert "Ocp-Apim-Subscription-Key" in text
-    assert "SPORTSDATAIO_API_KEY missing; skipping probe (soft-fail)" in text
-    assert "sys.exit(0)" in text
+    assert 'print("SPORTSDATAIO_API_KEY missing")' in text
+    assert "sys.exit(1)" in text
+    assert "soft-fail" not in text.split("if not key:", 1)[-1].split("url =", 1)[0]
     assert "/v3/mlb/scores/json/Teams" in text
     assert "HTTPError" in text
     assert "http_status={int(exc.code)}" in text
