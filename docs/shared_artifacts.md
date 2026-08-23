@@ -32,7 +32,8 @@ There is no HTTP API. Schemes: `s3://`, `r2://`, `gs://`, `file://`.
 | `manifest.json` | `schema_version`, `as_of_date`, `created_at`, `git_sha`, `pipeline_steps`, `war_source_summary`, `files[]` |
 
 Readers still accept the retired `#109` prefix `{league}/{level}/latest/`
-so already-published objects keep loading.
+for **one release** so already-published objects keep loading. `latest/` is
+**deprecated and will be dropped next release**. New publishes do not write it.
 
 Example with `ARTIFACTS_URI=s3://my-bucket/baseball-analytics`:
 
@@ -135,7 +136,7 @@ vars above from repository secrets. It still uploads a 14-day
 
 1. Fresh disk cache under `artifacts/.remote_cache/` (TTL)
 2. `{ARTIFACTS_URI}/current/<metrics\|models\|fantasy>/<file>`
-3. Compat: `{league}/{level}/latest/<file>` from #109
+3. Compat (deprecated, one release): `{league}/{level}/latest/<file>` from #109
 4. Stale remote cache (remote unreachable)
 5. Local `artifacts/<file>` (or `artifacts/fantasy/cards.jsonl`)
 6. Missing → empty state
@@ -171,7 +172,6 @@ These steps are also encoded in `tests/test_storage.py`
    test -f /tmp/btee-qa/runs/qa20260823T000000Z/fantasy/cards.jsonl
    test -f /tmp/btee-qa/current/manifest.json
    test -f /tmp/btee-qa/current/fantasy/cards.jsonl
-   test ! -e /tmp/btee-qa/current/fantasy/fantasy_cards_2026-08-23.json
    python3 -c "
    import json
    m=json.load(open('/tmp/btee-qa/current/manifest.json'))

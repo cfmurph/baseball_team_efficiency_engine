@@ -23,8 +23,9 @@ run tree plus a single mutable pointer:
 ```
 
 `#109` published `{league}/{level}/{run_date}/` plus `latest/`. New writes use
-`runs/` + `current/` only. Readers still accept the old `latest/` prefix for a
-brief compat window.
+`runs/` + `current/` only. Readers still accept the old `latest/` prefix for
+**one release** so already-published objects keep loading. `latest/` is
+**deprecated and will be dropped next release**.
 
 ## Load order and badge
 
@@ -43,9 +44,9 @@ The dashboard Source badge is exactly `remote` | `local` | `missing`.
 ## Fantasy cards
 
 Path is `fantasy/cards.jsonl` under both `runs/{run_id}/` and `current/`.
-Not `fantasy/fantasy_cards_{as_of_date}.json`. `as_of_date` and
-`schema_version` belong on `manifest.json` and on each JSONL record.
-`war_source` on records is `bbref` | `approx`.
+`as_of_date` and `schema_version` belong on `manifest.json` and on each JSONL
+record. `edge.war_source` is `bbref` | `approx` only. An empty stub is OK
+until the #111 emitter.
 
 ## Interface
 

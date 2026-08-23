@@ -14,8 +14,9 @@ def test_adr_layout_uses_runs_current_and_cards_jsonl() -> None:
     assert "runs/{run_id}/" in adr
     assert "current/" in adr
     assert FANTASY_CARDS_RELPATH in adr
-    assert "fantasy_cards_{as_of_date}.json" in adr  # named as the voided path
-    assert "Not `fantasy/fantasy_cards_{as_of_date}.json`" in adr or "Not `fantasy/fantasy_cards_" in adr
+    assert "edge.war_source" in adr
+    assert "deprecated" in adr.lower()
+    assert "dropped next release" in adr
     for field in REQUIRED_MANIFEST_FIELDS:
         assert field in adr
     assert "remote" in adr and "local" in adr and "missing" in adr
@@ -36,6 +37,7 @@ def test_qa_guide_documents_file_uri_how_to_verify() -> None:
     assert "ARTIFACTS_URI=file://" in guide
     assert "file:///tmp/btee-qa" in guide
     assert "current/fantasy/cards.jsonl" in guide
-    assert "test ! -e /tmp/btee-qa/current/fantasy/fantasy_cards_2026-08-23.json" in guide
+    assert "deprecated" in guide.lower()
+    assert "dropped next release" in guide
     for field in REQUIRED_MANIFEST_FIELDS:
         assert field in guide

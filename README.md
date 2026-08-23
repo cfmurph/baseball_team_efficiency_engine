@@ -129,7 +129,7 @@ python3 -m models.cluster_teams
 streamlit run dashboard/app.py --server.port 8501 --server.headless true
 ```
 
-The dashboard is Streamlit + Plotly only. Pages load CSVs through named helpers in `dashboard/data.py` (`load_team_metrics()`, `load_player_season_metrics()`, …) — never raw `Path("artifacts")`. When `ARTIFACTS_URI` is set the loaders use `resolve_artifact()` (shared `s3://…` or `file:///…` `latest/` prefix, then local `artifacts/` if the store is unset or unreachable). Sidebar **Source** shows `local`, `shared filesystem`, or `shared s3://…`. See [docs/shared_artifacts.md](docs/shared_artifacts.md).
+The dashboard is Streamlit + Plotly only. Pages load CSVs through named helpers in `dashboard/data.py` (`load_team_metrics()`, `load_player_season_metrics()`, …) — never raw `Path("artifacts")`. When `ARTIFACTS_URI` is set the loaders use `resolve_artifact()` (`current/`, then a one-release `latest/` compat bridge, then local `artifacts/`). Sidebar **Source** shows `remote` | `local` | `missing`. See [docs/adr/0001-shared-artifact-contract.md](docs/adr/0001-shared-artifact-contract.md) and [docs/shared_artifacts.md](docs/shared_artifacts.md).
 
 Season, team, and league widgets share `st.session_state` keys `season_year`, `selected_team`, and `selected_league` (documented in `dashboard/state.py`) so a pick on Overview carries to Team Deep Dive.
 

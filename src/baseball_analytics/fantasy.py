@@ -22,7 +22,10 @@ VOID_DATED_CARDS_PREFIX = "fantasy_cards_"
 
 
 def map_card_war_source(value: object) -> str:
-    """Map warehouse ``real|approx|mixed`` onto the card enum ``bbref|approx``."""
+    """Map warehouse / alias values onto card ``edge.war_source``: ``bbref`` | ``approx``.
+
+    ``fangraphs`` is never emitted (no FG WAR ingest yet) and collapses to ``approx``.
+    """
     text = str(value or "").strip().lower()
     if text in {"real", "bbref"}:
         return "bbref"
@@ -35,11 +38,20 @@ def cards_record(
     as_of_date: str,
     schema_version: str = FANTASY_SCHEMA_VERSION,
 ) -> dict[str, object]:
-    """Build one JSONL record. Extra keys from ``row`` are kept if present."""
+    """Build one JSONL record. ``edge.war_source`` is ``bbref`` | ``approx`` only."""
     payload = dict(row)
     payload["schema_version"] = schema_version
     payload["as_of_date"] = as_of_date
-    payload["war_source"] = map_card_war_source(payload.get("war_source"))
+    edge = dict(payload.get("edge") or {})
+    raw_source = edge.get("war_source", payload.pop("war_source", None))
+    source = map_card_war_source(raw_source)
+    edge["war_source"] = source
+    edge["is_approx"] = source == "approx"
+    if "war" in payload and "war" not in edge:
+        edge["war"] = payload["war"]
+    if "vs_replacement" in payload and "vs_replacement" not in edge:
+        edge["vs_replacement"] = payload["vs_replacement"]
+    payload["edge"] = edge
     return payload
 
 

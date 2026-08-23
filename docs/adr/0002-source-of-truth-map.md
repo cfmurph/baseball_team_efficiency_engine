@@ -20,7 +20,8 @@ second competing WAR series, and do not replace BR rWAR with Stats API or
 Sportradar WAR.
 
 Warehouse grain keeps `war_source` as `real` | `approx` | `mixed`.
-Card JSONL maps `real` → `bbref` so the lake enum stays `bbref` | `approx`.
+Card JSONL maps `real` → `edge.war_source=bbref` so the lake enum stays
+`bbref` | `approx`. Never emit `fangraphs` until FG WAR ingest exists.
 
 ## Consequences
 

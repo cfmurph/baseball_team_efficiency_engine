@@ -65,11 +65,12 @@ def test_empty_stub_is_valid_and_uses_locked_path(tmp_path: Path) -> None:
     assert not (tmp_path / "fantasy" / "fantasy_cards_2026-08-23.json").exists()
 
 
-def test_records_carry_as_of_date_schema_and_bbref_war_source() -> None:
+def test_records_carry_as_of_date_schema_and_edge_war_source() -> None:
     text = render_cards_jsonl(
         [
             {"player_id": "judgeaa01", "war_source": "real", "war": 10.8},
             {"player_id": "unknown01", "war_source": "approx", "war": 1.2},
+            {"player_id": "fg01", "war_source": "fangraphs", "war": 5.0},
         ],
         as_of_date="2026-08-23",
         schema_version="1.0",
@@ -77,9 +78,14 @@ def test_records_carry_as_of_date_schema_and_bbref_war_source() -> None:
     rows = [json.loads(line) for line in text.splitlines()]
     assert rows[0]["as_of_date"] == "2026-08-23"
     assert rows[0]["schema_version"] == "1.0"
-    assert rows[0]["war_source"] == "bbref"
-    assert rows[1]["war_source"] == "approx"
-    assert {row["war_source"] for row in rows} <= {"bbref", "approx"}
+    assert rows[0]["edge"]["war_source"] == "bbref"
+    assert rows[0]["edge"]["is_approx"] is False
+    assert rows[1]["edge"]["war_source"] == "approx"
+    assert rows[1]["edge"]["is_approx"] is True
+    assert rows[2]["edge"]["war_source"] == "approx"
+    sources = {row["edge"]["war_source"] for row in rows}
+    assert sources <= {"bbref", "approx"}
+    assert "fangraphs" not in sources
 
 
 def test_map_war_source_real_to_bbref() -> None:
@@ -87,6 +93,7 @@ def test_map_war_source_real_to_bbref() -> None:
     assert map_card_war_source("bbref") == "bbref"
     assert map_card_war_source("approx") == "approx"
     assert map_card_war_source("mixed") == "approx"
+    assert map_card_war_source("fangraphs") == "approx"
 
 
 def test_recommendation_labels_map_sit_to_bench() -> None:
