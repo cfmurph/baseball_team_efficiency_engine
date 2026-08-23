@@ -27,6 +27,7 @@
 - [ ] Publish dashboard
 - [ ] Add API layer
 - [x] Schedule refresh jobs
+- [x] Shared artifact storage (S3/R2) + dashboard remote load with local fallback
 
 ## Phase 5: Simulation
 - [ ] Payroll redistribution simulator

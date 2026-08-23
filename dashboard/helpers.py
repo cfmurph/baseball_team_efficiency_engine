@@ -118,8 +118,9 @@ _EMPTY_COPY = {
     "metrics": {
         "title": "No team metrics yet",
         "body": (
-            "The dashboard reads CSVs from artifacts/. Run the pipeline to generate "
-            "team-season metrics, then refresh this page."
+            "The dashboard reads CSVs from shared storage when ARTIFACTS_URI is set, "
+            "otherwise from artifacts/. Run the pipeline to generate team-season "
+            "metrics, then refresh this page."
         ),
         "command": FULL_PIPELINE,
     },
@@ -469,8 +470,10 @@ def salary_coverage_note(year: int | None) -> str | None:
     return None
 
 
-def artifact_status(files: dict[str, Path]) -> dict[str, Any]:
-    present = {key: path.exists() for key, path in files.items()}
+def artifact_status(files: dict[str, Path | None]) -> dict[str, Any]:
+    present = {
+        key: path is not None and Path(path).exists() for key, path in files.items()
+    }
     missing = [key for key, ok in present.items() if not ok]
     return {
         "present": present,

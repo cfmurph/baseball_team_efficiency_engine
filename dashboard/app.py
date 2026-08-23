@@ -28,9 +28,14 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from src.baseball_analytics.config import load_artifact_settings
 from src.baseball_analytics.dashboard_utils import (
     player_id_columns_for_duplicate_names,
     scale_payroll_for_display,
+)
+from src.baseball_analytics.storage import (
+    artifact_source_label,
+    resolve_artifact,
 )
 from dashboard.helpers import (
     CONTRACT_COLORS,
@@ -309,7 +314,10 @@ hr { border-color: #21262d !important; margin: 0.9rem 0 !important; }
 """, unsafe_allow_html=True)
 
 # ── Artifact paths ─────────────────────────────────────────────────────────────
-ARTIFACTS = Path("artifacts")
+# Shared storage (ARTIFACTS_URI) is preferred; local artifacts/ is the fallback.
+# See docs/shared_artifacts.md.
+_ARTIFACT_SETTINGS = load_artifact_settings(str(_ROOT / "config/settings.yaml"))
+ARTIFACTS = _ARTIFACT_SETTINGS.local_dir
 _FILES = {
     "metrics":       ARTIFACTS / "team_onfield_contract_metrics.csv",
     "frontier":      ARTIFACTS / "team_efficiency_frontier.csv",
@@ -331,11 +339,20 @@ _FILES = {
 
 
 @st.cache_data(ttl=300)
-def _load(key: str) -> pd.DataFrame | None:
+def _resolve_file(key: str) -> str | None:
     path = _FILES.get(key)
-    if path is None or not path.exists():
+    if path is None:
         return None
-    return pd.read_csv(path)
+    resolved = resolve_artifact(path.name, _ARTIFACT_SETTINGS)
+    return None if resolved is None else str(resolved)
+
+
+@st.cache_data(ttl=300)
+def _load(key: str) -> pd.DataFrame | None:
+    raw = _resolve_file(key)
+    if raw is None:
+        return None
+    return pd.read_csv(raw)
 
 
 # ── Column config ──────────────────────────────────────────────────────────────
@@ -473,7 +490,11 @@ all_years = years_from_frame(metrics)
 _slider_max = max(all_years[-1], _current_year) if all_years else _current_year
 _slider_lo = all_years[0] if all_years else _current_year
 all_teams = teams_from_frame(metrics)
-_status = artifact_status(_FILES)
+_status = artifact_status({
+    key: Path(raw) if (raw := _resolve_file(key)) else None
+    for key in _FILES
+})
+_source_label = artifact_source_label(_ARTIFACT_SETTINGS)
 
 
 def _season_picker(key: str = "season", default_latest: bool = True) -> int | None:
@@ -515,6 +536,7 @@ missing_core = [key for key in ("metrics", "players", "frontier_data", "preds") 
 status_bits = [
     f"<strong>Seasons</strong> {html.escape(year_span_label(all_years))}",
     f"<strong>Artifacts</strong> {_status['n_present']}/{_status['n_total']}",
+    f"<strong>Source</strong> {html.escape(_source_label)}",
 ]
 if missing_core:
     status_bits.append("Core files missing — pages show setup steps.")
