@@ -19,9 +19,6 @@ import html
 import sys
 from pathlib import Path
 
-# Streamlit runs this file as a script, so sys.path often starts as
-# dashboard/ (or the shell CWD) — not the repo root. Prepend the root
-# before any dashboard.* / src.* imports.
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
@@ -31,12 +28,17 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-from src.baseball_analytics.dashboard_helpers import compute_slider_max
+from src.baseball_analytics.dashboard_helpers import (
+    apply_layout_and_render_chart,
+    compute_slider_max,
+)
 from src.baseball_analytics.dashboard_utils import (
+    apply_plotly_layout,
+    calculate_slider_max,
     player_id_columns_for_duplicate_names,
+    render_plotly_chart,
     scale_payroll_for_display,
 )
-
 from dashboard.helpers import (
     CONTRACT_COLORS,
     add_payroll_millions,
@@ -432,36 +434,30 @@ _SCATTER_MARKER = dict(size=8, opacity=0.82, line=dict(width=0.5, color="#0d1117
 
 def _apply_layout(fig) -> None:
     """Apply the Baseball Savant dark layout to any Plotly figure."""
-    fig.update_layout(**_PLOTLY_LAYOUT)
+    apply_plotly_layout(fig, _PLOTLY_LAYOUT)
 
 
 def _chart(fig, height: int = 400) -> None:
     """Apply dark layout and render a Plotly chart."""
-    _apply_layout(fig)
-    fig.update_layout(height=height)
-    st.plotly_chart(fig, use_container_width=True)
+    apply_layout_and_render_chart(
+        fig,
+        apply_layout=_apply_layout,
+        plotly_chart=st.plotly_chart,
+        height=height,
+    )
 
 
-def _page_header(label: str) -> None:
-    page_meta = nav_page(label)
-    st.markdown(f'<div class="page-kicker">{html.escape(page_meta["kicker"])}</div>', unsafe_allow_html=True)
-    st.title(page_meta["label"])
-    st.caption(page_meta["blurb"])
-
-
-def _empty(kind: str) -> None:
-    copy = empty_state_copy(kind)
-    cmd = copy.get("command") or ""
-    cmd_html = f"<pre><code>{html.escape(cmd)}</code></pre>" if cmd else ""
-    st.markdown(
-        f"""
-        <div class="empty-card" role="status">
-          <h3>{html.escape(copy["title"])}</h3>
-          <p>{html.escape(copy["body"])}</p>
-          {cmd_html}
-        </div>
-        """,
-        unsafe_allow_html=True,
+# ── Global state ───────────────────────────────────────────────────────────────
+metrics = _load("metrics")
+if metrics is None:
+    st.error(
+        "No artifacts found. Run the full pipeline first:\n\n"
+        "```\npython3 -m pipeline.extract.pull_sources\n"
+        "python3 -m pipeline.extract.pull_war\n"
+        "python3 -m pipeline.transform.build_warehouse\n"
+        "python3 -m pipeline.transform.build_metrics\n"
+        "python3 -m models.train_win_model\n"
+        "python3 -m models.cluster_teams\n```"
     )
 
 
@@ -474,11 +470,9 @@ def _salary_note(year: int | None) -> None:
 # ── Global state ───────────────────────────────────────────────────────────────
 metrics = _load("metrics")
 _current_year = datetime.date.today().year
-all_years = years_from_frame(metrics)
-_slider_lo = int(all_years[0]) if all_years else _current_year
+all_years = sorted(metrics["year_id"].dropna().astype(int).unique().tolist())
 _slider_max = compute_slider_max(all_years, _current_year)
-all_teams = teams_from_frame(metrics)
-_status = artifact_status(_FILES)
+all_teams = sorted(metrics["team_name"].dropna().unique().tolist())
 
 
 def _season_picker(key: str = "season", default_latest: bool = True) -> int | None:
@@ -756,7 +750,6 @@ def page_player_explorer() -> None:
         "player_war", "war_source", "salary", "surplus_value", "contract_label",
     ]) if c in filt.columns]
 
-    tab_bat, tab_pit, tab_contract, tab_all = st.tabs(["Batting", "Pitching", "Contract", "All Stats"])
     with tab_bat:
         _show_table(scale_money_columns(filt[[c for c in bat_cols if c in filt.columns]]), _PLAYER_COL_CFG)
     with tab_pit:
@@ -1346,10 +1339,6 @@ def page_model_insights() -> None:
 
 
 # ── Routing ────────────────────────────────────────────────────────────────────
-page_overview = page_league_snapshot
-page_roster_lab = page_player_explorer
-page_contract_watch = page_contract_analysis
-
 _PAGES = {
     "Overview": page_overview,
     "Team Deep Dive": page_team_deep_dive,

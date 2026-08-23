@@ -1,0 +1,73 @@
+from __future__ import annotations
+
+import duckdb
+import pandas as pd
+
+from pipeline.transform import build_metrics
+
+
+def test_efficiency_labels_bucket_wins_per_10m() -> None:
+    df = pd.DataFrame({"wins_per_10m": [0.3, 0.8, 1.2, 2.0]})
+
+    result = build_metrics._efficiency_labels(df)
+
+    assert result["efficiency_label"].astype(str).tolist() == [
+        "low",
+        "below_avg",
+        "above_avg",
+        "elite",
+    ]
+
+
+def test_contract_exports_filter_and_sort_material_contract_risks() -> None:
+    player_df = pd.DataFrame(
+        {
+            "name_full": ["Value Bat", "Replacement", "Injured Ace", "Bench Deal"],
+            "player_war": [4.0, 0.0, -0.5, 1.0],
+            "salary": [2_000_000, 1_000_000, 25_000_000, 500_000],
+            "surplus_value": [28_000_000, 5_000_000, -24_000_000, -2_000_000],
+            "contract_label": ["surplus_value", "fair_value", "dead_money", "overpaid"],
+        }
+    )
+
+    top_value = build_metrics._top_value_players(player_df, n=3)
+    worst = build_metrics._worst_contracts(player_df, n=3)
+    dead_money = build_metrics._dead_money_leaders(player_df)
+
+    assert top_value["name_full"].tolist() == ["Value Bat", "Bench Deal"]
+    assert worst["name_full"].tolist() == ["Injured Ace", "Replacement", "Value Bat"]
+    assert dead_money["name_full"].tolist() == ["Injured Ace"]
+
+
+def test_window_summary_keeps_latest_phase_per_team() -> None:
+    team_df = pd.DataFrame(
+        {
+            "team_name": ["Aces", "Bears", "Aces", "Bears"],
+            "year_id": [2022, 2021, 2024, 2023],
+            "window_phase": ["building", "retooling", "contending", "rebuilding"],
+            "wins": [78, 85, 96, 67],
+            "payroll": [90_000_000, 120_000_000, 150_000_000, 80_000_000],
+            "team_total_war": [30.0, 35.0, 45.0, 22.0],
+        }
+    )
+
+    result = build_metrics._window_summary(team_df).sort_values("team_name").reset_index(drop=True)
+
+    assert result[["team_name", "year_id", "window_phase", "wins"]].to_dict("records") == [
+        {"team_name": "Aces", "year_id": 2024, "window_phase": "contending", "wins": 96},
+        {"team_name": "Bears", "year_id": 2023, "window_phase": "rebuilding", "wins": 67},
+    ]
+
+
+def test_table_has_rows_handles_present_empty_and_missing_tables() -> None:
+    con = duckdb.connect(":memory:")
+    try:
+        con.execute("CREATE TABLE present_empty (id INTEGER)")
+        con.execute("CREATE TABLE present_with_rows (id INTEGER)")
+        con.execute("INSERT INTO present_with_rows VALUES (1)")
+
+        assert build_metrics._table_has_rows(con, "present_empty") is False
+        assert build_metrics._table_has_rows(con, "present_with_rows") is True
+        assert build_metrics._table_has_rows(con, "missing_table") is False
+    finally:
+        con.close()

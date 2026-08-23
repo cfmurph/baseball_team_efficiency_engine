@@ -12,8 +12,10 @@ from src.baseball_analytics.validation import (
     check_column_range,
     check_no_duplicate_pk,
     check_referential_integrity,
+    validate_fact_player_season,
     validate_fact_team_season,
     validate_dim_team,
+    validate_all,
 )
 
 
@@ -147,6 +149,53 @@ def test_validate_fact_team_season_bad_wins():
     assert not report.passed
 
 
+def _valid_fact_player_season() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "player_id": ["judgeaa01", "colege01"],
+            "season_key": [2024, 2024],
+            "team_id": ["NYA", "NYA"],
+            "salary": [40_000_000, 36_000_000],
+        }
+    )
+
+
+def test_validate_fact_player_season_passes():
+    report = validate_fact_player_season(_valid_fact_player_season())
+
+    assert report.passed, report.summary()
+
+
+def test_validate_fact_player_season_rejects_duplicate_player_team_season():
+    df = pd.concat(
+        [_valid_fact_player_season(), _valid_fact_player_season().iloc[[0]]],
+        ignore_index=True,
+    )
+
+    report = validate_fact_player_season(df)
+
+    assert not report.passed
+    duplicate_result = next(
+        result for result in report.results if result.name == "fact_player_season PK unique"
+    )
+    assert not duplicate_result.passed
+    assert duplicate_result.rows_affected == 1
+
+
+def test_validate_fact_player_season_rejects_negative_salary():
+    df = _valid_fact_player_season()
+    df.loc[0, "salary"] = -1
+
+    report = validate_fact_player_season(df)
+
+    assert not report.passed
+    salary_result = next(
+        result for result in report.results if result.name == "salary non-negative"
+    )
+    assert not salary_result.passed
+    assert salary_result.rows_affected == 1
+
+
 def test_validate_dim_team_passes():
     df = pd.DataFrame({
         "team_key": ["NYA", "BOS"],
@@ -157,3 +206,34 @@ def test_validate_dim_team_passes():
     })
     report = validate_dim_team(df)
     assert report.passed
+
+def test_validate_all_aggregates_player_season_failures():
+    fact_team = pd.DataFrame({
+        "team_key": ["NYA_2010"],
+        "season_key": [2010],
+        "wins": [95],
+        "losses": [67],
+        "payroll": [200e6],
+        "pythag_wins": [93.0],
+        "gini_salary": [0.4],
+    })
+    fact_player = pd.DataFrame({
+        "player_id": ["playerA"],
+        "season_key": [2010],
+        "team_id": ["NYA"],
+        "salary": [-10_000],
+    })
+    dim_team = pd.DataFrame({
+        "team_key": ["NYA_2010"],
+        "team_id": ["NYA"],
+        "franchise_id": ["NYY"],
+        "team_name": ["New York Yankees"],
+        "league_id": ["AL"],
+    })
+
+    report = validate_all(fact_team, fact_player, dim_team)
+
+    assert not report.passed
+    assert report.n_failed == 1
+    assert "FAILED" in report.summary()
+

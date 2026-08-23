@@ -176,3 +176,88 @@ def test_player_query_preserves_both_player_type_and_pitching_rates() -> None:
     assert two_way["era"] == pytest.approx(3.0)
     assert two_way["pitching_war"] == pytest.approx(0.8)
     assert two_way["player_war"] == 1.0
+
+
+def test_player_query_preserves_distinct_same_name_players() -> None:
+    """Two people who share a display name must stay on separate export rows."""
+    con = duckdb.connect(":memory:")
+    con.register(
+        "fact_player_season",
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "same001",
+                    "season_key": 2024,
+                    "team_id": "NYY",
+                    "player_type": "pitcher",
+                    "pa": 0,
+                    "hr": 0,
+                    "bb": 0,
+                    "woba": None,
+                    "batting_war": 0.0,
+                    "ip": 80.0,
+                    "fip": 3.50,
+                    "era": 4.00,
+                    "pitching_war": 2.0,
+                    "player_war": 2.0,
+                    "war_source": "approx",
+                    "salary": 5_000_000,
+                    "surplus_value": 11_000_000,
+                    "contract_label": "fair_value",
+                },
+                {
+                    "player_id": "same002",
+                    "season_key": 2024,
+                    "team_id": "NYY",
+                    "player_type": "pitcher",
+                    "pa": 0,
+                    "hr": 0,
+                    "bb": 0,
+                    "woba": None,
+                    "batting_war": 0.0,
+                    "ip": 60.0,
+                    "fip": 4.50,
+                    "era": 5.00,
+                    "pitching_war": 1.0,
+                    "player_war": 1.0,
+                    "war_source": "approx",
+                    "salary": 4_000_000,
+                    "surplus_value": 4_000_000,
+                    "contract_label": "overpaid",
+                },
+            ]
+        ),
+    )
+    con.register(
+        "dim_player",
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "same001",
+                    "name_full": "Chris Same",
+                    "name_first": "Chris",
+                    "name_last": "Same",
+                },
+                {
+                    "player_id": "same002",
+                    "name_full": "Chris Same",
+                    "name_first": "Chris",
+                    "name_last": "Same",
+                },
+            ]
+        ),
+    )
+    con.register(
+        "dim_team",
+        pd.DataFrame(
+            [
+                {"team_key": "NYY_2024", "team_id": "NYY", "team_name": "New York"},
+            ]
+        ),
+    )
+
+    result = con.execute(_PLAYER_QUERY).fetchdf()
+    same_name = result[result["name_full"] == "Chris Same"].sort_values("player_id")
+
+    assert same_name["player_id"].tolist() == ["same001", "same002"]
+    assert same_name["player_war"].tolist() == [pytest.approx(2.0), pytest.approx(1.0)]
