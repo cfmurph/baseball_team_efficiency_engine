@@ -23,7 +23,7 @@
 
 ## Phase 4: Productization
 - [ ] Dockerize
-- [ ] Add CI/CD
+- [x] Add CI/CD
 - [ ] Publish dashboard
 - [ ] Add API layer
 - [x] Schedule refresh jobs

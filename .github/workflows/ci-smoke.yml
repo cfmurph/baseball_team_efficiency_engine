@@ -3,9 +3,11 @@ name: CI smoke
 on:
   pull_request:
     branches: [master]
+  push:
+    branches: [master]
 
 concurrency:
-  group: ci-smoke-${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ci-smoke-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -13,7 +15,7 @@ permissions:
 
 jobs:
   smoke:
-    name: Dashboard + pipeline + golden WAR
+    name: Offline pytest + AppTest + WAR
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -29,10 +31,8 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run CI smokes
-        run: >
-          python3 -m pytest
-          tests/test_dashboard_apptest.py
-          tests/test_run_nightly.py
-          tests/test_golden_war.py
-          -v
+      # Full unit suite minus @pytest.mark.network. Covers AppTest boot,
+      # golden + overlay rWAR, pull_war contracts, and shared-storage fallback.
+      # No live Baseball-Reference / Lahman / S3 calls.
+      - name: Run offline smoke suite
+        run: python3 -m pytest tests/ -m "not network" -v

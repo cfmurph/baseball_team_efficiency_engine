@@ -183,15 +183,20 @@ python3 -m pytest tests/ -v
 
 Unit tests covering: metrics helpers, approximate WAR, Baseball-Reference rWAR overlay + ID mapping, BaseRuns, contract classification, window detection, data validation checks.
 
-CI smokes on PRs to `master` (`.github/workflows/ci-smoke.yml`):
+CI smokes on **pull requests and pushes to `master`** (`.github/workflows/ci-smoke.yml`). The job runs the full unit suite with live-network tests excluded:
 
 ```bash
-python3 -m pytest tests/test_dashboard_apptest.py tests/test_run_nightly.py tests/test_golden_war.py -v
+python3 -m pytest tests/ -m "not network" -v
 ```
 
+That includes:
+
 - **AppTest** — every sidebar page boots without exception (empty `artifacts/` is fine).
-- **Nightly contract** — `pull_war` stays in `PIPELINE_STEPS` immediately after `pull_sources`.
-- **Golden WAR** — Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023 stay `war_source=real` against committed fixtures. Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
+- **Nightly + pull_war contracts** — `pull_war` stays in `PIPELINE_STEPS` immediately after `pull_sources`; extract URLs/filenames match Baseball-Reference (mocked download, no live fetch).
+- **Golden + overlay WAR** — `tests/test_golden_war.py` and `tests/test_real_war.py` (Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023). Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
+- **Shared storage** — URI resolution and local fallback (`tests/test_storage.py`).
+
+Mark a new live-network test with `@pytest.mark.network` so CI keeps skipping it. Nightly extract stays in `.github/workflows/nightly-refresh.yml`.
 
 ## Data sources
 
