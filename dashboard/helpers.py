@@ -199,10 +199,12 @@ def _is_missing(value: Any) -> bool:
 
 
 def format_money_millions(value: Any, *, decimals: int = 0, na: str = "—") -> str:
-    """Format a raw dollar amount as $XM / $X.XM."""
+    """Format a raw dollar amount as $XM / $X.XM. Negatives render as -$XM."""
     if _is_missing(value):
         return na
-    return f"${float(value) / 1_000_000:,.{decimals}f}M"
+    amount = float(value) / 1_000_000
+    sign = "-" if amount < 0 else ""
+    return f"{sign}${abs(amount):,.{decimals}f}M"
 
 
 def format_war(value: Any, *, decimals: int = 1, na: str = "—") -> str:

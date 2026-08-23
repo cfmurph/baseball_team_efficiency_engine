@@ -103,6 +103,12 @@ class _FakeStreamlit:
     def title(self, *args, **kwargs) -> None:
         return None
 
+    def markdown(self, *args, **kwargs) -> None:
+        return None
+
+    def metric(self, *args, **kwargs) -> None:
+        return None
+
     def caption(self, text: str, *args, **kwargs) -> None:
         self.captions.append(str(text))
 
@@ -170,6 +176,9 @@ class _FakeFigure:
     def update_traces(self, *args, **kwargs) -> None:
         return None
 
+    def add_hline(self, *args, **kwargs) -> None:
+        return None
+
 
 def test_nav_pages_resolve_to_defined_page_functions():
     tree = _read_app_tree()
@@ -196,8 +205,16 @@ def test_slider_max_expression_handles_empty_and_non_empty_years():
     expr = _slider_max_expr()
     compiled = compile(ast.Expression(expr), str(APP_PATH), "eval")
 
-    empty_result = eval(compiled, {"all_years": [], "_current_year": 2026})
-    non_empty_result = eval(compiled, {"all_years": [2018, 2024], "_current_year": 2020})
+    from src.baseball_analytics.dashboard_helpers import compute_slider_max
+
+    empty_result = eval(
+        compiled,
+        {"all_years": [], "_current_year": 2026, "compute_slider_max": compute_slider_max},
+    )
+    non_empty_result = eval(
+        compiled,
+        {"all_years": [2018, 2024], "_current_year": 2020, "compute_slider_max": compute_slider_max},
+    )
 
     assert empty_result == 2026
     assert non_empty_result == 2024
@@ -289,9 +306,19 @@ def test_player_explorer_shows_player_id_when_name_collides():
     fake_px = SimpleNamespace(
         scatter=lambda *args, **kwargs: _FakeFigure(),
     )
+    from dashboard.helpers import (
+        empty_state_copy,
+        metric_label,
+        salary_coverage_note,
+        scale_money_columns,
+        teams_from_frame,
+        years_from_frame,
+    )
+    from src.baseball_analytics.dashboard_utils import player_id_columns_for_duplicate_names
 
     namespace = _load_app_symbols(
-        functions=("page_player_explorer",),
+        functions=("page_player_explorer", "_empty", "_salary_note", "_page_header"),
+        assignments=("_SCATTER_MARKER",),
         globals_dict={
             "pd": pd,
             "st": st,
@@ -308,10 +335,13 @@ def test_player_explorer_shows_player_id_when_name_collides():
             "CONTRACT_COLORS": CONTRACT_COLORS,
             "years_from_frame": years_from_frame,
             "teams_from_frame": teams_from_frame,
+            "metric_label": metric_label,
             "scale_money_columns": scale_money_columns,
             "player_id_columns_for_duplicate_names": player_id_columns_for_duplicate_names,
             "nav_page": nav_page,
             "empty_state_copy": empty_state_copy,
+            "salary_coverage_note": salary_coverage_note,
+            "html": __import__("html"),
         },
     )
 
@@ -407,8 +437,11 @@ def test_team_deep_dive_roster_includes_player_id_for_name_collisions():
         bar=lambda *args, **kwargs: _FakeFigure(),
     )
 
+    from dashboard.helpers import empty_state_copy, salary_coverage_note
+    from src.baseball_analytics.dashboard_utils import player_id_columns_for_duplicate_names
+
     namespace = _load_app_symbols(
-        functions=("page_team_deep_dive",),
+        functions=("page_team_deep_dive", "_page_header", "_empty", "_salary_note"),
         globals_dict={
             "pd": pd,
             "st": st,
@@ -433,6 +466,8 @@ def test_team_deep_dive_roster_includes_player_id_for_name_collisions():
             "player_id_columns_for_duplicate_names": player_id_columns_for_duplicate_names,
             "nav_page": nav_page,
             "empty_state_copy": empty_state_copy,
+            "salary_coverage_note": salary_coverage_note,
+            "html": __import__("html"),
         },
     )
 

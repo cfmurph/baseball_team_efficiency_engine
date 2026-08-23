@@ -66,7 +66,9 @@ def test_slider_max_expression_is_safe_for_empty_years():
     expr = _get_slider_max_expr()
     compiled = compile(ast.Expression(expr), str(DASHBOARD_APP_PATH), "eval")
 
+    from src.baseball_analytics.dashboard_helpers import compute_slider_max
+
     # Empty data should safely fall back to current year.
-    assert eval(compiled, {"all_years": [], "_current_year": 2026}) == 2026
+    assert eval(compiled, {"all_years": [], "_current_year": 2026, "compute_slider_max": compute_slider_max}) == 2026
     # Non-empty data should still choose the max between latest data and current year.
-    assert eval(compiled, {"all_years": [2016, 2024], "_current_year": 2023}) == 2024
+    assert eval(compiled, {"all_years": [2016, 2024], "_current_year": 2023, "compute_slider_max": compute_slider_max}) == 2024

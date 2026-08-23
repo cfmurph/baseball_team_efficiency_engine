@@ -1,11 +1,55 @@
 from __future__ import annotations
 
+import ast
+from pathlib import Path
 from unittest.mock import Mock
 
+import pandas as pd
+
+from dashboard.helpers import (
+    add_payroll_millions,
+    apply_efficiency_labels,
+    artifact_status,
+    empty_state_copy,
+    filter_season,
+    format_money_millions,
+    format_ratio,
+    format_signed_int,
+    format_war,
+    metric_label,
+    nav_labels,
+    nav_page,
+    overview_kpi_payload,
+    overview_leaders,
+    rank_by_efficiency,
+    salary_coverage_note,
+    scale_money_columns,
+    slider_bounds,
+    teams_from_frame,
+    top_n_by,
+    year_span_label,
+    years_from_frame,
+)
 from src.baseball_analytics.dashboard_helpers import (
     apply_layout_and_render_chart,
     compute_slider_max,
 )
+
+
+def _season() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "team_name": ["Rays", "Yankees", "A's", "Red Sox"],
+            "league_id": ["AL", "AL", "AL", "AL"],
+            "year_id": [2015, 2015, 2015, 2015],
+            "wins": [80, 87, 68, 78],
+            "payroll": [70_000_000, 210_000_000, 80_000_000, 180_000_000],
+            "team_total_war": [28.0, 35.0, 18.0, 30.0],
+            "surplus_value": [40_000_000, -30_000_000, 10_000_000, -20_000_000],
+            "cost_per_war": [2_500_000, 6_000_000, 4_400_000, 6_000_000],
+            "wins_per_10m": [1.14, 0.41, 0.85, 0.43],
+        }
+    )
 
 
 def test_compute_slider_max_uses_current_year_when_no_data() -> None:
@@ -48,3 +92,191 @@ def test_apply_layout_and_render_chart_applies_layout_then_renders() -> None:
     assert events == ["apply_layout", "update_layout"]
     assert fig.last_layout_kwargs == {"height": 460}
     plotly_chart.assert_called_once_with(fig, use_container_width=True)
+
+
+def test_nav_has_eight_product_sections() -> None:
+    labels = nav_labels()
+    assert labels == [
+        "Overview",
+        "Team Deep Dive",
+        "Compare Teams",
+        "Roster Lab",
+        "Contract Watch",
+        "Efficiency Frontier",
+        "What-If Sim",
+        "Model Insights",
+    ]
+    assert nav_page("Roster Lab")["kicker"] == "Roster"
+    assert nav_page("Missing")["label"] == "Overview"
+
+
+def test_format_money_and_war() -> None:
+    assert format_money_millions(98_400_000) == "$98M"
+    assert format_money_millions(2_500_000, decimals=1) == "$2.5M"
+    assert format_money_millions(-30_400_000) == "-$30M"
+    assert format_money_millions(-2_500_000, decimals=1) == "-$2.5M"
+    assert format_money_millions(None) == "—"
+    assert format_money_millions(float("nan")) == "—"
+    assert format_war(32.46) == "32.5"
+    assert format_war(None) == "—"
+    assert format_signed_int(42) == "+42"
+    assert format_signed_int(-7) == "-7"
+    assert format_ratio(1.141) == "1.14"
+
+
+def test_scale_money_columns_and_dead_money() -> None:
+    df = pd.DataFrame(
+        {
+            "payroll": [100_000_000],
+            "surplus_value": [8_000_000],
+            "salary": [2_000_000],
+            "dead_money_share": [0.12],
+            "wins": [90],
+        }
+    )
+    scaled = scale_money_columns(df)
+    assert scaled["payroll"].iloc[0] == 100.0
+    assert scaled["surplus_value"].iloc[0] == 8.0
+    assert scaled["salary"].iloc[0] == 2.0
+    assert abs(scaled["dead_money_share"].iloc[0] - 12.0) < 1e-9
+    assert scaled["wins"].iloc[0] == 90
+    assert df["payroll"].iloc[0] == 100_000_000
+
+
+def test_add_payroll_millions() -> None:
+    df = pd.DataFrame({"payroll": [50_000_000], "wins": [81]})
+    chart = add_payroll_millions(df)
+    assert chart["payroll_m"].iloc[0] == 50.0
+    assert chart["payroll"].iloc[0] == 50_000_000
+
+
+def test_years_teams_and_slider_bounds() -> None:
+    df = pd.DataFrame({"year_id": [2014, 2016, 2015], "team_name": ["A", "B", "A"]})
+    assert years_from_frame(df) == [2014, 2015, 2016]
+    assert teams_from_frame(df) == ["A", "B"]
+    assert years_from_frame(None) == []
+    assert teams_from_frame(pd.DataFrame()) == []
+    assert slider_bounds([1990, 2016], 2026) == (1990, 2026)
+    assert slider_bounds([], 2026) == (2026, 2026)
+
+
+def test_filter_season_by_league() -> None:
+    df = pd.DataFrame(
+        {
+            "year_id": [2015, 2015, 2014],
+            "league_id": ["AL", "NL", "AL"],
+            "team_name": ["Yankees", "Mets", "Royals"],
+        }
+    )
+    al = filter_season(df, 2015, "AL")
+    assert list(al["team_name"]) == ["Yankees"]
+    assert len(filter_season(df, 2015, "All")) == 2
+
+
+def test_rank_by_efficiency_prefers_surplus() -> None:
+    ranked = rank_by_efficiency(_season())
+    assert list(ranked["team_name"]) == ["Rays", "A's", "Red Sox", "Yankees"]
+    assert list(ranked["rank"]) == [1, 2, 3, 4]
+
+
+def test_rank_by_efficiency_falls_back_to_wins() -> None:
+    df = pd.DataFrame({"team_name": ["A", "B"], "wins": [70, 95]})
+    ranked = rank_by_efficiency(df)
+    assert list(ranked["team_name"]) == ["B", "A"]
+
+
+def test_apply_efficiency_labels_matches_pipeline_bins() -> None:
+    df = pd.DataFrame({"wins_per_10m": [0.2, 0.7, 1.2, 2.0]})
+    labeled = apply_efficiency_labels(df)
+    assert list(labeled["efficiency_label"].astype(str)) == [
+        "low",
+        "below_avg",
+        "above_avg",
+        "elite",
+    ]
+    already = pd.DataFrame({"wins_per_10m": [2.0], "efficiency_label": ["custom"]})
+    assert apply_efficiency_labels(already)["efficiency_label"].iloc[0] == "custom"
+
+
+def test_overview_leaders_and_kpis() -> None:
+    leaders = overview_leaders(_season())
+    assert leaders["n_teams"] == 4
+    assert leaders["best_surplus_team"] == "Rays"
+    assert leaders["worst_surplus_team"] == "Yankees"
+    assert leaders["best_cpw_team"] == "Rays"
+    assert leaders["best_wp10_team"] == "Rays"
+    assert leaders["n_positive_surplus"] == 2
+    assert leaders["has_dollar_metrics"] is True
+
+    cards = overview_kpi_payload(_season())
+    assert cards[1]["value"] == "Rays"
+    assert cards[1]["delta"] == "$40M"
+    assert cards[4]["value"] == "2 / 4"
+    assert cards[5]["value"] == "$130M"
+
+    empty = overview_kpi_payload(pd.DataFrame())
+    assert empty[0]["value"] == "0"
+    assert empty[1]["value"] == "—"
+
+
+def test_top_n_by_and_metric_label() -> None:
+    top = top_n_by(_season(), "surplus_value", n=2, extra_cols=("wins",))
+    assert list(top["team_name"]) == ["Rays", "A's"]
+    bottom = top_n_by(_season(), "surplus_value", n=1, ascending=True)
+    assert bottom["team_name"].iloc[0] == "Yankees"
+    assert metric_label("surplus_value") == "Surplus ($M)"
+    assert metric_label("unknown_col") == "Unknown Col"
+
+
+def test_salary_coverage_note() -> None:
+    assert salary_coverage_note(2016) is None
+    note = salary_coverage_note(2024)
+    assert note is not None
+    assert "2016" in note
+    assert salary_coverage_note(None) is None
+
+
+def test_artifact_status_and_empty_copy(tmp_path: Path) -> None:
+    present = tmp_path / "team_onfield_contract_metrics.csv"
+    present.write_text("year_id\n2015\n")
+    files = {
+        "metrics": present,
+        "players": tmp_path / "missing.csv",
+    }
+    status = artifact_status(files)
+    assert status["n_present"] == 1
+    assert status["n_total"] == 2
+    assert status["ready"] is True
+    assert status["missing"] == ["players"]
+
+    copy = empty_state_copy("players")
+    assert "player_season_metrics.csv" in copy["body"]
+    assert empty_state_copy("not-a-kind")["title"] == "Nothing to show"
+
+
+def test_year_span_label() -> None:
+    assert year_span_label([]) == "No seasons loaded"
+    assert year_span_label([2015]) == "2015"
+    assert year_span_label([1990, 2016]) == "1990–2016"
+
+
+def test_app_bootstraps_sys_path_before_package_imports() -> None:
+    """Streamlit adds dashboard/ (not the repo root) to sys.path first."""
+    app_path = Path(__file__).resolve().parents[1] / "dashboard" / "app.py"
+    tree = ast.parse(app_path.read_text())
+    saw_root_bootstrap = False
+    package_imports: list[str] = []
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            if "_ROOT" in targets:
+                saw_root_bootstrap = True
+        if isinstance(node, ast.ImportFrom) and node.module:
+            if node.module == "dashboard" or node.module.startswith(("dashboard.", "src.")):
+                package_imports.append(node.module)
+                assert saw_root_bootstrap, f"{node.module} imported before _ROOT sys.path bootstrap"
+    assert saw_root_bootstrap
+    assert "dashboard.helpers" in package_imports
+    assert "src.baseball_analytics.dashboard_helpers" in package_imports
+    assert "src.baseball_analytics.dashboard_utils" in package_imports
+    assert package_imports[0].startswith("src.") or package_imports[0].startswith("dashboard.")

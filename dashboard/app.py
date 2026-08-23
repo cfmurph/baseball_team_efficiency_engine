@@ -19,6 +19,10 @@ import html
 import sys
 from pathlib import Path
 
+_ROOT = Path(__file__).resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
 import numpy as np
 import pandas as pd
 import plotly.express as px
@@ -28,11 +32,6 @@ from src.baseball_analytics.dashboard_utils import (
     player_id_columns_for_duplicate_names,
     scale_payroll_for_display,
 )
-
-_ROOT = Path(__file__).resolve().parents[1]
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
-
 from dashboard.helpers import (
     CONTRACT_COLORS,
     add_payroll_millions,
