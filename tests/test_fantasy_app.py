@@ -6,8 +6,18 @@ import subprocess
 import sys
 from pathlib import Path
 
-from fantasy.cards import CARD_LAKE_KEY
-from fantasy.copy import CTA, FOOTER, HEADLINE, MICROCOPY, PRODUCT_NAME, SUBHEAD, SUCCESS
+from fantasy.cards import CARD_LAKE_KEY, OPTIONAL_CARD_KEY
+from fantasy.copy import (
+    CTA,
+    EMPTY_BODY,
+    EMPTY_TITLE,
+    FOOTER,
+    HEADLINE,
+    MICROCOPY,
+    PRODUCT_NAME,
+    SUBHEAD,
+    SUCCESS,
+)
 
 APP_PATH = Path(__file__).resolve().parents[1] / "dashboard" / "fantasy_app.py"
 ROOT = APP_PATH.resolve().parents[1]
@@ -46,8 +56,9 @@ def test_fantasy_entrypoint_bootstraps_before_local_imports() -> None:
 def test_fantasy_app_uses_shared_cards_jsonl_and_marketing_copy() -> None:
     source = APP_PATH.read_text(encoding="utf-8")
     assert "resolve_artifact" in source
+    assert "resolve_player_artifacts" in source
     assert CARD_LAKE_KEY in source
-    assert "fantasy_cards_" not in source
+    assert OPTIONAL_CARD_KEY in source
     for name in (
         "PRODUCT_NAME",
         "HEADLINE",
@@ -56,6 +67,8 @@ def test_fantasy_app_uses_shared_cards_jsonl_and_marketing_copy() -> None:
         "MICROCOPY",
         "SUCCESS",
         "FOOTER",
+        "EMPTY_TITLE",
+        "EMPTY_BODY",
     ):
         assert name in source
     assert HEADLINE.startswith("Know who to start")

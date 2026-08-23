@@ -1,20 +1,21 @@
-"""Load and normalize BenchOrStart share cards from ``cards.jsonl``.
+"""Load and normalize BenchOrStart share cards (schema 1.0).
 
-Architect SoT paths (same relative file, two prefixes)::
+Architect path lock via ``resolve_artifact`` / ``ARTIFACTS_URI``::
 
     current/fantasy/cards.jsonl
-    runs/{run_id}/fantasy/cards.jsonl
 
-This shell reads ``current/`` via ``resolve_artifact``. It does not look for
-``fantasy_cards_{as_of_date}.json``. Until #111 publishes the feed, bundled
-stub JSONL is rendered instead.
+That is ``fantasy/cards.jsonl`` under the published ``current/`` prefix.
+``fantasy_cards_*.json`` is a fallback only if the locked file is missing.
+``edge.war_source`` is ``bbref`` or ``approx`` only.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import html
 import json
 from pathlib import Path
+import re
 from typing import Any, Mapping
 
 from src.baseball_analytics.config import ArtifactSettings, load_artifact_settings
@@ -22,10 +23,20 @@ from src.baseball_analytics.storage import resolve_artifact_hit
 
 from fantasy.copy import EARLY_MODEL_BADGE, PROMPT_LINE
 
+# Architect SoT: fantasy/cards.jsonl under ARTIFACTS_URI current/
 CARD_LAKE_KEY = "current/fantasy/cards.jsonl"
+OPTIONAL_CARD_KEY = "fantasy/cards.jsonl"
+CARD_FEED_KEYS = (CARD_LAKE_KEY, OPTIONAL_CARD_KEY)
+DATED_CARD_PREFIX = "fantasy_cards_"
+DATED_CARD_RE = re.compile(r"fantasy_cards_(\d{4}-\d{2}-\d{2})\.json$")
 STUB_CARDS_PATH = Path(__file__).resolve().parent / "stub_cards.jsonl"
 ALLOWED_WAR_SOURCES = frozenset({"bbref", "approx"})
-RETIRED_CARD_NAMES = ("fantasy_cards_",)
+PLAYER_ARTIFACTS = {
+    "players": "player_season_metrics.csv",
+    "top_value": "player_top_surplus_value.csv",
+    "worst": "player_worst_contracts.csv",
+    "dead": "player_dead_money.csv",
+}
 
 RECOMMENDATION_LABELS = {
     "start": "START",
@@ -49,6 +60,15 @@ LABEL_TONES = {
 }
 
 SOURCE_STUB = "stub"
+SOURCE_MISSING = "missing"
+
+
+@dataclass(frozen=True)
+class CardLoad:
+    cards: list[dict[str, Any]]
+    source: str
+    key: str | None = None
+    path: Path | None = None
 
 
 def recommendation_label(recommendation_type: str | None) -> str:
@@ -75,14 +95,76 @@ def parse_cards_jsonl(text: str) -> list[dict[str, Any]]:
     return cards
 
 
+def parse_card_payload(text: str, *, filename: str = "") -> list[dict[str, Any]]:
+    """Parse ``cards.jsonl`` or a #111 ``fantasy_cards_*.json`` document."""
+    name = Path(filename).name.lower()
+    if name.endswith(".jsonl"):
+        return parse_cards_jsonl(text)
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return parse_cards_jsonl(text)
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict) and row]
+    if isinstance(payload, dict) and payload:
+        nested = payload.get("cards")
+        if isinstance(nested, list):
+            return [row for row in nested if isinstance(row, dict) and row]
+        if payload.get("recommendation_type"):
+            return [payload]
+    return []
+
+
+def dated_card_keys(
+    settings: ArtifactSettings,
+    *,
+    environ: Mapping[str, str] | None = None,
+    now: datetime | None = None,
+) -> list[str]:
+    """Candidate ``fantasy_cards_{date}.json`` keys, newest / configured first."""
+    dates: list[str] = []
+    configured = default_run_date(now=now, environ=environ)
+    dates.append(configured)
+    local_dates: list[str] = []
+    if settings.local_dir.is_dir():
+        for path in settings.local_dir.rglob("fantasy_cards_*.json"):
+            match = DATED_CARD_RE.search(path.name)
+            if match:
+                local_dates.append(match.group(1))
+    dates.extend(sorted(set(local_dates), reverse=True))
+    keys: list[str] = []
+    seen: set[str] = set()
+    for day in dates:
+        for rel in (
+            f"current/fantasy/{DATED_CARD_PREFIX}{day}.json",
+            f"fantasy/{DATED_CARD_PREFIX}{day}.json",
+            f"{DATED_CARD_PREFIX}{day}.json",
+        ):
+            if rel not in seen:
+                seen.add(rel)
+                keys.append(rel)
+    return keys
+
+
 def load_stub_cards(path: Path | None = None) -> list[dict[str, Any]]:
     stub = path or STUB_CARDS_PATH
     return parse_cards_jsonl(stub.read_text(encoding="utf-8"))
 
 
 def card_feed_keys() -> tuple[str, ...]:
-    """Live keys this shell will ask ``resolve_artifact`` for. Never dated JSON."""
-    return (CARD_LAKE_KEY,)
+    """Locked jsonl first. Dated ``fantasy_cards_*.json`` is fallback-only."""
+    return CARD_FEED_KEYS
+
+
+def resolve_player_artifacts(
+    settings: ArtifactSettings | None = None,
+    *,
+    backend: object | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, Path | None]:
+    """Same published player CSVs the FO dashboard loads via #105 helpers."""
+    cfg = settings if settings is not None else load_artifact_settings(environ=environ)
+    return resolve_named_artifacts(PLAYER_ARTIFACTS, cfg, backend=backend, environ=environ)
 
 
 def resolve_card_feed(
@@ -90,8 +172,9 @@ def resolve_card_feed(
     *,
     backend: object | None = None,
     environ: Mapping[str, str] | None = None,
-) -> tuple[Path | None, str]:
-    """Return ``(path, source)`` for ``current/fantasy/cards.jsonl`` only."""
+    now: datetime | None = None,
+) -> tuple[Path | None, str, str | None]:
+    """Return ``(path, source, key)`` for jsonl, then dated ``fantasy_cards_*.json``."""
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
     hit = resolve_artifact_hit(CARD_LAKE_KEY, cfg, backend=backend, environ=environ)
     if hit is not None:
@@ -105,14 +188,17 @@ def load_share_cards(
     backend: object | None = None,
     environ: Mapping[str, str] | None = None,
     stub_path: Path | None = None,
-) -> tuple[list[dict[str, Any]], str]:
-    """Load live cards.jsonl when present; otherwise return the bundled stub set."""
-    path, source = resolve_card_feed(settings, backend=backend, environ=environ)
+    now: datetime | None = None,
+) -> CardLoad:
+    """Load live cards when present; otherwise an empty miss (UI uses stubs)."""
+    path, source, key = resolve_card_feed(
+        settings, backend=backend, environ=environ, now=now
+    )
     if path is not None:
-        cards = parse_cards_jsonl(path.read_text(encoding="utf-8"))
+        cards = parse_card_payload(path.read_text(encoding="utf-8"), filename=path.name)
         if cards:
-            return cards, source
-    return load_stub_cards(stub_path), SOURCE_STUB
+            return CardLoad(cards=cards, source=source, key=key, path=path)
+    return CardLoad(cards=[], source=SOURCE_MISSING)
 
 
 def _share_map(card: Mapping[str, Any]) -> Mapping[str, Any]:
