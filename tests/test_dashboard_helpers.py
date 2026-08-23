@@ -109,6 +109,14 @@ def test_nav_has_eight_product_sections() -> None:
     assert nav_page("Roster Lab")["kicker"] == "Roster"
     assert nav_page("Missing")["label"] == "Overview"
 
+    from dashboard.helpers import kpi_cards_html, nav_groups
+
+    groups = dict(nav_groups())
+    assert list(groups) == ["League", "Roster", "Models"]
+    assert [p["label"] for p in groups["League"]] == ["Overview", "Team Deep Dive", "Compare Teams"]
+    html = kpi_cards_html([{"label": "Teams", "value": "30", "delta": None}])
+    assert "Teams" in html and "30" in html
+
 
 def test_format_money_and_war() -> None:
     assert format_money_millions(98_400_000) == "$98M"
@@ -248,6 +256,10 @@ def test_artifact_status_and_empty_copy(tmp_path: Path) -> None:
     assert status["n_total"] == 2
     assert status["ready"] is True
     assert status["missing"] == ["players"]
+
+    none_status = artifact_status({"metrics": None, "players": present})
+    assert none_status["n_present"] == 1
+    assert none_status["missing"] == ["metrics"]
 
     copy = empty_state_copy("players")
     assert "player_season_metrics.csv" in copy["body"]

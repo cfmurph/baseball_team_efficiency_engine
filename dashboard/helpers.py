@@ -1,6 +1,7 @@
 """Pure helpers for the Streamlit dashboard. No Streamlit imports."""
 from __future__ import annotations
 
+import html
 from pathlib import Path
 from typing import Any
 
@@ -58,49 +59,57 @@ NAV_PAGES = (
     {
         "key": "overview",
         "label": "Overview",
-        "kicker": "League",
+        "kicker": "Command",
+        "group": "League",
         "blurb": "Which teams bought the most wins per dollar this season?",
     },
     {
         "key": "deep_dive",
         "label": "Team Deep Dive",
-        "kicker": "League",
+        "kicker": "Franchise",
+        "group": "League",
         "blurb": "Franchise trajectory: wins, payroll, WAR, and window phase.",
     },
     {
         "key": "compare",
         "label": "Compare Teams",
         "kicker": "League",
+        "group": "League",
         "blurb": "Head-to-head trends across any metric and year range.",
     },
     {
         "key": "roster",
         "label": "Roster Lab",
         "kicker": "Roster",
+        "group": "Roster",
         "blurb": "Player WAR versus salary, with contract classification.",
     },
     {
         "key": "contracts",
         "label": "Contract Watch",
-        "kicker": "Roster",
+        "kicker": "Contracts",
+        "group": "Roster",
         "blurb": "Surplus value, overpays, and dead money — searchable by season.",
     },
     {
         "key": "frontier",
         "label": "Efficiency Frontier",
         "kicker": "Models",
+        "group": "Models",
         "blurb": "Teams above the curve produce more wins per dollar than the baseline.",
     },
     {
         "key": "whatif",
         "label": "What-If Sim",
         "kicker": "Models",
+        "group": "Models",
         "blurb": "Estimate win change from a payroll increase using league-wide regression.",
     },
     {
         "key": "models",
         "label": "Model Insights",
         "kicker": "Models",
+        "group": "Models",
         "blurb": "Win-model accuracy, feature importance, and the largest misses.",
     },
 )
@@ -118,8 +127,9 @@ _EMPTY_COPY = {
     "metrics": {
         "title": "No team metrics yet",
         "body": (
-            "The dashboard reads CSVs from artifacts/. Run the pipeline to generate "
-            "team-season metrics, then refresh this page."
+            "The dashboard reads CSVs from shared storage when ARTIFACTS_URI is set, "
+            "otherwise from artifacts/. Run the pipeline to generate team-season "
+            "metrics, then refresh this page."
         ),
         "command": FULL_PIPELINE,
     },
@@ -183,6 +193,84 @@ def nav_page(label: str) -> dict[str, str]:
         if page["label"] == label:
             return page
     return NAV_PAGES[0]
+
+
+def nav_groups() -> list[tuple[str, list[dict[str, str]]]]:
+    """Group nav pages for product-style sidebar sections."""
+    grouped: dict[str, list[dict[str, str]]] = {}
+    order: list[str] = []
+    for page in NAV_PAGES:
+        group = str(page.get("group") or "More")
+        if group not in grouped:
+            grouped[group] = []
+            order.append(group)
+        grouped[group].append(page)
+    return [(name, grouped[name]) for name in order]
+
+
+def delta_tone(delta: str | None) -> str:
+    """Return pos / neg / neu for a formatted delta string."""
+    if delta is None:
+        return "neu"
+    text = str(delta).strip()
+    if not text or text in {"—", "-", "0", "$0M", "+0", "+$0M"}:
+        return "neu"
+    if text.startswith("-"):
+        return "neg"
+    return "pos"
+
+
+def kpi_cards_html(cards: list[dict[str, Any]]) -> str:
+    """Dense command-center KPI strip. Values are escaped."""
+    cells: list[str] = []
+    for card in cards:
+        label = html.escape(str(card.get("label") or ""))
+        value = html.escape(str(card.get("value") if card.get("value") is not None else "—"))
+        delta = card.get("delta")
+        delta_html = ""
+        if delta:
+            tone = delta_tone(str(delta))
+            delta_html = f'<div class="kpi-delta {tone}">{html.escape(str(delta))}</div>'
+        cells.append(
+            f'<div class="kpi-card">'
+            f'<div class="kpi-label">{label}</div>'
+            f'<div class="kpi-value">{value}</div>'
+            f"{delta_html}"
+            f"</div>"
+        )
+    return f'<div class="kpi-grid">{"".join(cells)}</div>'
+
+
+def leaderboard_html(
+    df: pd.DataFrame,
+    *,
+    name_col: str = "team_name",
+    value_col: str,
+    value_format: str = "{:.1f}",
+    prefix: str = "",
+    suffix: str = "",
+) -> str:
+    """Compact ranked list for Overview leader panels."""
+    rows: list[str] = []
+    for idx, row in enumerate(df.itertuples(index=False), start=1):
+        data = row._asdict() if hasattr(row, "_asdict") else dict(zip(df.columns, row))
+        name = html.escape(str(data.get(name_col, "—")))
+        raw = data.get(value_col)
+        if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+            formatted = "—"
+        else:
+            try:
+                formatted = f"{prefix}{value_format.format(float(raw))}{suffix}"
+            except (TypeError, ValueError):
+                formatted = str(raw)
+        rows.append(
+            f'<li class="lb-row">'
+            f'<span class="lb-rank">{idx}</span>'
+            f'<span class="lb-name">{name}</span>'
+            f'<span class="lb-stat">{html.escape(formatted)}</span>'
+            f"</li>"
+        )
+    return f'<ol class="leaderboard">{"".join(rows)}</ol>'
 
 
 def metric_label(column: str) -> str:
@@ -469,8 +557,10 @@ def salary_coverage_note(year: int | None) -> str | None:
     return None
 
 
-def artifact_status(files: dict[str, Path]) -> dict[str, Any]:
-    present = {key: path.exists() for key, path in files.items()}
+def artifact_status(files: dict[str, Path | None]) -> dict[str, Any]:
+    present = {
+        key: path is not None and Path(path).exists() for key, path in files.items()
+    }
     missing = [key for key, ok in present.items() if not ok]
     return {
         "present": present,

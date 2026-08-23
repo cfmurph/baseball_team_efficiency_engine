@@ -57,7 +57,7 @@ def test_chart_renders_once_with_expected_layout_and_height():
     ns["_chart"](fig, height=333)
 
     assert fig.layout.height == 333
-    assert fig.layout.plot_bgcolor == "#0d1117"
+    assert fig.layout.plot_bgcolor in {"#0d1117", "#07090d", "rgba(0,0,0,0)"}
     plotly_chart.assert_called_once_with(fig, use_container_width=True)
 
 

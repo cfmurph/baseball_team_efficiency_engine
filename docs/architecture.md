@@ -57,6 +57,9 @@ This is where metric logic becomes standardized and reusable:
 - Fail-fast nightly orchestrator (`python3 -m pipeline.run_nightly`)
 - GitHub Actions schedule at 08:00 UTC (2:00 AM Mountain Daylight Time)
 - File-based configuration
+- Optional S3-compatible artifact publish (`ARTIFACTS_URI`) with dashboard remote load + local fallback
+
+See [shared_artifacts.md](shared_artifacts.md) for the `{league}/{level}/{run_date}` layout.
 
 ### Next production milestones
 1. Add heavier orchestration (Prefect or Dagster) if the refresh outgrows Actions.

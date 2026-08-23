@@ -27,6 +27,7 @@
 - [ ] Publish dashboard
 - [ ] Add API layer
 - [x] Schedule refresh jobs
+- [x] Dashboard artifact load via ARTIFACTS_URI + local fallback
 
 ## Phase 5: Simulation
 - [ ] Payroll redistribution simulator

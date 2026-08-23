@@ -47,9 +47,13 @@ models/
   train_win_model.py            LinearRegression + XGBoost win models + efficiency frontier
   cluster_teams.py              KMeans team archetype clustering
 dbt/                            dbt scaffold (staging + mart SQL models)
-dashboard/app.py                Streamlit multi-section dashboard
-docs/                           Architecture, schema, metrics framework, roadmap, product brief
-tests/                          53 unit tests covering metrics, WAR, validation
+  dashboard/app.py                Streamlit 8-section front-office dashboard
+  dashboard/theme.py              Design tokens, CSS, Plotly theme
+  dashboard/ui.py                 Shared chrome (nav, headers, tables, charts)
+  dashboard/data.py               Named artifact loaders (ARTIFACTS_URI + local fallback)
+  dashboard/state.py              Shared session keys (season_year, selected_team, selected_league)
+docs/                           Architecture, schema, metrics framework, shared artifacts, roadmap
+tests/                          Unit tests covering metrics, WAR, validation, artifact storage
 artifacts/                      Output CSVs and plots (gitignored, generated at runtime)
 ```
 
@@ -121,8 +125,12 @@ python3 -m models.train_win_model
 python3 -m models.cluster_teams
 
 # Dashboard (run from the repo root)
-streamlit run dashboard/app.py
+streamlit run dashboard/app.py --server.port 8501 --server.headless true
 ```
+
+The dashboard is Streamlit + Plotly only. Pages load CSVs through named helpers in `dashboard/data.py` (`load_team_metrics()`, `load_player_season_metrics()`, …) — never raw `Path("artifacts")`. When `ARTIFACTS_URI` is set the loaders use `resolve_artifact()` (shared `s3://…` or `file:///…` `latest/` prefix, then local `artifacts/` if the store is unset or unreachable). Sidebar **Source** shows `local`, `shared filesystem`, or `shared s3://…`. See [docs/shared_artifacts.md](docs/shared_artifacts.md).
+
+Season, team, and league widgets share `st.session_state` keys `season_year`, `selected_team`, and `selected_league` (documented in `dashboard/state.py`) so a pick on Overview carries to Team Deep Dive.
 
 ## Nightly refresh
 
@@ -145,16 +153,18 @@ Optional Sportradar pulls are not part of this job; they still require `SPORTRAD
 
 ## Dashboard sections
 
-1. **Overview** — Efficiency KPIs (most surplus, lowest $/WAR, best W/$10M), payroll-vs-wins scatter, ranking, standings, and window phases
-2. **Team Deep Dive** — Win trajectory, payroll, WAR, window phase, and season roster
-3. **Compare Teams** — Multi-team line chart across any metric, any date range
+Product nav is grouped in the sidebar (League / Roster / Models). Entrypoint is still `streamlit run dashboard/app.py`.
+
+1. **Overview** — Command-center KPIs, surplus leaderboards, payroll-vs-wins scatter, ranking, standings, and window phases
+2. **Team Deep Dive** — Franchise dossier: KPIs, history, trajectory charts, and season roster
+3. **Compare Teams** — Multi-team table + metric trends across a year range
 4. **Roster Lab** — Player WAR vs salary scatter with contract classification
 5. **Contract Watch** — Surplus value / overpaid / dead money / fair value tables
 6. **Efficiency Frontier** — Teams above/below polynomial payroll-wins envelope + cluster archetypes
-7. **What-If Sim** — Estimated win change from payroll increase
+7. **What-If Sim** — Estimated win change from a payroll increase
 8. **Model Insights** — Feature importance, actual vs predicted, largest model misses
 
-Each section stays usable when its CSV is missing: the UI shows a short empty state and the pipeline command to generate it. Lahman payroll typically ends in 2016 — recent seasons may show standings without dollar metrics.
+Each section stays usable when its CSV is missing: the UI shows a short empty state and the pipeline command to generate it. Lahman payroll typically ends in 2016 — recent seasons may show standings without dollar metrics. This app is the front-office GM dashboard (no fantasy start/sit, waitlist, or share cards).
 
 ## Running tests
 
