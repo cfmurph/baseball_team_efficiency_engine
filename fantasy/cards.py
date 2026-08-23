@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from src.baseball_analytics.config import ArtifactSettings, load_artifact_settings
-from src.baseball_analytics.storage import artifact_source_label, resolve_artifact
+from src.baseball_analytics.storage import resolve_artifact_hit
 
 from fantasy.copy import EARLY_MODEL_BADGE, PROMPT_LINE
 
@@ -93,9 +93,9 @@ def resolve_card_feed(
 ) -> tuple[Path | None, str]:
     """Return ``(path, source)`` for ``current/fantasy/cards.jsonl`` only."""
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
-    path = resolve_artifact(CARD_LAKE_KEY, cfg, backend=backend, environ=environ)
-    if path is not None:
-        return path, artifact_source_label(cfg, backend=backend, environ=environ)
+    hit = resolve_artifact_hit(CARD_LAKE_KEY, cfg, backend=backend, environ=environ)
+    if hit is not None:
+        return hit.path, hit.source
     return None, SOURCE_STUB
 
 
