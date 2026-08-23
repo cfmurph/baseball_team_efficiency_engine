@@ -8,7 +8,9 @@ import pandas as pd
 import typer
 
 from src.baseball_analytics.config import load_settings
+from src.baseball_analytics.fantasy import write_fantasy_cards_stub
 from src.baseball_analytics.io import ensure_dir
+from src.baseball_analytics.storage import default_as_of_date
 
 log = logging.getLogger(__name__)
 app = typer.Typer(add_completion=False)
@@ -206,6 +208,103 @@ def _dead_money_leaders(player_df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+_POSITION_FROM_TYPE = {
+    "pitcher": "P",
+    "batter": "UTIL",
+    "both": "UTIL",
+}
+
+PHASE0_PLAYER_FIELDS = (
+    "player_id",
+    "player_name",
+    "team",
+    "position",
+    "player_war",
+    "war",
+    "war_source",
+    "surplus_value",
+    "cost_per_war",
+    "vs_replacement",
+    "edge",
+    "rank_overall",
+    "rank_at_position",
+    "season",
+    "as_of_date",
+)
+
+
+def enrich_player_season_phase0(
+    player_df: pd.DataFrame,
+    *,
+    as_of_date: str,
+) -> pd.DataFrame:
+    """Add fantasy Phase 0 aliases/ranks without changing player-season grain.
+
+    Existing dashboard columns (``name_full``, ``team_name``, ``year_id``,
+    ``player_war``, ``surplus_value``) stay in place. New fields are additive.
+    ``war`` aliases ``player_war`` (same value — not a second WAR write).
+    """
+    out = player_df.copy()
+    if out.empty:
+        for col in PHASE0_PLAYER_FIELDS:
+            if col not in out.columns:
+                out[col] = pd.Series(dtype="object")
+        return out
+
+    if "player_name" not in out.columns:
+        source = "name_full" if "name_full" in out.columns else None
+        out["player_name"] = out[source] if source else pd.NA
+    if "team" not in out.columns:
+        source = "team_name" if "team_name" in out.columns else None
+        out["team"] = out[source] if source else pd.NA
+    if "season" not in out.columns:
+        if "year_id" in out.columns:
+            out["season"] = out["year_id"]
+        elif "season_key" in out.columns:
+            out["season"] = out["season_key"]
+        else:
+            out["season"] = pd.NA
+    if "as_of_date" not in out.columns:
+        out["as_of_date"] = as_of_date
+    if "position" not in out.columns:
+        if "player_type" in out.columns:
+            out["position"] = out["player_type"].map(_POSITION_FROM_TYPE).fillna("UTIL")
+        else:
+            out["position"] = "UTIL"
+    if "war" not in out.columns and "player_war" in out.columns:
+        out["war"] = out["player_war"]
+    if "cost_per_war" not in out.columns and {"salary", "player_war"} <= set(out.columns):
+        war = pd.to_numeric(out["player_war"], errors="coerce")
+        salary = pd.to_numeric(out["salary"], errors="coerce")
+        out["cost_per_war"] = salary.where(war.abs() > 1e-9) / war.replace(0, pd.NA)
+    if "vs_replacement" not in out.columns and "player_war" in out.columns:
+        out["vs_replacement"] = out["player_war"]
+    if "edge" not in out.columns and "surplus_value" in out.columns:
+        out["edge"] = out["surplus_value"]
+    if "is_approx" not in out.columns and "war_source" in out.columns:
+        out["is_approx"] = ~out["war_source"].astype(str).str.lower().isin({"real", "bbref"})
+
+    season_key = "season" if "season" in out.columns else None
+    if "rank_overall" not in out.columns and "player_war" in out.columns and season_key:
+        out["rank_overall"] = (
+            out.groupby(season_key, dropna=False)["player_war"]
+            .rank(method="min", ascending=False)
+            .astype("Int64")
+        )
+    if (
+        "rank_at_position" not in out.columns
+        and "player_war" in out.columns
+        and season_key
+        and "position" in out.columns
+    ):
+        out["rank_at_position"] = (
+            out.groupby([season_key, "position"], dropna=False)["player_war"]
+            .rank(method="min", ascending=False)
+            .astype("Int64")
+        )
+    return out
+
+
 def _window_summary(team_df: pd.DataFrame) -> pd.DataFrame:
     """Most recent window phase per franchise."""
     latest = (
@@ -288,8 +387,12 @@ def main(config_path: str = "config/settings.yaml") -> None:
     log.info("Wrote team_window_phases.csv (%d rows)", len(window_df))
 
     # ---- Player exports ----
+    as_of = default_as_of_date()
+    player_df = enrich_player_season_phase0(player_df, as_of_date=as_of)
     player_df.to_csv(artifacts_dir / "player_season_metrics.csv", index=False)
     log.info("Wrote player_season_metrics.csv (%d rows)", len(player_df))
+    write_fantasy_cards_stub(artifacts_dir, as_of_date=as_of)
+    log.info("Wrote fantasy/cards.jsonl stub")
 
     top_value = _top_value_players(player_df)
     top_value.to_csv(artifacts_dir / "player_top_surplus_value.csv", index=False)

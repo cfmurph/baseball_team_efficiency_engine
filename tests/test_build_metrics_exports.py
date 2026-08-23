@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import duckdb
 import pandas as pd
+import pytest
 
 from pipeline.transform import build_metrics
+from pipeline.transform.build_metrics import (
+    PHASE0_PLAYER_FIELDS,
+    enrich_player_season_phase0,
+)
 
 
 def test_efficiency_labels_bucket_wins_per_10m() -> None:
@@ -57,6 +62,41 @@ def test_window_summary_keeps_latest_phase_per_team() -> None:
         {"team_name": "Aces", "year_id": 2024, "window_phase": "contending", "wins": 96},
         {"team_name": "Bears", "year_id": 2023, "window_phase": "rebuilding", "wins": 67},
     ]
+
+
+def test_enrich_player_season_phase0_adds_aliases_ranks_and_keeps_grain() -> None:
+    player_df = pd.DataFrame(
+        {
+            "player_id": ["a", "b", "c"],
+            "name_full": ["Ace", "Bat", "Util"],
+            "team_name": ["Aces", "Bears", "Aces"],
+            "year_id": [2015, 2015, 2015],
+            "player_type": ["pitcher", "batter", "batter"],
+            "player_war": [6.0, 4.0, 4.0],
+            "war_source": ["real", "approx", "real"],
+            "salary": [12_000_000, 2_000_000, 8_000_000],
+            "surplus_value": [36_000_000, 30_000_000, 24_000_000],
+        }
+    )
+
+    result = enrich_player_season_phase0(player_df, as_of_date="2026-08-23")
+
+    for field in PHASE0_PLAYER_FIELDS:
+        assert field in result.columns, field
+    assert list(result["player_name"]) == ["Ace", "Bat", "Util"]
+    assert list(result["team"]) == ["Aces", "Bears", "Aces"]
+    assert list(result["season"]) == [2015, 2015, 2015]
+    assert list(result["position"]) == ["P", "UTIL", "UTIL"]
+    assert list(result["war"]) == [6.0, 4.0, 4.0]
+    assert list(result["vs_replacement"]) == [6.0, 4.0, 4.0]
+    assert list(result["edge"]) == [36_000_000, 30_000_000, 24_000_000]
+    assert result["as_of_date"].unique().tolist() == ["2026-08-23"]
+    assert result["rank_overall"].tolist() == [1, 2, 2]
+    assert result.loc[result["player_id"] == "a", "rank_at_position"].iloc[0] == 1
+    assert result.duplicated(["player_id", "season"]).sum() == 0
+    assert result["cost_per_war"].iloc[0] == pytest.approx(2_000_000)
+    # Additive — dashboard columns remain.
+    assert "name_full" in result.columns and "team_name" in result.columns
 
 
 def test_table_has_rows_handles_present_empty_and_missing_tables() -> None:
