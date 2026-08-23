@@ -28,6 +28,7 @@
 - [ ] Add API layer
 - [x] Schedule refresh jobs
 - [x] Shared artifact storage (S3/R2) + dashboard remote load with local fallback
+- [ ] BenchOrStart waitlist + share-card shell (Phase 0)
 
 ## Phase 5: Simulation
 - [ ] Payroll redistribution simulator
