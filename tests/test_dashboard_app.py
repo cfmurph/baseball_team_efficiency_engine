@@ -6,6 +6,20 @@ from types import SimpleNamespace
 
 import pandas as pd
 
+from dashboard.helpers import (
+    CONTRACT_COLORS,
+    add_payroll_millions,
+    empty_state_copy,
+    format_money_millions,
+    format_signed_int,
+    format_war,
+    nav_page,
+    scale_money_columns,
+    teams_from_frame,
+    years_from_frame,
+)
+from src.baseball_analytics.dashboard_utils import player_id_columns_for_duplicate_names
+
 
 APP_PATH = Path(__file__).resolve().parents[1] / "dashboard" / "app.py"
 
@@ -92,6 +106,9 @@ class _FakeStreamlit:
     def caption(self, text: str, *args, **kwargs) -> None:
         self.captions.append(str(text))
 
+    def markdown(self, *args, **kwargs) -> None:
+        return None
+
     def warning(self, *args, **kwargs) -> None:
         return None
 
@@ -144,11 +161,35 @@ class _FakeFigure:
     def add_scatter(self, *args, **kwargs) -> None:
         return None
 
+    def add_hline(self, *args, **kwargs) -> None:
+        return None
+
     def update_yaxes(self, *args, **kwargs) -> None:
         return None
 
     def update_traces(self, *args, **kwargs) -> None:
         return None
+
+
+def test_nav_pages_resolve_to_defined_page_functions():
+    tree = _read_app_tree()
+    func_names = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
+    aliases: dict[str, str] = {}
+    pages = None
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if isinstance(target, ast.Name) and target.id == "_PAGES" and isinstance(node.value, ast.Dict):
+                pages = node.value
+            elif isinstance(target, ast.Name) and isinstance(node.value, ast.Name):
+                aliases[target.id] = node.value.id
+    assert pages is not None, "Could not find _PAGES routing dict"
+    for key, value in zip(pages.keys, pages.values):
+        assert isinstance(key, ast.Constant)
+        assert isinstance(value, ast.Name)
+        resolved = aliases.get(value.id, value.id)
+        assert resolved in func_names, f"{key.value} maps to undefined {value.id}"
 
 
 def test_slider_max_expression_handles_empty_and_non_empty_years():
@@ -245,15 +286,32 @@ def test_player_explorer_shows_player_id_when_name_collides():
             return None
         return None
 
+    fake_px = SimpleNamespace(
+        scatter=lambda *args, **kwargs: _FakeFigure(),
+    )
+
     namespace = _load_app_symbols(
         functions=("page_player_explorer",),
         globals_dict={
             "pd": pd,
             "st": st,
+            "px": fake_px,
             "_load": _fake_load,
             "_scale_payroll": lambda df: df,
             "_PLAYER_COL_CFG": {},
             "_show_table": lambda df, *args, **kwargs: captured_tables.append(df.copy()),
+            "_empty": lambda *args, **kwargs: None,
+            "_page_header": lambda *args, **kwargs: None,
+            "_salary_note": lambda *args, **kwargs: None,
+            "_chart": lambda *args, **kwargs: None,
+            "_SCATTER_MARKER": {},
+            "CONTRACT_COLORS": CONTRACT_COLORS,
+            "years_from_frame": years_from_frame,
+            "teams_from_frame": teams_from_frame,
+            "scale_money_columns": scale_money_columns,
+            "player_id_columns_for_duplicate_names": player_id_columns_for_duplicate_names,
+            "nav_page": nav_page,
+            "empty_state_copy": empty_state_copy,
         },
     )
 
@@ -265,7 +323,7 @@ def test_player_explorer_shows_player_id_when_name_collides():
         assert "player_id" in table.columns
 
 
-def test_team_profile_roster_includes_player_id_for_name_collisions():
+def test_team_deep_dive_roster_includes_player_id_for_name_collisions():
     st = _FakeStreamlit(selectbox_values={"tp_team": "Alpha"})
     metrics = pd.DataFrame(
         [
@@ -350,7 +408,7 @@ def test_team_profile_roster_includes_player_id_for_name_collisions():
     )
 
     namespace = _load_app_symbols(
-        functions=("page_team_profile",),
+        functions=("page_team_deep_dive",),
         globals_dict={
             "pd": pd,
             "st": st,
@@ -364,10 +422,21 @@ def test_team_profile_roster_includes_player_id_for_name_collisions():
             "_PLAYER_COL_CFG": {},
             "px": fake_px,
             "_chart": lambda *args, **kwargs: None,
+            "_empty": lambda *args, **kwargs: None,
+            "_page_header": lambda *args, **kwargs: None,
+            "_salary_note": lambda *args, **kwargs: None,
+            "scale_money_columns": scale_money_columns,
+            "add_payroll_millions": add_payroll_millions,
+            "format_money_millions": format_money_millions,
+            "format_signed_int": format_signed_int,
+            "format_war": format_war,
+            "player_id_columns_for_duplicate_names": player_id_columns_for_duplicate_names,
+            "nav_page": nav_page,
+            "empty_state_copy": empty_state_copy,
         },
     )
 
-    namespace["page_team_profile"]()
+    namespace["page_team_deep_dive"]()
 
     roster_tables = [df for df in captured_tables if "name_full" in df.columns]
     assert roster_tables, "Expected at least one roster table render call"
