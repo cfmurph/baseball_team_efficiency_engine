@@ -58,6 +58,9 @@ This is where metric logic becomes standardized and reusable:
 - GitHub Actions schedule at 08:00 UTC (2:00 AM Mountain Daylight Time)
 - Optional S3-compatible artifact publish (`ARTIFACTS_URI`) with dashboard remote load + local fallback
 - File-based configuration
+- Optional S3-compatible artifact publish (`ARTIFACTS_URI`) with dashboard remote load + local fallback
+
+See [shared_artifacts.md](shared_artifacts.md) for the `{league}/{level}/{run_date}` layout.
 
 See [shared_artifacts.md](shared_artifacts.md) for the `{league}/{level}/{run_date}` layout.
 

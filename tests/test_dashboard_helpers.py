@@ -109,6 +109,14 @@ def test_nav_has_eight_product_sections() -> None:
     assert nav_page("Roster Lab")["kicker"] == "Roster"
     assert nav_page("Missing")["label"] == "Overview"
 
+    from dashboard.helpers import kpi_cards_html, nav_groups
+
+    groups = dict(nav_groups())
+    assert list(groups) == ["League", "Roster", "Models"]
+    assert [p["label"] for p in groups["League"]] == ["Overview", "Team Deep Dive", "Compare Teams"]
+    html = kpi_cards_html([{"label": "Teams", "value": "30", "delta": None}])
+    assert "Teams" in html and "30" in html
+
 
 def test_format_money_and_war() -> None:
     assert format_money_millions(98_400_000) == "$98M"
