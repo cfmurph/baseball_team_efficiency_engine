@@ -46,15 +46,21 @@ def test_fantasy_entrypoint_bootstraps_before_local_imports() -> None:
 def test_fantasy_app_uses_shared_cards_jsonl_and_marketing_copy() -> None:
     source = APP_PATH.read_text(encoding="utf-8")
     assert "resolve_artifact" in source
-    assert "CARD_LAKE_KEY" in source or CARD_LAKE_KEY in source
+    assert CARD_LAKE_KEY in source
     assert "fantasy_cards_" not in source
-    assert PRODUCT_NAME in source
-    assert HEADLINE in source
-    assert SUBHEAD in source
-    assert CTA in source
-    assert MICROCOPY in source
-    assert SUCCESS in source
-    assert FOOTER in source
+    for name in (
+        "PRODUCT_NAME",
+        "HEADLINE",
+        "SUBHEAD",
+        "CTA",
+        "MICROCOPY",
+        "SUCCESS",
+        "FOOTER",
+    ):
+        assert name in source
+    assert HEADLINE.startswith("Know who to start")
+    assert CTA == "Get early access"
+    assert PRODUCT_NAME == "BenchOrStart"
 
 
 def test_gm_dashboard_not_rewritten_for_fantasy() -> None:
