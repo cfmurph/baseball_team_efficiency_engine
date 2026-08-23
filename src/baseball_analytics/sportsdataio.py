@@ -113,6 +113,8 @@ class ExtractReport:
     endpoints: list[EndpointResult] = field(default_factory=list)
     error: str | None = None
     skipped_reason: str | None = None
+    active_season: int | None = None
+    current_season_missing: bool | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -124,6 +126,8 @@ class ExtractReport:
             "skipped_reason": self.skipped_reason,
             "source": SOURCE_NAME,
             "schema_version": "0.1",
+            "active_season": self.active_season,
+            "current_season_missing": self.current_season_missing,
             "endpoints": [
                 {
                     "endpoint": item.endpoint,
@@ -406,6 +410,7 @@ def pull_phase0_feeds(
         report.soft_fail = True
         report.error = f"missing_{API_KEY_ENV}"
         report.skipped_reason = "missing_api_key"
+        mark_extract_season_coverage(report)
         _write_report(report, raw_dir, as_of_date, backend)
         log.warning("SportsDataIO extract skipped: %s unset", API_KEY_ENV)
         return report
@@ -493,6 +498,7 @@ def pull_phase0_feeds(
                 )
             )
     report.ok = all(item.ok for item in report.endpoints)
+    mark_extract_season_coverage(report)
     _write_report(report, raw_dir, as_of_date, backend)
     return report
 
@@ -930,6 +936,42 @@ def load_sdio_frames(
     )
 
 
+def default_season_window(as_of_date: str) -> list[int]:
+    """Inclusive ``[Y-2, Y]`` from the ``as_of_date`` calendar year.
+
+    ``Y`` is the MLB championship season year implied by the extract cut
+    date, not a hardcoded 2024–2026 forever. A run dated 2026-08-23
+    therefore pulls 2024, 2025, and 2026.
+    """
+    text = str(as_of_date).strip()
+    if len(text) < 4 or not text[:4].isdigit():
+        raise ValueError(f"as_of_date must start with a 4-digit year, got {as_of_date!r}")
+    year = int(text[:4])
+    return list(range(year - 2, year + 1))
+
+
+def mark_extract_season_coverage(report: ExtractReport) -> ExtractReport:
+    """Flag when the active season did not land. Soft-fail is not “current.”"""
+    window = list(report.seasons) or default_season_window(report.as_of_date)
+    active = max(window)
+    report.active_season = active
+    if report.skipped_reason == "missing_api_key" or not report.endpoints:
+        report.current_season_missing = True
+        return report
+    landed_season = any(
+        item.ok
+        and item.endpoint == ENDPOINT_PLAYER_SEASON_STATS
+        and item.season == active
+        for item in report.endpoints
+    )
+    landed_games = int(str(report.as_of_date)[:4]) == active and any(
+        item.ok and item.endpoint == ENDPOINT_PLAYER_GAME_STATS
+        for item in report.endpoints
+    )
+    report.current_season_missing = not (landed_season or landed_games)
+    return report
+
+
 def seasons_from_settings(
     settings: Mapping[str, Any] | None,
     as_of_date: str,
@@ -944,7 +986,7 @@ def seasons_from_settings(
     years = configured.get("seasons") or []
     if years:
         return sorted({int(year) for year in years})
-    return [int(as_of_date[:4])]
+    return default_season_window(as_of_date)
 
 
 def client_from_settings(

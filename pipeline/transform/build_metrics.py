@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import asdict, dataclass
+import json
 import logging
 from pathlib import Path
 
@@ -10,6 +12,7 @@ import typer
 from src.baseball_analytics.config import load_settings
 from src.baseball_analytics.fantasy import emit_ranked_fantasy_cards
 from src.baseball_analytics.io import ensure_dir
+from src.baseball_analytics.sportsdataio import default_season_window, seasons_from_settings
 from src.baseball_analytics.storage import default_as_of_date
 
 log = logging.getLogger(__name__)
@@ -173,6 +176,128 @@ FROM fact_sr_injuries i
 ORDER BY i.start_date DESC
 """
 
+# SportsDataIO live season overlay. Does not read or write WAR onto spine facts.
+# Prefers a Lahman playerID alias when one exists so historical rows stay joined.
+_SDIO_PLAYER_SEASON_QUERY = """
+SELECT
+    COALESCE(lahman.external_id, s.player_id) AS player_id,
+    COALESCE(p.display_name, s.player_id)     AS name_full,
+    p.first_name                              AS name_first,
+    p.last_name                               AS name_last,
+    s.season                                  AS year_id,
+    FIRST(COALESCE(t.sdio_abbr, t.team_id) ORDER BY COALESCE(s.pa, 0) + COALESCE(s.ip, 0) DESC) AS team_id,
+    FIRST(COALESCE(t.team_name, t.sdio_abbr) ORDER BY COALESCE(s.pa, 0) + COALESCE(s.ip, 0) DESC) AS team_name,
+    CASE
+        WHEN SUM(COALESCE(s.ip, 0)) > 0 AND SUM(COALESCE(s.pa, 0)) > 0 THEN 'both'
+        WHEN SUM(COALESCE(s.ip, 0)) > 0 THEN 'pitcher'
+        ELSE 'batter'
+    END                                       AS player_type,
+    FIRST(p.position ORDER BY COALESCE(s.pa, 0) + COALESCE(s.ip, 0) DESC) AS position,
+    SUM(s.pa)                                 AS pa,
+    SUM(s.hr)                                 AS hr,
+    SUM(s.bb)                                 AS bb,
+    SUM(s.hits)                               AS hits,
+    SUM(s.games)                              AS games,
+    SUM(s.ab)                                 AS ab,
+    SUM(s.so)                                 AS so,
+    SUM(s.rbi)                                AS rbi,
+    SUM(s.sb)                                 AS sb,
+    CAST(NULL AS DOUBLE)                      AS woba,
+    CAST(NULL AS DOUBLE)                      AS batting_war,
+    SUM(s.ip)                                 AS ip,
+    CAST(NULL AS DOUBLE)                      AS fip,
+    SUM(CASE WHEN s.ip > 0 AND s.era IS NOT NULL THEN s.era * s.ip END)
+        / NULLIF(SUM(CASE WHEN s.ip > 0 AND s.era IS NOT NULL THEN s.ip ELSE 0 END), 0) AS era,
+    SUM(CASE WHEN s.ip > 0 AND s.whip IS NOT NULL THEN s.whip * s.ip END)
+        / NULLIF(SUM(CASE WHEN s.ip > 0 AND s.whip IS NOT NULL THEN s.ip ELSE 0 END), 0) AS whip,
+    SUM(s.pitching_so)                        AS pitching_so,
+    SUM(s.pitching_bb)                        AS pitching_bb,
+    CAST(NULL AS DOUBLE)                      AS pitching_war,
+    CAST(NULL AS DOUBLE)                      AS player_war,
+    'approx'                                  AS war_source,
+    CAST(NULL AS DOUBLE)                      AS salary,
+    CAST(NULL AS DOUBLE)                      AS surplus_value,
+    CAST(NULL AS VARCHAR)                     AS contract_label,
+    'sportsdataio'                            AS stat_source
+FROM player_season_stat s
+LEFT JOIN player p ON p.player_id = s.player_id
+LEFT JOIN team t ON t.team_id = s.team_id
+LEFT JOIN (
+    SELECT internal_id, MIN(external_id) AS external_id
+    FROM external_id_alias
+    WHERE system = 'lahman' AND entity_type = 'player'
+    GROUP BY internal_id
+) lahman ON lahman.internal_id = s.player_id
+GROUP BY
+    COALESCE(lahman.external_id, s.player_id),
+    COALESCE(p.display_name, s.player_id),
+    p.first_name,
+    p.last_name,
+    s.season
+ORDER BY s.season, SUM(COALESCE(s.pa, 0)) DESC
+"""
+
+_SDIO_PLAYER_GAME_ROLLUP_QUERY = """
+SELECT
+    COALESCE(lahman.external_id, g.player_id) AS player_id,
+    COALESCE(p.display_name, g.player_id)     AS name_full,
+    p.first_name                              AS name_first,
+    p.last_name                               AS name_last,
+    g.season                                  AS year_id,
+    FIRST(COALESCE(t.sdio_abbr, t.team_id) ORDER BY COALESCE(g.pa, 0) + COALESCE(g.ip, 0) DESC) AS team_id,
+    FIRST(COALESCE(t.team_name, t.sdio_abbr) ORDER BY COALESCE(g.pa, 0) + COALESCE(g.ip, 0) DESC) AS team_name,
+    CASE
+        WHEN SUM(COALESCE(g.ip, 0)) > 0 AND SUM(COALESCE(g.pa, 0)) > 0 THEN 'both'
+        WHEN SUM(COALESCE(g.ip, 0)) > 0 THEN 'pitcher'
+        ELSE 'batter'
+    END                                       AS player_type,
+    FIRST(COALESCE(g.position, p.position) ORDER BY COALESCE(g.pa, 0) + COALESCE(g.ip, 0) DESC) AS position,
+    SUM(g.pa)                                 AS pa,
+    SUM(g.hr)                                 AS hr,
+    SUM(g.bb)                                 AS bb,
+    SUM(g.hits)                               AS hits,
+    COUNT(*)                                  AS games,
+    SUM(g.ab)                                 AS ab,
+    SUM(g.so)                                 AS so,
+    SUM(g.rbi)                                AS rbi,
+    SUM(g.sb)                                 AS sb,
+    CAST(NULL AS DOUBLE)                      AS woba,
+    CAST(NULL AS DOUBLE)                      AS batting_war,
+    SUM(g.ip)                                 AS ip,
+    CAST(NULL AS DOUBLE)                      AS fip,
+    SUM(CASE WHEN g.ip > 0 AND g.era IS NOT NULL THEN g.era * g.ip END)
+        / NULLIF(SUM(CASE WHEN g.ip > 0 AND g.era IS NOT NULL THEN g.ip ELSE 0 END), 0) AS era,
+    SUM(CASE WHEN g.ip > 0 AND g.whip IS NOT NULL THEN g.whip * g.ip END)
+        / NULLIF(SUM(CASE WHEN g.ip > 0 AND g.whip IS NOT NULL THEN g.ip ELSE 0 END), 0) AS whip,
+    SUM(g.pitching_so)                        AS pitching_so,
+    SUM(g.pitching_bb)                        AS pitching_bb,
+    CAST(NULL AS DOUBLE)                      AS pitching_war,
+    CAST(NULL AS DOUBLE)                      AS player_war,
+    'approx'                                  AS war_source,
+    CAST(NULL AS DOUBLE)                      AS salary,
+    CAST(NULL AS DOUBLE)                      AS surplus_value,
+    CAST(NULL AS VARCHAR)                     AS contract_label,
+    'sportsdataio'                            AS stat_source
+FROM player_game_stat g
+LEFT JOIN player p ON p.player_id = g.player_id
+LEFT JOIN team t ON t.team_id = g.team_id
+LEFT JOIN (
+    SELECT internal_id, MIN(external_id) AS external_id
+    FROM external_id_alias
+    WHERE system = 'lahman' AND entity_type = 'player'
+    GROUP BY internal_id
+) lahman ON lahman.internal_id = g.player_id
+GROUP BY
+    COALESCE(lahman.external_id, g.player_id),
+    COALESCE(p.display_name, g.player_id),
+    p.first_name,
+    p.last_name,
+    g.season
+ORDER BY g.season, SUM(COALESCE(g.pa, 0)) DESC
+"""
+
+METRICS_MANIFEST_NAME = "metrics_manifest.json"
+
 
 def _efficiency_labels(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -326,6 +451,208 @@ def _table_has_rows(con: duckdb.DuckDBPyConnection, table: str) -> bool:
         return False
 
 
+@dataclass
+class SeasonCoverage:
+    """Publish-time signal so prior-only metrics are not mistaken for current."""
+
+    as_of_date: str
+    active_season: int
+    season_window: list[int]
+    seasons_present: list[int]
+    overlay_seasons: list[int]
+    overlay_rows: int
+    active_season_present: bool
+    active_season_source: str | None
+    current_season_missing: bool
+    current_season_missing_reason: str | None
+
+    def to_dict(self) -> dict[str, object]:
+        return asdict(self)
+
+
+def _year_set(frame: pd.DataFrame, column: str = "year_id") -> set[int]:
+    if frame is None or frame.empty or column not in frame.columns:
+        return set()
+    values = pd.to_numeric(frame[column], errors="coerce").dropna()
+    return {int(year) for year in values}
+
+
+def _season_frame_is_thin(frame: pd.DataFrame | None, year: int) -> bool:
+    """True when the season stub has no counting-stat volume for ``year``."""
+    if frame is None or frame.empty or "year_id" not in frame.columns:
+        return True
+    years = pd.to_numeric(frame["year_id"], errors="coerce")
+    subset = frame.loc[years == year]
+    if subset.empty:
+        return True
+    pa = pd.to_numeric(subset["pa"], errors="coerce").fillna(0).sum() if "pa" in subset.columns else 0
+    ip = pd.to_numeric(subset["ip"], errors="coerce").fillna(0).sum() if "ip" in subset.columns else 0
+    return float(pa) <= 0 and float(ip) <= 0
+
+
+def approx_vs_replacement_from_counting(row: pd.Series) -> float:
+    """Ranking proxy for SDIO overlay rows. Not rWAR and never written to spine facts."""
+    pa = float(pd.to_numeric(row.get("pa"), errors="coerce") or 0)
+    ip = float(pd.to_numeric(row.get("ip"), errors="coerce") or 0)
+    hr = float(pd.to_numeric(row.get("hr"), errors="coerce") or 0)
+    hits = float(pd.to_numeric(row.get("hits"), errors="coerce") or 0)
+    bb = float(pd.to_numeric(row.get("bb"), errors="coerce") or 0)
+    sb = float(pd.to_numeric(row.get("sb"), errors="coerce") or 0)
+    so = float(pd.to_numeric(row.get("so"), errors="coerce") or 0)
+    rbi = float(pd.to_numeric(row.get("rbi"), errors="coerce") or 0)
+    pitching_so = float(pd.to_numeric(row.get("pitching_so"), errors="coerce") or 0)
+    pitching_bb = float(pd.to_numeric(row.get("pitching_bb"), errors="coerce") or 0)
+    era = pd.to_numeric(row.get("era"), errors="coerce")
+
+    batting = 0.0
+    if pa > 0:
+        singles = max(hits - hr, 0.0)
+        batting = (hr * 1.4 + singles * 0.3 + bb * 0.3 + sb * 0.2 - so * 0.1 + rbi * 0.05) / 10.0
+    pitching = 0.0
+    if ip > 0:
+        era_val = float(era) if pd.notna(era) else 4.5
+        pitching = (ip / 50.0) + (pitching_so - pitching_bb) / 40.0 - max(era_val - 4.0, -2.0) * (ip / 180.0)
+    return round(batting + pitching, 3)
+
+
+def _apply_counting_proxy(frame: pd.DataFrame) -> pd.DataFrame:
+    out = frame.copy()
+    if out.empty:
+        return out
+    if "player_war" not in out.columns:
+        out["player_war"] = pd.NA
+    missing = pd.to_numeric(out["player_war"], errors="coerce").isna()
+    if missing.any():
+        out.loc[missing, "player_war"] = out.loc[missing].apply(
+            approx_vs_replacement_from_counting, axis=1
+        )
+        if "batting_war" in out.columns:
+            bat_missing = missing & pd.to_numeric(out["batting_war"], errors="coerce").isna()
+            out.loc[bat_missing, "batting_war"] = out.loc[bat_missing, "player_war"]
+        if "pitching_war" in out.columns:
+            pit_missing = missing & pd.to_numeric(out["pitching_war"], errors="coerce").isna()
+            pitcherish = out["player_type"].astype(str).isin({"pitcher", "both"}) if "player_type" in out.columns else False
+            out.loc[pit_missing & pitcherish, "pitching_war"] = out.loc[pit_missing & pitcherish, "player_war"]
+    if "war_source" not in out.columns:
+        out["war_source"] = "approx"
+    else:
+        out["war_source"] = out["war_source"].fillna("approx")
+    return out
+
+
+def select_sdio_overlay_frame(
+    season_df: pd.DataFrame | None,
+    game_df: pd.DataFrame | None,
+    *,
+    window: list[int],
+    lahman_years: set[int],
+) -> pd.DataFrame:
+    """Keep SDIO rows for window years Lahman lacks. Roll up games when the stub is thin."""
+    need = [year for year in window if year not in lahman_years]
+    if not need:
+        return pd.DataFrame()
+    parts: list[pd.DataFrame] = []
+    covered: set[int] = set()
+    if season_df is not None and not season_df.empty and "year_id" in season_df.columns:
+        years = pd.to_numeric(season_df["year_id"], errors="coerce")
+        for year in need:
+            if _season_frame_is_thin(season_df, year):
+                continue
+            slice_df = season_df.loc[years == year]
+            if not slice_df.empty:
+                parts.append(slice_df)
+                covered.add(year)
+    still_need = [year for year in need if year not in covered]
+    if still_need and game_df is not None and not game_df.empty and "year_id" in game_df.columns:
+        years = pd.to_numeric(game_df["year_id"], errors="coerce")
+        slice_df = game_df.loc[years.isin(still_need)]
+        if not slice_df.empty:
+            parts.append(slice_df)
+    if not parts:
+        return pd.DataFrame()
+    return pd.concat(parts, ignore_index=True)
+
+
+def bridge_sdio_player_season_metrics(
+    lahman_df: pd.DataFrame,
+    season_df: pd.DataFrame | None = None,
+    game_df: pd.DataFrame | None = None,
+    *,
+    as_of_date: str,
+    window: list[int] | None = None,
+) -> tuple[pd.DataFrame, SeasonCoverage]:
+    """UNION SDIO seasons onto Lahman metrics for years Lahman does not have.
+
+    Historical Lahman + BR WAR rows stay intact. Overlay rows get a counting
+    proxy marked ``war_source=approx`` so cards can rank the active season.
+    That proxy is never written back onto ``player_season_stat``.
+    """
+    resolved_window = list(window) if window else default_season_window(as_of_date)
+    active = resolved_window[-1] if resolved_window else int(str(as_of_date)[:4])
+    lahman = lahman_df.copy() if lahman_df is not None else pd.DataFrame()
+    lahman_years = _year_set(lahman)
+    overlay = select_sdio_overlay_frame(
+        season_df, game_df, window=resolved_window, lahman_years=lahman_years
+    )
+    overlay_years = sorted(_year_set(overlay))
+    if not overlay.empty:
+        overlay = _apply_counting_proxy(overlay)
+        if "stat_source" not in overlay.columns:
+            overlay["stat_source"] = "sportsdataio"
+        combined = pd.concat([lahman, overlay], ignore_index=True) if not lahman.empty else overlay
+    else:
+        combined = lahman
+
+    seasons_present = sorted(_year_set(combined))
+    active_present = active in seasons_present
+    if active in overlay_years:
+        active_source: str | None = "sportsdataio"
+        missing_reason = None
+    elif active in lahman_years:
+        active_source = "lahman"
+        missing_reason = None
+    elif (season_df is not None and not season_df.empty) or (
+        game_df is not None and not game_df.empty
+    ):
+        active_source = None
+        missing_reason = "sdio_empty_active_season"
+    else:
+        active_source = None
+        missing_reason = "sdio_unavailable"
+
+    coverage = SeasonCoverage(
+        as_of_date=as_of_date,
+        active_season=active,
+        season_window=resolved_window,
+        seasons_present=seasons_present,
+        overlay_seasons=overlay_years,
+        overlay_rows=int(len(overlay)),
+        active_season_present=active_present,
+        active_season_source=active_source,
+        current_season_missing=not active_present,
+        current_season_missing_reason=missing_reason if not active_present else None,
+    )
+    return combined, coverage
+
+
+def write_metrics_manifest(artifacts_dir: Path, coverage: SeasonCoverage) -> Path:
+    dest = Path(artifacts_dir) / METRICS_MANIFEST_NAME
+    dest.write_text(json.dumps(coverage.to_dict(), indent=2) + "\n", encoding="utf-8")
+    return dest
+
+
+def load_sdio_metric_frames(con: duckdb.DuckDBPyConnection) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
+    season_df = None
+    game_df = None
+    if _table_has_rows(con, "player_season_stat"):
+        season_df = con.execute(_SDIO_PLAYER_SEASON_QUERY).fetchdf()
+        log.info("SportsDataIO player_season_stat available — %d season rows", len(season_df))
+    if _table_has_rows(con, "player_game_stat"):
+        game_df = con.execute(_SDIO_PLAYER_GAME_ROLLUP_QUERY).fetchdf()
+        log.info("SportsDataIO player_game_stat available — %d rolled-up rows", len(game_df))
+    return season_df, game_df
+
+
 @app.command()
 def main(config_path: str = "config/settings.yaml") -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -338,6 +665,7 @@ def main(config_path: str = "config/settings.yaml") -> None:
 
     log.info("Querying player metrics")
     player_df = con.execute(_PLAYER_QUERY).fetchdf()
+    sdio_season_df, sdio_game_df = load_sdio_metric_frames(con)
 
     # ---- Sportradar enrichment (only if data was pulled) ----
     sr_player_df: pd.DataFrame | None = None
@@ -388,9 +716,33 @@ def main(config_path: str = "config/settings.yaml") -> None:
 
     # ---- Player exports ----
     as_of = default_as_of_date()
+    window = seasons_from_settings(settings, as_of)
+    player_df, coverage = bridge_sdio_player_season_metrics(
+        player_df,
+        sdio_season_df,
+        sdio_game_df,
+        as_of_date=as_of,
+        window=window,
+    )
+    if coverage.current_season_missing:
+        log.warning(
+            "Active season %s is missing from player_season_metrics (%s). "
+            "Prior-only metrics are not current-year.",
+            coverage.active_season,
+            coverage.current_season_missing_reason or "unknown",
+        )
+    else:
+        log.info(
+            "Active season %s present via %s; overlay seasons=%s",
+            coverage.active_season,
+            coverage.active_season_source,
+            coverage.overlay_seasons,
+        )
     player_df = enrich_player_season_phase0(player_df, as_of_date=as_of)
     player_df.to_csv(artifacts_dir / "player_season_metrics.csv", index=False)
     log.info("Wrote player_season_metrics.csv (%d rows)", len(player_df))
+    write_metrics_manifest(artifacts_dir, coverage)
+    log.info("Wrote %s (current_season_missing=%s)", METRICS_MANIFEST_NAME, coverage.current_season_missing)
     cards_path = emit_ranked_fantasy_cards(
         artifacts_dir, as_of_date=as_of, player_df=player_df
     )

@@ -108,3 +108,36 @@ empty (same pattern as MLB Stats API #123).
 - Changing `current/fantasy/cards.jsonl` or `share.stat_line`
   (`+X.X edge · NN% conf` for bbref/real; approx hides conf; never `vs repl`)
 - Thin API (#106) and realtime (#107)
+
+## Clarifying addendum (#131 — not a schema fork)
+
+Status: locked as clarification of v0.1 (Cole / Product ACK 2026-08-23).
+This is **not** v0.2. No new forked tables.
+
+1. **`season_id` / `season` year** is the MLB championship season year
+   (e.g. `2026` for the 2026 regular season). It is not interchangeable
+   with `as_of`.
+2. **`as_of`** (and artifact `as_of_date`) is the calendar cut date of the
+   extract / publish (`YYYY-MM-DD`). A run with `as_of=2026-08-23` is
+   defective if its published facts only cover `season≤2025`.
+3. **Active season in `current/`:** while season `Y` is in progress (or
+   until product marks it closed), every successful `current/` publish
+   that feeds fantasy / FO live surfaces **MUST** include player-season
+   facts for `Y` when SportsDataIO has them. Prior-only `current/` is a
+   defect, not an acceptable fallback.
+4. **Default window:** emitters and default dashboard filters use
+   `season_year ∈ [Y-2, Y]` where `Y` is the year of `as_of_date`
+   (2024–2026 when `Y=2026`). Derive the window; do not hardcode those
+   years forever. `SPORTSDATAIO_SEASONS` / `sportsdataio.seasons` may
+   override the extract list.
+5. **Live path:** SportsDataIO `player_season_stat` (and `player_game_stat`
+   rollups when the season stub is thin) is the live path for in-season
+   years Lahman does not have. Overlay those years onto
+   `player_season_metrics` / `current/fantasy/cards.jsonl`. Keep Lahman +
+   BR rWAR historical rows intact. Do not dual-write WAR onto Stats API
+   or SDIO spine facts.
+6. **Soft-fail:** missing `SPORTSDATAIO_API_KEY` still exits 0 and skips
+   the spine. That path must surface a clear signal (`extract_report`
+   `current_season_missing`, `metrics_manifest.json`, and a logged
+   warning). It must not silently ship prior-only metrics as if the
+   current season were present.

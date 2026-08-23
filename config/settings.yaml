@@ -54,7 +54,9 @@ sportsdataio:
   team_crosswalk: data/crosswalks/mlb_team_map.csv
   min_request_interval: 0.5
   max_retries: 3
-  seasons: []          # empty = year of as_of_date (season rollup stub)
+  # empty = [Y-2, Y] from as_of_date year (2024–2026 when Y=2026).
+  # SPORTSDATAIO_SEASONS=2024,2025,2026 overrides this list.
+  seasons: []
   include_season_feeds: false
 
 # Sportradar MLB API v8

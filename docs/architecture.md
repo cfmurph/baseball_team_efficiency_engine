@@ -18,8 +18,11 @@ Turn a simple historical baseball CSV merge into an analytics platform that can 
   `{ARTIFACTS_URI}/raw/mlb_stats/{endpoint}/{as_of_date}/` or local
   `data/raw/mlb_stats/` — soft-fail; warehouse stays Lahman-only if empty
 - Pull SportsDataIO Phase 0 feeds (`pull_sportsdataio`) into
-  `{ARTIFACTS_URI}/raw/sportsdataio/{endpoint}/{as_of_date}/` — soft-fail
-  without `SPORTSDATAIO_API_KEY`; warehouse skips the spine if empty
+  `{ARTIFACTS_URI}/raw/sportsdataio/{endpoint}/{as_of_date}/` — default
+  seasons `[Y-2, Y]` from `as_of_date`; soft-fail without
+  `SPORTSDATAIO_API_KEY`; warehouse skips the spine if empty; metrics
+  overlay those years onto `player_season_metrics` so `current/` can
+  include the active season
 - Maintain one file per source
 - Preserve raw column names for traceability
 
