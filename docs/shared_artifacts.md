@@ -20,11 +20,11 @@ There is no HTTP API. Schemes: `s3://`, `r2://`, `gs://`, `file://`.
 level). New product files are added beside today's CSVs — same URI and
 partition. See [ADR 0001](adr/0001-shared-artifact-layout.md).
 
-Reserved for a Fantasy Phase 0 follow-up (not emitted by #105):
+Fantasy Phase 0 cards (#111 ranked emitter) live at the locked path only:
 
 ```text
-{league}/{level}/{run_date}/fantasy/cards.jsonl
-{league}/{level}/latest/fantasy/cards.jsonl
+runs/{run_id}/fantasy/cards.jsonl
+current/fantasy/cards.jsonl
 ```
 
 | Segment | Current default | Future example |
@@ -32,7 +32,7 @@ Reserved for a Fantasy Phase 0 follow-up (not emitted by #105):
 | `league` | `mlb` | `milb` |
 | `level` | `mlb` | `aaa`, `aa`, `a+` |
 | `run_date` | UTC `YYYY-MM-DD` | `2026-08-23` |
-| `latest` | copy of the newest successful publish | dashboards always read this |
+| `latest` | deprecated #109 pointer; dropped next release | readers still accept it for one release |
 
 Example with `ARTIFACTS_URI=s3://my-bucket/baseball-analytics`:
 
@@ -119,11 +119,12 @@ export ARTIFACTS_URI=file:///tmp/baseball-artifacts
 ## Nightly upload
 
 `python3 -m pipeline.run_nightly` runs extract → warehouse → metrics → models,
-then publishes `artifacts/` (CSVs, plots, and `fantasy/cards.jsonl`; not
-`.remote_cache/`) when `ARTIFACTS_URI` is set. Upload writes `runs/{run_id}/`
-first; `current/` is promoted only after that tree is complete. Upload
-failure after a successful pipeline exits non-zero and does not mutate an
-existing run id.
+then publishes `artifacts/` (CSVs, plots, and ranked `fantasy/cards.jsonl`; not
+`.remote_cache/`) when `ARTIFACTS_URI` is set. `build_metrics` ranks
+`player_season_metrics` into start|sit|pickup|stream at that path. Upload
+writes `runs/{run_id}/` first; `current/` is promoted only after that tree
+is complete. Upload failure after a successful pipeline exits non-zero and
+does not mutate an existing run id.
 
 GitHub Actions (`.github/workflows/nightly-refresh.yml`) forwards the env
 vars above from repository secrets. It still uploads a 14-day

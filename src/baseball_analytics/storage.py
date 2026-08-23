@@ -11,8 +11,8 @@ nested files are first-class). ``run_date`` is ``YYYY-MM-DD`` (UTC unless
 ``ARTIFACTS_RUN_DATE`` is set). ``latest/`` is a copy of the most recent
 successful publish so dashboards do not need to list history. Future
 minor-league feeds use the same shape (e.g. ``milb/aaa/2026-08-23/``).
-Reserved (unpublished in this slice): ``fantasy/cards.jsonl``.
-See ``docs/adr/0001-shared-artifact-layout.md``.
+Fantasy cards: ``fantasy/cards.jsonl`` (ranked #111 emitter).
+See ``docs/adr/0001-shared-artifact-contract.md``.
 
 A brief read-only compat bridge still accepts the #109
 ``{league}/{level}/latest/`` prefix so already-published objects keep working.
@@ -41,7 +41,7 @@ from src.baseball_analytics.config import ArtifactSettings, load_artifact_settin
 from src.baseball_analytics.fantasy import (
     FANTASY_CARDS_RELPATH,
     FANTASY_SCHEMA_VERSION,
-    write_fantasy_cards_stub,
+    emit_ranked_fantasy_cards,
 )
 
 log = logging.getLogger(__name__)
@@ -488,7 +488,7 @@ def upload_artifacts(
             f"No artifact files to upload from {source}. "
             "Run the pipeline before publishing."
         )
-    _ensure_fantasy_stub(source, resolved_as_of)
+    _ensure_fantasy_cards(source, resolved_as_of)
     files = iter_artifact_files(source)
 
     store = backend if backend is not None else open_backend(settings.uri, environ=env)
@@ -697,11 +697,12 @@ def publish_nightly_artifacts(
     )
 
 
-def _ensure_fantasy_stub(local_dir: Path, as_of_date: str) -> Path:
+def _ensure_fantasy_cards(local_dir: Path, as_of_date: str) -> Path:
+    """Emit ranked cards from published metrics when the lake file is missing."""
     dest = local_dir / FANTASY_CARDS_RELPATH
-    if dest.is_file():
+    if dest.is_file() and dest.stat().st_size > 0:
         return dest
-    return write_fantasy_cards_stub(local_dir, as_of_date=as_of_date)
+    return emit_ranked_fantasy_cards(local_dir, as_of_date=as_of_date)
 
 
 def _promote_current(

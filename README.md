@@ -98,6 +98,7 @@ team_window_phases.csv               Latest phase per franchise
 team_clusters.csv                    KMeans archetypes per team-season
 team_cluster_summary.csv             Mean stats per archetype
 player_season_metrics.csv            All player-season metrics (Phase 0 aliases + ranks)
+fantasy/cards.jsonl                  Ranked start|sit|pickup|stream cards (schema 1.0)
 player_top_surplus_value.csv         Best-value players
 player_worst_contracts.csv           Most negative surplus value
 player_dead_money.csv                Players with WAR ≤ 0 and salary > 0

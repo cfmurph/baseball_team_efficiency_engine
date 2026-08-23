@@ -19,7 +19,7 @@ import re
 from typing import Any, Mapping
 
 from src.baseball_analytics.config import ArtifactSettings, load_artifact_settings
-from src.baseball_analytics.storage import resolve_artifact_hit
+from src.baseball_analytics.storage import resolve_artifact_hit, resolve_named_artifacts
 
 from fantasy.copy import EARLY_MODEL_BADGE, PROMPT_LINE
 
@@ -61,6 +61,7 @@ LABEL_TONES = {
 
 SOURCE_STUB = "stub"
 SOURCE_MISSING = "missing"
+EDGE_UNIT = "edge"
 
 
 @dataclass(frozen=True)
@@ -176,10 +177,11 @@ def resolve_card_feed(
 ) -> tuple[Path | None, str, str | None]:
     """Return ``(path, source, key)`` for jsonl, then dated ``fantasy_cards_*.json``."""
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
-    hit = resolve_artifact_hit(CARD_LAKE_KEY, cfg, backend=backend, environ=environ)
-    if hit is not None:
-        return hit.path, hit.source
-    return None, SOURCE_STUB
+    for key in (*CARD_FEED_KEYS, *dated_card_keys(cfg, environ=environ, now=now)):
+        hit = resolve_artifact_hit(key, cfg, backend=backend, environ=environ)
+        if hit is not None:
+            return hit.path, hit.source, key
+    return None, SOURCE_MISSING, None
 
 
 def load_share_cards(

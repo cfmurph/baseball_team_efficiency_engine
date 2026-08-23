@@ -1,16 +1,26 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 from pathlib import Path
+
+import pandas as pd
+import pytest
 
 from src.baseball_analytics.config import ArtifactSettings
 from src.baseball_analytics.fantasy import (
     FANTASY_CARDS_RELPATH,
+    FANTASY_SCHEMA_VERSION,
+    RECOMMENDATION_TYPES,
     VOID_DATED_CARDS_PREFIX,
+    card_schema_errors,
+    emit_ranked_fantasy_cards,
     map_card_war_source,
+    rank_fantasy_cards,
     render_cards_jsonl,
     write_fantasy_cards_stub,
 )
+from src.baseball_analytics.storage import upload_artifacts
 
 from fantasy.card_image import render_share_card_png
 from fantasy.cards import (
@@ -281,6 +291,132 @@ class _MemoryBackend:
         return self.objects.get(relative_key)
 
 
+def _player_metrics_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "player_id": "judgeaa01",
+                "player_name": "Aaron Judge",
+                "team_id": "NYA",
+                "position": "OF",
+                "player_type": "batter",
+                "season": 2015,
+                "player_war": 9.4,
+                "war": 9.4,
+                "vs_replacement": 9.4,
+                "surplus_value": 40_000_000,
+                "pitching_war": 0.0,
+                "war_source": "real",
+            },
+            {
+                "player_id": "troutmi01",
+                "player_name": "Mike Trout",
+                "team_id": "LAA",
+                "position": "OF",
+                "player_type": "batter",
+                "season": 2015,
+                "player_war": 9.0,
+                "war": 9.0,
+                "vs_replacement": 9.0,
+                "surplus_value": 55_000_000,
+                "pitching_war": 0.0,
+                "war_source": "bbref",
+            },
+            {
+                "player_id": "degroja01",
+                "player_name": "Jacob deGrom",
+                "team_id": "NYN",
+                "position": "P",
+                "player_type": "pitcher",
+                "season": 2015,
+                "player_war": 6.4,
+                "war": 6.4,
+                "vs_replacement": 6.4,
+                "surplus_value": 48_000_000,
+                "pitching_war": 6.4,
+                "war_source": "real",
+            },
+            {
+                "player_id": "kershcl01",
+                "player_name": "Clayton Kershaw",
+                "team_id": "LAN",
+                "position": "P",
+                "player_type": "pitcher",
+                "season": 2015,
+                "player_war": 5.8,
+                "war": 5.8,
+                "vs_replacement": 5.8,
+                "surplus_value": 12_000_000,
+                "pitching_war": 5.8,
+                "war_source": "approx",
+            },
+            {
+                "player_id": "steersp01",
+                "player_name": "Spencer Steer",
+                "team_id": "CIN",
+                "position": "1B",
+                "player_type": "batter",
+                "season": 2015,
+                "player_war": 2.4,
+                "war": 2.4,
+                "vs_replacement": 2.4,
+                "surplus_value": 22_000_000,
+                "pitching_war": 0.0,
+                "war_source": "bbref",
+            },
+            {
+                "player_id": "solerjo01",
+                "player_name": "Jorge Soler",
+                "team_id": "KCA",
+                "position": "OF",
+                "player_type": "batter",
+                "season": 2015,
+                "player_war": -0.6,
+                "war": -0.6,
+                "vs_replacement": -0.6,
+                "surplus_value": -8_000_000,
+                "pitching_war": 0.0,
+                "war_source": "approx",
+            },
+            {
+                "player_id": "oldbat01",
+                "player_name": "Prior Season",
+                "team_id": "BOS",
+                "position": "OF",
+                "player_type": "batter",
+                "season": 2014,
+                "player_war": 12.0,
+                "war": 12.0,
+                "vs_replacement": 12.0,
+                "surplus_value": 99_000_000,
+                "pitching_war": 0.0,
+                "war_source": "real",
+            },
+        ]
+    )
+
+
+def _assert_schema_cards(cards: list[dict]) -> None:
+    assert cards
+    types = {card["recommendation_type"] for card in cards}
+    assert types == set(RECOMMENDATION_TYPES)
+    for card in cards:
+        assert card_schema_errors(card) == []
+        assert card["schema_version"] == FANTASY_SCHEMA_VERSION
+        source = card["edge"]["war_source"]
+        assert source in {"bbref", "approx"}
+        assert source != "fangraphs"
+        assert card["edge"]["is_approx"] is (source == "approx")
+        assert "\n" not in card["reason"]
+        assert "vs replacement" in card["reason"]
+        stat_line = str((card.get("share") or {}).get("stat_line") or "")
+        assert stat_line
+        assert "vs repl" not in stat_line
+        assert "vs replacement" not in stat_line
+        assert " edge · " in stat_line
+        assert stat_line.endswith("% conf")
+
+
 def test_resolve_prefers_current_fantasy_cards_jsonl(tmp_path: Path) -> None:
     backend = _MemoryBackend(
         {
@@ -289,9 +425,9 @@ def test_resolve_prefers_current_fantasy_cards_jsonl(tmp_path: Path) -> None:
         }
     )
     settings = _settings(tmp_path, uri="s3://bucket/prefix")
-    cards, source = load_share_cards(settings, backend=backend)
-    assert cards[0]["recommendation_type"] == "pickup"
-    assert source == "remote"
+    feed = load_share_cards(settings, backend=backend)
+    assert feed.cards[0]["recommendation_type"] == "pickup"
+    assert feed.source == "remote"
     assert "current/fantasy/cards.jsonl" in backend.gets
     assert not any("fantasy_cards_" in key for key in backend.gets)
 
@@ -368,3 +504,132 @@ def test_player_artifacts_use_shared_resolve(tmp_path: Path) -> None:
     assert set(resolved) == set(PLAYER_ARTIFACTS)
     assert resolved["players"] == local / "player_season_metrics.csv"
     assert resolved["top_value"] is None
+
+
+def test_ranked_emitter_writes_locked_path_and_all_rec_types(tmp_path: Path) -> None:
+    dest = emit_ranked_fantasy_cards(
+        tmp_path,
+        as_of_date="2026-08-23",
+        top_n=2,
+        player_df=_player_metrics_frame(),
+    )
+    assert dest == tmp_path / "fantasy" / "cards.jsonl"
+    assert dest.is_file()
+    assert not any(tmp_path.joinpath("fantasy").glob("fantasy_cards_*.json"))
+    assert VOID_DATED_CARDS_PREFIX not in dest.name
+
+    cards = [json.loads(line) for line in dest.read_text(encoding="utf-8").splitlines() if line]
+    _assert_schema_cards(cards)
+    by_type = {rec: [c for c in cards if c["recommendation_type"] == rec] for rec in RECOMMENDATION_TYPES}
+    assert all(len(group) == 2 for group in by_type.values())
+    assert [c["rank"]["among_rec_type"] for c in by_type["start"]] == [1, 2]
+    assert by_type["start"][0]["player"]["player_id"] == "judgeaa01"
+    assert by_type["sit"][0]["player"]["player_id"] == "solerjo01"
+    assert by_type["pickup"][0]["player"]["player_id"] == "troutmi01"
+    assert by_type["stream"][0]["player"]["player_id"] == "degroja01"
+    assert all(c["player"]["player_id"] != "oldbat01" for c in cards)
+    assert all(c["as_of_date"] == "2026-08-23" for c in cards)
+
+
+def test_ranked_cards_map_war_source_and_never_emit_fangraphs() -> None:
+    frame = _player_metrics_frame()
+    frame.loc[frame["player_id"] == "steersp01", "war_source"] = "fangraphs"
+    cards = rank_fantasy_cards(frame, as_of_date="2026-08-23", top_n=8)
+    _assert_schema_cards(cards)
+    sources = {card["edge"]["war_source"] for card in cards}
+    assert sources <= {"bbref", "approx"}
+    assert "fangraphs" not in sources
+    steer = next(card for card in cards if card["player"]["player_id"] == "steersp01")
+    assert steer["edge"]["war_source"] == "approx"
+    assert steer["edge"]["is_approx"] is True
+    judge = next(card for card in cards if card["player"]["player_id"] == "judgeaa01")
+    assert judge["edge"]["war_source"] == "bbref"
+    assert judge["edge"]["is_approx"] is False
+
+
+def test_emit_reads_player_season_metrics_alias_paths(tmp_path: Path) -> None:
+    metrics = tmp_path / "metrics"
+    metrics.mkdir()
+    _player_metrics_frame().to_csv(metrics / "player_season_metrics.csv", index=False)
+    dest = emit_ranked_fantasy_cards(tmp_path, as_of_date="2026-08-23", top_n=1)
+    cards = [json.loads(line) for line in dest.read_text(encoding="utf-8").splitlines() if line]
+    _assert_schema_cards(cards)
+    assert len(cards) == 4
+
+
+def test_emit_empty_when_metrics_missing(tmp_path: Path) -> None:
+    dest = emit_ranked_fantasy_cards(tmp_path, as_of_date="2026-08-23")
+    assert dest.read_text(encoding="utf-8") == ""
+    assert dest == tmp_path / FANTASY_CARDS_RELPATH
+
+
+def test_upload_promotes_ranked_cards_to_current(tmp_path: Path) -> None:
+    local = tmp_path / "artifacts"
+    local.mkdir()
+    _player_metrics_frame().to_csv(local / "player_season_metrics.csv", index=False)
+    (local / "team_onfield_contract_metrics.csv").write_text("year_id\n2015\n")
+    lake = tmp_path / "lake"
+    result = upload_artifacts(
+        local,
+        _settings(tmp_path, uri=f"file://{lake}", local_dir=local),
+        run_id="20260823T080012Z",
+        as_of_date="2026-08-23",
+        git_sha="abc123",
+    )
+    assert result.current_updated is True
+    assert FANTASY_CARDS_RELPATH in result.files
+    run_cards = lake / "runs" / "20260823T080012Z" / "fantasy" / "cards.jsonl"
+    current_cards = lake / "current" / "fantasy" / "cards.jsonl"
+    assert run_cards.is_file()
+    assert current_cards.is_file()
+    assert not list(lake.rglob("fantasy_cards_*.json"))
+    cards = [json.loads(line) for line in current_cards.read_text(encoding="utf-8").splitlines() if line]
+    _assert_schema_cards(cards)
+    feed = load_share_cards(_settings(tmp_path, uri=f"file://{lake}", local_dir=tmp_path / "empty"))
+    assert feed.source == "remote"
+    assert {card["recommendation_type"] for card in feed.cards} == set(RECOMMENDATION_TYPES)
+    assert all(card_schema_errors(card) == [] for card in feed.cards)
+    assert all("vs repl" not in str((card.get("share") or {}).get("stat_line") or "") for card in feed.cards)
+
+
+def test_failed_promote_leaves_run_cards_and_skips_current(tmp_path: Path) -> None:
+    local = tmp_path / "artifacts"
+    local.mkdir()
+    _player_metrics_frame().to_csv(local / "player_season_metrics.csv", index=False)
+    (local / "team_onfield_contract_metrics.csv").write_text("year_id\n2015\n")
+
+    stored: dict[str, bytes] = {}
+
+    class Backend:
+        def put(self, relative_key: str, data: bytes) -> None:
+            if relative_key.startswith("current/"):
+                raise RuntimeError("promote failed")
+            stored[relative_key] = data
+
+        def get(self, relative_key: str) -> bytes | None:
+            return stored.get(relative_key)
+
+    from src.baseball_analytics.storage import ArtifactUploadError
+
+    with pytest.raises(ArtifactUploadError, match="current/ promote failed"):
+        upload_artifacts(
+            local,
+            _settings(tmp_path, uri="s3://bucket/prefix"),
+            run_id="20260823T080012Z",
+            as_of_date="2026-08-23",
+            backend=Backend(),
+        )
+    assert any(key.endswith("fantasy/cards.jsonl") and key.startswith("runs/") for key in stored)
+    assert not any(key.startswith("current/") for key in stored)
+
+
+def test_share_stat_line_uses_edge_not_vs_repl() -> None:
+    cards = rank_fantasy_cards(_player_metrics_frame(), as_of_date="2026-08-23", top_n=1)
+    start = next(card for card in cards if card["recommendation_type"] == "start")
+    assert start["share"]["stat_line"] == "+9.4 edge · 86% conf"
+    for card in cards:
+        stat = str(card["share"]["stat_line"])
+        assert stat.endswith("% conf")
+        assert " edge · " in stat
+        assert "vs repl" not in stat
+        assert "vs replacement" not in stat

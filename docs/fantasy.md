@@ -28,7 +28,7 @@ The shell reads published files through the same `resolve_artifact()` / `ARTIFAC
 
 Fallback only if that file is missing: `fantasy/cards.jsonl`, then `fantasy_cards_{as_of_date}.json`. If none exist the waitlist still works and labeled stub cards render.
 
-JSONL schema 1.0. `as_of_date` is on each record and `manifest.json`. `edge.war_source` is `bbref` or `approx` only. The lake file may be an empty stub until #111. Until that emitter publishes cards, the shell renders bundled stubs in `fantasy/stub_cards.jsonl` (pickup / stream / start / sit). `approx` rows set `is_approx: true` and show an **early model** badge.
+JSONL schema 1.0. `as_of_date` is on each record and `manifest.json`. `edge.war_source` is `bbref` or `approx` only. The #111 nightly emitter ranks published `player_season_metrics` into top-N **start / sit / pickup / stream** cards at `fantasy/cards.jsonl` (never `fantasy_cards_*.json`). After a successful nightly the shell reads that file so it is not empty. Bundled stubs in `fantasy/stub_cards.jsonl` render only when the lake file is missing or empty. `approx` rows set `is_approx: true` and show an **early model** badge.
 
 Recommendation labels (schema v1.0): `start` → START, `sit` → BENCH, `pickup` → PICK UP, `stream` → STREAM.
 

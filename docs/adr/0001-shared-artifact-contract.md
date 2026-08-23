@@ -16,7 +16,7 @@ run tree plus a single mutable pointer:
                                  # + pipeline_steps + war_source_summary + files[]
     metrics/*.csv                # existing filenames unchanged
     models/*                     # plots and other non-CSV model outputs
-    fantasy/cards.jsonl          # Phase 0 card payload (stub/empty OK)
+    fantasy/cards.jsonl          # Phase 0 ranked cards (#111 nightly emitter)
   current/                       # overwritten only after a fully successful nightly
     manifest.json
     …same tree…
@@ -51,7 +51,10 @@ The dashboard Source badge is exactly `remote` | `local` | `missing`.
 Path is **only** `fantasy/cards.jsonl` under `runs/{run_id}/` and `current/`.
 Format is JSONL `schema_version` 1.0. `as_of_date` lives on each record and
 on `manifest.json`, never in the filename. `edge.war_source` is `bbref` |
-`approx` only. An empty stub is OK until the #111 emitter.
+`approx` only. The #111 nightly emitter ranks published
+`player_season_metrics` into start|sit|pickup|stream. An empty stub is
+valid only when player metrics are missing (do not emit dated
+`fantasy_cards_*.json`).
 
 ## Interface
 
