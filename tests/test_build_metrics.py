@@ -1,74 +1,187 @@
-"""Tests for metric export helpers in build_metrics."""
 from __future__ import annotations
 
 import duckdb
 import pandas as pd
+import pytest
 
-from pipeline.transform.build_metrics import (
-    _dead_money_leaders,
-    _efficiency_labels,
-    _table_has_rows,
-    _window_summary,
-)
+from pipeline.transform.build_metrics import _PLAYER_QUERY
 
 
-def test_efficiency_labels_assigns_expected_bins() -> None:
-    df = pd.DataFrame({"wins_per_10m": [0.25, 0.75, 1.25, 2.0]})
-
-    result = _efficiency_labels(df)
-
-    assert result["efficiency_label"].astype(str).tolist() == [
-        "low",
-        "below_avg",
-        "above_avg",
-        "elite",
-    ]
-
-
-def test_window_summary_uses_latest_team_season() -> None:
-    team_df = pd.DataFrame(
-        {
-            "team_name": ["Aces", "Aces", "Bees", "Bees"],
-            "year_id": [2021, 2020, 2020, 2022],
-            "window_phase": ["contending", "rebuilding", "steady", "developing"],
-            "wins": [91, 65, 80, 86],
-            "payroll": [120_000_000, 55_000_000, 75_000_000, 90_000_000],
-            "team_total_war": [42.0, 18.0, 29.0, 35.0],
-        }
-    )
-
-    result = _window_summary(team_df).set_index("team_name")
-
-    assert result.loc["Aces", "year_id"] == 2021
-    assert result.loc["Aces", "window_phase"] == "contending"
-    assert result.loc["Bees", "year_id"] == 2022
-    assert result.loc["Bees", "window_phase"] == "developing"
-
-
-def test_dead_money_leaders_filters_and_sorts_by_salary() -> None:
-    player_df = pd.DataFrame(
-        {
-            "name_full": ["Low Salary", "Healthy Contract", "High Salary"],
-            "contract_label": ["dead_money", "surplus_value", "dead_money"],
-            "salary": [4_000_000, 30_000_000, 25_000_000],
-        }
-    )
-
-    result = _dead_money_leaders(player_df)
-
-    assert result["name_full"].tolist() == ["High Salary", "Low Salary"]
-    assert (result["contract_label"] == "dead_money").all()
-
-
-def test_table_has_rows_handles_missing_empty_and_populated_tables() -> None:
+def test_player_query_collapses_traded_player_stints_without_team_fanout() -> None:
+    """The exported player metrics should remain one row per player-season."""
     con = duckdb.connect(":memory:")
-    try:
-        assert not _table_has_rows(con, "missing_table")
+    con.register(
+        "fact_player_season",
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "player-a",
+                    "season_key": 2024,
+                    "team_id": "AAA",
+                    "player_type": "batter",
+                    "pa": 100,
+                    "hr": 5,
+                    "bb": 10,
+                    "woba": 0.300,
+                    "batting_war": 1.0,
+                    "ip": None,
+                    "fip": None,
+                    "era": None,
+                    "pitching_war": 0.0,
+                    "player_war": 1.0,
+                    "war_source": "approx",
+                    "salary": 1_000_000,
+                    "surplus_value": 7_000_000,
+                    "contract_label": "surplus_value",
+                },
+                {
+                    "player_id": "player-a",
+                    "season_key": 2024,
+                    "team_id": "BBB",
+                    "player_type": "batter",
+                    "pa": 300,
+                    "hr": 15,
+                    "bb": 30,
+                    "woba": 0.400,
+                    "batting_war": 3.0,
+                    "ip": None,
+                    "fip": None,
+                    "era": None,
+                    "pitching_war": 0.0,
+                    "player_war": 3.0,
+                    "war_source": "approx",
+                    "salary": 2_000_000,
+                    "surplus_value": 22_000_000,
+                    "contract_label": "fair_value",
+                },
+            ]
+        ),
+    )
+    con.register(
+        "dim_player",
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "player-a",
+                    "name_full": "Traded Batter",
+                    "name_first": "Traded",
+                    "name_last": "Batter",
+                }
+            ]
+        ),
+    )
+    con.register(
+        "dim_team",
+        pd.DataFrame(
+            [
+                {"team_key": "AAA_2024", "team_id": "AAA", "team_name": "Alpha Aces"},
+                {"team_key": "AAA_2023", "team_id": "AAA", "team_name": "Alpha Aces"},
+                {"team_key": "BBB_2024", "team_id": "BBB", "team_name": "Beta Bears"},
+                {"team_key": "BBB_2023", "team_id": "BBB", "team_name": "Beta Bears"},
+            ]
+        ),
+    )
 
-        con.execute("CREATE TABLE optional_feed (id INTEGER)")
-        assert not _table_has_rows(con, "optional_feed")
+    result = con.execute(_PLAYER_QUERY).fetchdf()
 
-        con.execute("INSERT INTO optional_feed VALUES (1)")
-        assert _table_has_rows(con, "optional_feed")
-    finally:
-        con.close()
+    assert len(result) == 1
+    row = result.iloc[0]
+    assert row["player_id"] == "player-a"
+    assert row["year_id"] == 2024
+    assert row["team_id"] == "BBB"
+    assert row["team_name"] == "Beta Bears"
+    assert row["pa"] == 400
+    assert row["hr"] == 20
+    assert row["bb"] == 40
+    assert row["batting_war"] == pytest.approx(4.0)
+    assert row["player_war"] == pytest.approx(4.0)
+    assert row["salary"] == 3_000_000
+    assert row["surplus_value"] == 29_000_000
+    assert row["woba"] == pytest.approx(0.375)
+    assert row["contract_label"] == "fair_value"
+
+
+def test_player_query_weights_pitching_rate_stats_and_preserves_two_way_type() -> None:
+    con = duckdb.connect(":memory:")
+    con.register(
+        "fact_player_season",
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "player-b",
+                    "season_key": 2024,
+                    "team_id": "AAA",
+                    "player_type": "both",
+                    "pa": 10,
+                    "hr": 1,
+                    "bb": 2,
+                    "woba": 0.500,
+                    "batting_war": 0.5,
+                    "ip": 10.0,
+                    "fip": 5.00,
+                    "era": 6.00,
+                    "pitching_war": 1.5,
+                    "player_war": 2.0,
+                    "war_source": "approx",
+                    "salary": 4_000_000,
+                    "surplus_value": 12_000_000,
+                    "contract_label": "surplus_value",
+                },
+                {
+                    "player_id": "player-b",
+                    "season_key": 2024,
+                    "team_id": "BBB",
+                    "player_type": "pitcher",
+                    "pa": 0,
+                    "hr": 0,
+                    "bb": 0,
+                    "woba": None,
+                    "batting_war": 0.0,
+                    "ip": 30.0,
+                    "fip": 3.00,
+                    "era": 2.00,
+                    "pitching_war": 1.0,
+                    "player_war": 1.0,
+                    "war_source": "approx",
+                    "salary": 1_000_000,
+                    "surplus_value": 7_000_000,
+                    "contract_label": "overpaid",
+                },
+            ]
+        ),
+    )
+    con.register(
+        "dim_player",
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "player-b",
+                    "name_full": "Two Way Pitcher",
+                    "name_first": "Two Way",
+                    "name_last": "Pitcher",
+                }
+            ]
+        ),
+    )
+    con.register(
+        "dim_team",
+        pd.DataFrame(
+            [
+                {"team_key": "AAA_2024", "team_id": "AAA", "team_name": "Alpha Aces"},
+                {"team_key": "BBB_2024", "team_id": "BBB", "team_name": "Beta Bears"},
+            ]
+        ),
+    )
+
+    result = con.execute(_PLAYER_QUERY).fetchdf()
+
+    assert len(result) == 1
+    row = result.iloc[0]
+    assert row["team_id"] == "AAA"
+    assert row["player_type"] == "both"
+    assert row["ip"] == pytest.approx(40.0)
+    assert row["fip"] == pytest.approx(3.5)
+    assert row["era"] == pytest.approx(3.0)
+    assert row["pitching_war"] == pytest.approx(2.5)
+    assert row["player_war"] == pytest.approx(3.0)
+    assert row["contract_label"] == "surplus_value"
