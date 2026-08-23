@@ -24,6 +24,18 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from src.baseball_analytics.dashboard_helpers import (
+    apply_layout_and_render_chart,
+    compute_slider_max,
+)
+
+from src.baseball_analytics.dashboard_utils import (
+    apply_plotly_layout,
+    calculate_slider_max,
+    player_id_columns_for_duplicate_names,
+    render_plotly_chart,
+    scale_payroll_for_display,
+)
 
 _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
@@ -347,6 +359,7 @@ _TEAM_COL_CFG = {
     "payroll_per_win":   st.column_config.NumberColumn("$/Win ($M)", format="$%.2fM"),
     "wins_per_10m":      st.column_config.NumberColumn("W/$10M", format="%.2f"),
     "team_total_war":    st.column_config.NumberColumn("Team WAR", format="%.1f"),
+    "war_source":        st.column_config.TextColumn("WAR source"),
     "cost_per_war":      st.column_config.NumberColumn("$/WAR ($M)", format="$%.2fM"),
     "war_per_1m":        st.column_config.NumberColumn("WAR/$1M", format="%.2f"),
     "surplus_value":     st.column_config.NumberColumn("Surplus ($M)", format="$%.1fM"),
@@ -360,26 +373,31 @@ _TEAM_COL_CFG = {
 }
 
 _PLAYER_COL_CFG = {
-    "player_id":        st.column_config.TextColumn("Player ID", width="small"),
-    "name_full":        st.column_config.TextColumn("Player", width="medium"),
-    "year_id":          st.column_config.NumberColumn("Year", format="%d", width="small"),
-    "team_name":        st.column_config.TextColumn("Team", width="medium"),
-    "player_type":      st.column_config.TextColumn("Type", width="small"),
-    "primary_position": st.column_config.TextColumn("Pos", width="small"),
-    "pa":               st.column_config.NumberColumn("PA", format="%d", width="small"),
-    "hr":               st.column_config.NumberColumn("HR", format="%d", width="small"),
-    "bb":               st.column_config.NumberColumn("BB", format="%d", width="small"),
-    "woba":             st.column_config.NumberColumn("wOBA", format="%.3f"),
-    "ip":               st.column_config.NumberColumn("IP", format="%.1f"),
-    "era":              st.column_config.NumberColumn("ERA", format="%.2f"),
-    "fip":              st.column_config.NumberColumn("FIP", format="%.2f"),
-    "batting_war":      st.column_config.NumberColumn("bWAR", format="%.1f"),
-    "pitching_war":     st.column_config.NumberColumn("pWAR", format="%.1f"),
-    "player_war":       st.column_config.NumberColumn("WAR", format="%.1f"),
-    "salary":           st.column_config.NumberColumn("Salary ($M)", format="$%.2fM"),
-    "surplus_value":    st.column_config.NumberColumn("Surplus ($M)", format="$%.2fM"),
-    "contract_label":   st.column_config.TextColumn("Contract"),
+    "name_full":       st.column_config.TextColumn("Player"),
+    "year_id":         st.column_config.NumberColumn("Year", format="%d"),
+    "team_name":       st.column_config.TextColumn("Team"),
+    "player_type":     st.column_config.TextColumn("Type"),
+    "primary_position": st.column_config.TextColumn("Pos"),
+    "pa":              st.column_config.NumberColumn("PA", format="%d"),
+    "hr":              st.column_config.NumberColumn("HR", format="%d"),
+    "bb":              st.column_config.NumberColumn("BB", format="%d"),
+    "woba":            st.column_config.NumberColumn("wOBA", format="%.3f"),
+    "ip":              st.column_config.NumberColumn("IP", format="%.1f"),
+    "era":             st.column_config.NumberColumn("ERA", format="%.2f"),
+    "fip":             st.column_config.NumberColumn("FIP", format="%.2f"),
+    "batting_war":     st.column_config.NumberColumn("bWAR", format="%.1f"),
+    "pitching_war":    st.column_config.NumberColumn("pWAR", format="%.1f"),
+    "player_war":      st.column_config.NumberColumn("WAR", format="%.1f"),
+    "war_source":      st.column_config.TextColumn("WAR source"),
+    "salary":          st.column_config.NumberColumn("Salary ($M)", format="$%.2fM"),
+    "surplus_value":   st.column_config.NumberColumn("Surplus ($M)", format="$%.2fM"),
+    "contract_label":  st.column_config.TextColumn("Contract"),
 }
+
+
+def _scale_payroll(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert payroll/salary columns from raw $ to $M for display."""
+    return scale_payroll_for_display(df)
 
 
 def _show_table(df: pd.DataFrame, col_cfg: dict | None = None, height: int = 600, **kwargs) -> None:
@@ -417,35 +435,31 @@ _SCATTER_MARKER = dict(size=8, opacity=0.82, line=dict(width=0.5, color="#0d1117
 
 
 def _apply_layout(fig) -> None:
-    fig.update_layout(**_PLOTLY_LAYOUT)
+    """Apply the Baseball Savant dark layout to any Plotly figure."""
+    apply_plotly_layout(fig, _PLOTLY_LAYOUT)
 
 
 def _chart(fig, height: int = 400) -> None:
-    _apply_layout(fig)
-    fig.update_layout(height=height)
-    st.plotly_chart(fig, use_container_width=True)
+    """Apply dark layout and render a Plotly chart."""
+    apply_layout_and_render_chart(
+        fig,
+        apply_layout=_apply_layout,
+        plotly_chart=st.plotly_chart,
+        height=height,
+    )
 
 
-def _page_header(label: str) -> None:
-    page = nav_page(label)
-    st.markdown(f'<div class="page-kicker">{html.escape(page["kicker"])}</div>', unsafe_allow_html=True)
-    st.title(page["label"])
-    st.caption(page["blurb"])
-
-
-def _empty(kind: str) -> None:
-    copy = empty_state_copy(kind)
-    cmd = copy.get("command") or ""
-    cmd_html = f"<pre><code>{html.escape(cmd)}</code></pre>" if cmd else ""
-    st.markdown(
-        f"""
-        <div class="empty-card" role="status">
-          <h3>{html.escape(copy["title"])}</h3>
-          <p>{html.escape(copy["body"])}</p>
-          {cmd_html}
-        </div>
-        """,
-        unsafe_allow_html=True,
+# ── Global state ───────────────────────────────────────────────────────────────
+metrics = _load("metrics")
+if metrics is None:
+    st.error(
+        "No artifacts found. Run the full pipeline first:\n\n"
+        "```\npython3 -m pipeline.extract.pull_sources\n"
+        "python3 -m pipeline.extract.pull_war\n"
+        "python3 -m pipeline.transform.build_warehouse\n"
+        "python3 -m pipeline.transform.build_metrics\n"
+        "python3 -m models.train_win_model\n"
+        "python3 -m models.cluster_teams\n```"
     )
 
 
@@ -458,10 +472,9 @@ def _salary_note(year: int | None) -> None:
 # ── Global state ───────────────────────────────────────────────────────────────
 metrics = _load("metrics")
 _current_year = datetime.date.today().year
-all_years = years_from_frame(metrics)
-_slider_lo, _slider_max = slider_bounds(all_years, _current_year)
-all_teams = teams_from_frame(metrics)
-_status = artifact_status(_FILES)
+all_years = sorted(metrics["year_id"].dropna().astype(int).unique().tolist())
+_slider_max = compute_slider_max(all_years, _current_year)
+all_teams = sorted(metrics["team_name"].dropna().unique().tolist())
 
 
 def _season_picker(key: str = "season", default_latest: bool = True) -> int | None:
@@ -517,11 +530,12 @@ st.sidebar.markdown(
 # ══════════════════════════════════════════════════════════════════════════════
 # 1. OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════════
-def page_overview() -> None:
-    _page_header("Overview")
-    if metrics is None:
-        _empty("metrics")
-        return
+def page_league_snapshot() -> None:
+    st.title("League Snapshot")
+    st.caption(
+        "Full sortable team table for any season. Team WAR is Baseball-Reference rWAR "
+        "rolled up from players (`war_source=real`); Lahman wOBA/FIP approx is the fallback."
+    )
 
     col_nav, col_lg = st.columns([3, 1])
     with col_nav:
@@ -599,8 +613,8 @@ def page_overview() -> None:
     table_cols = [
         "rank", "team_name", "league_id", "wins", "losses", "run_diff", "pythag_wins", "pythag_gap",
         "payroll", "payroll_per_win", "wins_per_10m",
-        "team_total_war", "cost_per_war", "surplus_value",
-        "efficiency_label", "gini_salary", "dead_money_share", "window_phase",
+        "team_total_war", "war_source", "cost_per_war", "surplus_value",
+        "gini_salary", "dead_money_share", "window_phase",
     ]
     with rank_tab:
         st.caption("Sorted by surplus value, then wins per $10M. Click a header to re-sort.")
@@ -653,8 +667,13 @@ def page_overview() -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. ROSTER LAB
 # ══════════════════════════════════════════════════════════════════════════════
-def page_roster_lab() -> None:
-    _page_header("Roster Lab")
+def page_player_explorer() -> None:
+    st.title("Player Explorer")
+    st.caption(
+        "All player stats for any season. WAR is Baseball-Reference rWAR when the "
+        "player-season maps (`war_source=real`); otherwise the Lahman approximation."
+    )
+
     players = _load("players")
     sr_players = _load("sr_players")
     if players is None:
@@ -676,8 +695,9 @@ def page_roster_lab() -> None:
     with f4:
         name_search = st.text_input("Search player name", key="pe_name", placeholder="e.g. Judge")
     with f5:
-        sort_col_opts = [c for c in ["player_war", "salary", "surplus_value", "batting_war", "pitching_war", "pa", "hr", "ip", "era", "fip", "woba"] if c in players.columns]
-        sort_by = st.selectbox("Sort by", sort_col_opts, format_func=metric_label, key="pe_sort")
+        sort_col_opts = ["player_war", "salary", "surplus_value", "batting_war", "pitching_war", "pa", "hr", "ip", "era", "fip", "woba", "war_source"]
+        sort_col_opts = [c for c in sort_col_opts if c in players.columns]
+        sort_by = st.selectbox("Sort by", sort_col_opts, key="pe_sort")
 
     _salary_note(year)
     filt = players[players["year_id"] == year].copy() if year is not None else players.copy()
@@ -713,20 +733,23 @@ def page_roster_lab() -> None:
             fig.update_traces(marker=_SCATTER_MARKER)
             _chart(fig, height=420)
 
-    tab_bat, tab_pit, tab_contract, tab_all = st.tabs(["Batting", "Pitching", "Contract", "All Stats"])
-    has_name_collision = "name_full" in filt.columns and filt.duplicated("name_full", keep=False).any()
-    id_col = ["player_id"] if has_name_collision and "player_id" in filt.columns else []
+    # Detect same-name players in the current filtered view so we can show player_id
+    has_name_collision = (
+        "name_full" in filt.columns
+        and filt.duplicated("name_full", keep=False).any()
+    )
+    id_col = player_id_columns_for_duplicate_names(filt)
     if has_name_collision:
         st.caption("Multiple players share a name in this view — the Player ID column distinguishes them.")
 
-    bat_cols = id_col + ["name_full", "team_name", "player_type", "pa", "hr", "bb", "woba", "batting_war"]
-    pit_cols = id_col + ["name_full", "team_name", "player_type", "ip", "era", "fip", "pitching_war"]
-    contract_cols = id_col + ["name_full", "team_name", "player_type", "player_war", "salary", "surplus_value", "contract_label"]
+    bat_cols = id_col + ["name_full", "team_name", "player_type", "pa", "hr", "bb", "woba", "batting_war", "war_source"]
+    pit_cols = id_col + ["name_full", "team_name", "player_type", "ip", "era", "fip", "pitching_war", "war_source"]
+    contract_cols = id_col + ["name_full", "team_name", "player_type", "player_war", "war_source", "salary", "surplus_value", "contract_label"]
     all_cols = [c for c in (id_col + [
         "name_full", "team_name", "player_type",
         "pa", "hr", "bb", "woba", "batting_war",
         "ip", "era", "fip", "pitching_war",
-        "player_war", "salary", "surplus_value", "contract_label",
+        "player_war", "war_source", "salary", "surplus_value", "contract_label",
     ]) if c in filt.columns]
 
     with tab_bat:
@@ -827,7 +850,7 @@ def page_team_deep_dive() -> None:
     hist_cols = [c for c in [
         "year_id", "wins", "losses", "run_diff", "pythag_wins", "pythag_gap",
         "payroll", "payroll_per_win", "wins_per_10m",
-        "team_total_war", "cost_per_war", "surplus_value",
+        "team_total_war", "war_source", "cost_per_war", "surplus_value",
         "gini_salary", "dead_money_share", "window_phase",
     ] if c in team_history.columns]
     _show_table(
@@ -877,26 +900,23 @@ def page_team_deep_dive() -> None:
 
     st.subheader(f"Roster — {year if year is not None else '—'}")
     players = _load("players")
-    if players is None:
-        _empty("players")
-        return
-    roster = players[players["year_id"] == year] if year is not None else players.iloc[0:0]
-    if "team_name" in roster.columns:
-        roster = roster[roster["team_name"] == team]
-    if roster.empty:
-        st.info("No player data for this team/season.")
-        return
-    roster_id = ["player_id"] if roster.duplicated("name_full", keep=False).any() and "player_id" in roster.columns else []
-    roster_cols = [c for c in (roster_id + [
-        "name_full", "player_type", "pa", "hr", "bb", "woba", "batting_war",
-        "ip", "era", "fip", "pitching_war",
-        "player_war", "salary", "surplus_value", "contract_label",
-    ]) if c in roster.columns]
-    _show_table(
-        scale_money_columns(roster[roster_cols]).sort_values("player_war", ascending=False).reset_index(drop=True),
-        _PLAYER_COL_CFG,
-        height=500,
-    )
+    if players is not None:
+        roster = players[(players["year_id"] == year)]
+        if "team_name" in roster.columns:
+            roster = roster[roster["team_name"] == team]
+        if not roster.empty:
+            roster_id = player_id_columns_for_duplicate_names(roster)
+            roster_cols = [c for c in (roster_id + [
+                "name_full", "player_type", "pa", "hr", "bb", "woba", "batting_war",
+                "ip", "era", "fip", "pitching_war",
+                "player_war", "war_source", "salary", "surplus_value", "contract_label",
+            ]) if c in roster.columns]
+            _show_table(
+                _scale_payroll(roster[roster_cols]).sort_values("player_war", ascending=False).reset_index(drop=True),
+                _PLAYER_COL_CFG, height=500,
+            )
+        else:
+            st.info("No player data for this team/season.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -977,8 +997,13 @@ def page_compare_teams() -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 # 5. CONTRACT WATCH
 # ══════════════════════════════════════════════════════════════════════════════
-def page_contract_watch() -> None:
-    _page_header("Contract Watch")
+def page_contract_analysis() -> None:
+    st.title("Contract Analysis")
+    st.caption(
+        "Every player contract, classified and searchable. Salary data from Lahman (through 2016). "
+        "Surplus value uses Baseball-Reference rWAR when `war_source=real`."
+    )
+
     players = _load("players")
     if players is None:
         _empty("players")
@@ -1011,7 +1036,7 @@ def page_contract_watch() -> None:
 
     contract_cols = [c for c in [
         "name_full", "year_id", "team_name", "player_type",
-        "player_war", "salary", "surplus_value", "contract_label",
+        "player_war", "war_source", "salary", "surplus_value", "contract_label",
         "batting_war", "pitching_war", "pa", "ip",
     ] if c in filt.columns]
     tabs = st.tabs(["All Contracts", "Surplus Value", "Overpaid", "Dead Money", "Fair Value"])

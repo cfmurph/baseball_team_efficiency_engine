@@ -65,8 +65,9 @@ CREATE OR REPLACE TABLE fact_player_season (
     era             DOUBLE,
     pitching_war    DOUBLE,
 
-    -- Combined
+    -- Combined (effective: BR rWAR when present, else Lahman approx)
     player_war      DOUBLE,
+    war_source      VARCHAR,     -- 'real' | 'approx'
     salary          DOUBLE,
     surplus_value   DOUBLE,
     contract_label  VARCHAR,
@@ -97,10 +98,11 @@ CREATE OR REPLACE TABLE fact_team_season (
     base_runs           DOUBLE,
     base_runs_gap       DOUBLE,
 
-    -- WAR
+    -- WAR (rolled up from effective player WAR)
     team_batting_war    DOUBLE,
     team_pitching_war   DOUBLE,
     team_total_war      DOUBLE,
+    war_source          VARCHAR,     -- 'real' | 'approx' | 'mixed'
     war_win_gap         DOUBLE,
 
     -- Payroll
