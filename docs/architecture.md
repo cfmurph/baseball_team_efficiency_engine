@@ -12,7 +12,8 @@ Turn a simple historical baseball CSV merge into an analytics platform that can 
 ## Layers
 
 ### 1. Ingestion
-- Pull raw CSVs into `data/raw`
+- Pull raw Lahman CSVs into `data/raw` (`pull_sources`)
+- Pull Baseball-Reference rWAR text files (`pull_war`) — optional; warehouse falls back to approx
 - Maintain one file per source
 - Preserve raw column names for traceability
 

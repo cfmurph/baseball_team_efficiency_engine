@@ -34,6 +34,7 @@ SELECT
     f.team_batting_war,
     f.team_pitching_war,
     f.team_total_war,
+    f.war_source,
     f.war_win_gap,
     f.payroll,
     f.max_salary,
@@ -89,6 +90,10 @@ SELECT
     AVG(CASE WHEN p.ip > 0 THEN p.era END) AS era,
     SUM(p.pitching_war)                 AS pitching_war,
     SUM(p.player_war)                   AS player_war,
+    CASE
+        WHEN COUNT(DISTINCT p.war_source) = 1 THEN MIN(p.war_source)
+        ELSE 'mixed'
+    END                                 AS war_source,
 
     SUM(p.salary)                       AS salary,
     SUM(p.surplus_value)                AS surplus_value,

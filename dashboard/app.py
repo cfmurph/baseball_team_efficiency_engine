@@ -376,6 +376,7 @@ _TEAM_COL_CFG = {
     "payroll_per_win":   st.column_config.NumberColumn("$/Win ($M)", format="$%.2fM"),
     "wins_per_10m":      st.column_config.NumberColumn("W/$10M", format="%.2f"),
     "team_total_war":    st.column_config.NumberColumn("Team WAR", format="%.1f"),
+    "war_source":        st.column_config.TextColumn("WAR source"),
     "cost_per_war":      st.column_config.NumberColumn("$/WAR ($M)", format="$%.2fM"),
     "war_per_1m":        st.column_config.NumberColumn("WAR/$1M", format="%.2f"),
     "surplus_value":     st.column_config.NumberColumn("Surplus ($M)", format="$%.1fM"),
@@ -404,6 +405,7 @@ _PLAYER_COL_CFG = {
     "batting_war":     st.column_config.NumberColumn("bWAR", format="%.1f"),
     "pitching_war":    st.column_config.NumberColumn("pWAR", format="%.1f"),
     "player_war":      st.column_config.NumberColumn("WAR", format="%.1f"),
+    "war_source":      st.column_config.TextColumn("WAR source"),
     "salary":          st.column_config.NumberColumn("Salary ($M)", format="$%.2fM"),
     "surplus_value":   st.column_config.NumberColumn("Surplus ($M)", format="$%.2fM"),
     "contract_label":  st.column_config.TextColumn("Contract"),
@@ -467,6 +469,7 @@ if metrics is None:
     st.error(
         "No artifacts found. Run the full pipeline first:\n\n"
         "```\npython3 -m pipeline.extract.pull_sources\n"
+        "python3 -m pipeline.extract.pull_war\n"
         "python3 -m pipeline.transform.build_warehouse\n"
         "python3 -m pipeline.transform.build_metrics\n"
         "python3 -m models.train_win_model\n"
@@ -525,7 +528,10 @@ page = st.sidebar.radio("", PAGES, label_visibility="collapsed")
 # ══════════════════════════════════════════════════════════════════════════════
 def page_league_snapshot() -> None:
     st.title("League Snapshot")
-    st.caption("Full sortable team table for any season. Click any column header to sort.")
+    st.caption(
+        "Full sortable team table for any season. Team WAR is Baseball-Reference rWAR "
+        "rolled up from players (`war_source=real`); Lahman wOBA/FIP approx is the fallback."
+    )
 
     col_nav, col_lg = st.columns([3, 1])
     with col_nav:
@@ -559,7 +565,7 @@ def page_league_snapshot() -> None:
     table_cols = [
         "team_name", "league_id", "wins", "losses", "run_diff", "pythag_wins", "pythag_gap",
         "payroll", "payroll_per_win", "wins_per_10m",
-        "team_total_war", "cost_per_war", "surplus_value",
+        "team_total_war", "war_source", "cost_per_war", "surplus_value",
         "gini_salary", "dead_money_share", "window_phase",
     ]
     table_cols = [c for c in table_cols if c in season.columns]
@@ -588,7 +594,10 @@ def page_league_snapshot() -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 def page_player_explorer() -> None:
     st.title("Player Explorer")
-    st.caption("All player stats for any season. Filter, search, and sort.")
+    st.caption(
+        "All player stats for any season. WAR is Baseball-Reference rWAR when the "
+        "player-season maps (`war_source=real`); otherwise the Lahman approximation."
+    )
 
     players = _load("players")
     sr_players = _load("sr_players")
@@ -613,7 +622,7 @@ def page_player_explorer() -> None:
     with f4:
         name_search = st.text_input("Search player name", key="pe_name", placeholder="e.g. Judge")
     with f5:
-        sort_col_opts = ["player_war", "salary", "surplus_value", "batting_war", "pitching_war", "pa", "hr", "ip", "era", "fip", "woba"]
+        sort_col_opts = ["player_war", "salary", "surplus_value", "batting_war", "pitching_war", "pa", "hr", "ip", "era", "fip", "woba", "war_source"]
         sort_col_opts = [c for c in sort_col_opts if c in players.columns]
         sort_by = st.selectbox("Sort by", sort_col_opts, key="pe_sort")
 
@@ -644,14 +653,14 @@ def page_player_explorer() -> None:
 
     _PLAYER_COL_CFG["player_id"] = st.column_config.TextColumn("Player ID")
 
-    bat_cols = id_col + ["name_full", "team_name", "player_type", "pa", "hr", "bb", "woba", "batting_war"]
-    pit_cols = id_col + ["name_full", "team_name", "player_type", "ip", "era", "fip", "pitching_war"]
-    contract_cols = id_col + ["name_full", "team_name", "player_type", "player_war", "salary", "surplus_value", "contract_label"]
+    bat_cols = id_col + ["name_full", "team_name", "player_type", "pa", "hr", "bb", "woba", "batting_war", "war_source"]
+    pit_cols = id_col + ["name_full", "team_name", "player_type", "ip", "era", "fip", "pitching_war", "war_source"]
+    contract_cols = id_col + ["name_full", "team_name", "player_type", "player_war", "war_source", "salary", "surplus_value", "contract_label"]
     all_cols = [c for c in (id_col + [
         "name_full", "team_name", "player_type",
         "pa", "hr", "bb", "woba", "batting_war",
         "ip", "era", "fip", "pitching_war",
-        "player_war", "salary", "surplus_value", "contract_label",
+        "player_war", "war_source", "salary", "surplus_value", "contract_label",
     ]) if c in filt.columns]
 
     with tab_bat:
@@ -748,7 +757,7 @@ def page_team_profile() -> None:
     hist_cols = [
         "year_id", "wins", "losses", "run_diff", "pythag_wins", "pythag_gap",
         "payroll", "payroll_per_win", "wins_per_10m",
-        "team_total_war", "cost_per_war", "surplus_value",
+        "team_total_war", "war_source", "cost_per_war", "surplus_value",
         "gini_salary", "dead_money_share", "window_phase",
     ]
     hist_cols = [c for c in hist_cols if c in team_history.columns]
@@ -787,7 +796,7 @@ def page_team_profile() -> None:
             roster_cols = [c for c in (roster_id + [
                 "name_full", "player_type", "pa", "hr", "bb", "woba", "batting_war",
                 "ip", "era", "fip", "pitching_war",
-                "player_war", "salary", "surplus_value", "contract_label",
+                "player_war", "war_source", "salary", "surplus_value", "contract_label",
             ]) if c in roster.columns]
             _show_table(
                 _scale_payroll(roster[roster_cols]).sort_values("player_war", ascending=False).reset_index(drop=True),
@@ -869,7 +878,10 @@ def page_season_compare() -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 def page_contract_analysis() -> None:
     st.title("Contract Analysis")
-    st.caption("Every player contract, classified and searchable. Salary data from Lahman (through 2016).")
+    st.caption(
+        "Every player contract, classified and searchable. Salary data from Lahman (through 2016). "
+        "Surplus value uses Baseball-Reference rWAR when `war_source=real`."
+    )
 
     players = _load("players")
     if players is None:
@@ -898,7 +910,7 @@ def page_contract_analysis() -> None:
 
     contract_cols = [c for c in [
         "name_full", "year_id", "team_name", "player_type",
-        "player_war", "salary", "surplus_value", "contract_label",
+        "player_war", "war_source", "salary", "surplus_value", "contract_label",
         "batting_war", "pitching_war", "pa", "ip",
     ] if c in filt.columns]
 
