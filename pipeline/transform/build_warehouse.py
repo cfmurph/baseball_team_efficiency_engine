@@ -25,7 +25,15 @@ from src.baseball_analytics.metrics import (
     payroll_underperformer_share,
     detect_team_window,
 )
-from src.baseball_analytics.war import batting_war, pitching_war, team_war_totals, base_runs
+from src.baseball_analytics.war import (
+    apply_real_war,
+    batting_war,
+    base_runs,
+    load_real_war,
+    pitching_war,
+    team_war_from_players,
+    team_war_totals,
+)
 
 log = logging.getLogger(__name__)
 app = typer.Typer(add_completion=False)
@@ -107,6 +115,7 @@ def build_fact_player_season(
     pitching: pd.DataFrame,
     salaries: pd.DataFrame,
     min_year: int,
+    real_war: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     import numpy as np  # noqa: F401
     bat_war = batting_war(batting[batting["yearID"] >= min_year])
@@ -134,6 +143,9 @@ def build_fact_player_season(
     player_df["batting_war"] = player_df["batting_war"].fillna(0)
     player_df["pitching_war"] = player_df["pitching_war"].fillna(0)
     player_df["player_war"] = player_df["batting_war"] + player_df["pitching_war"]
+
+    # Overlay Baseball-Reference rWAR when the extract is present
+    player_df = apply_real_war(player_df, real_war)
 
     # Attach salary
     sal = (
@@ -164,7 +176,7 @@ def build_fact_player_season(
         "player_id", "season_key", "team_id", "player_type",
         "pa", "hr", "bb", "woba", "batting_war",
         "ip", "fip", "era", "pitching_war",
-        "player_war", "salary", "surplus_value", "contract_label",
+        "player_war", "war_source", "salary", "surplus_value", "contract_label",
     ]
     out_cols = [c for c in out_cols if c in player_df.columns]
     return player_df[out_cols]
@@ -180,6 +192,7 @@ def build_fact_team_season(
     batting: pd.DataFrame,
     pitching: pd.DataFrame,
     min_year: int,
+    player_season: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     import numpy as np  # local import so module is importable without numpy side effects
 
@@ -208,11 +221,18 @@ def build_fact_team_season(
         if drop_col in salary_shares.columns:
             salary_shares = salary_shares.drop(columns=[drop_col])
 
-    # ---- WAR aggregates ----
-    bat_war_df = batting_war(batting[batting["yearID"] >= min_year])
-    pit_war_df = pitching_war(pitching[pitching["yearID"] >= min_year])
-    war_team = team_war_totals(bat_war_df, pit_war_df)
-    war_team = war_team.rename(columns={"yearID": "yearID_war", "teamID": "teamID_war"})
+    # ---- WAR aggregates (prefer effective player WAR so team == player rollup) ----
+    if player_season is not None and not player_season.empty:
+        war_team = team_war_from_players(player_season)
+        war_team = war_team.rename(columns={"yearID": "yearID_war", "teamID": "teamID_war"})
+        bat_war_df = None
+        pit_war_df = None
+    else:
+        bat_war_df = batting_war(batting[batting["yearID"] >= min_year])
+        pit_war_df = pitching_war(pitching[pitching["yearID"] >= min_year])
+        war_team = team_war_totals(bat_war_df, pit_war_df)
+        war_team = war_team.rename(columns={"yearID": "yearID_war", "teamID": "teamID_war"})
+        war_team["war_source"] = "approx"
 
     # ---- BaseRuns from batting aggregate ----
     bat_team = (
@@ -249,18 +269,24 @@ def build_fact_team_season(
     )
 
     # ---- Player-level dead money share ----
-    bat_war_merged = bat_war_df.merge(
-        sal_filtered[["yearID", "teamID", "playerID", "salary"]],
-        on=["yearID", "teamID", "playerID"],
-        how="left",
-    ).rename(columns={"batting_war": "player_war"})
-    pit_war_merged = pit_war_df.merge(
-        sal_filtered[["yearID", "teamID", "playerID", "salary"]],
-        on=["yearID", "teamID", "playerID"],
-        how="left",
-    ).rename(columns={"pitching_war": "player_war"})
-    all_players = pd.concat([bat_war_merged, pit_war_merged], ignore_index=True)
-    all_players["salary"] = all_players["salary"].fillna(0)
+    if player_season is not None and not player_season.empty:
+        all_players = player_season.rename(
+            columns={"season_key": "yearID", "team_id": "teamID", "player_id": "playerID"}
+        ).copy()
+        all_players["salary"] = all_players["salary"].fillna(0)
+    else:
+        bat_war_merged = bat_war_df.merge(
+            sal_filtered[["yearID", "teamID", "playerID", "salary"]],
+            on=["yearID", "teamID", "playerID"],
+            how="left",
+        ).rename(columns={"batting_war": "player_war"})
+        pit_war_merged = pit_war_df.merge(
+            sal_filtered[["yearID", "teamID", "playerID", "salary"]],
+            on=["yearID", "teamID", "playerID"],
+            how="left",
+        ).rename(columns={"pitching_war": "player_war"})
+        all_players = pd.concat([bat_war_merged, pit_war_merged], ignore_index=True)
+        all_players["salary"] = all_players["salary"].fillna(0)
 
     dead_money = (
         all_players
@@ -331,7 +357,7 @@ def build_fact_team_season(
         "wins", "losses", "games", "runs_scored", "runs_allowed", "strikeouts", "attendance",
         "run_diff", "pythag_wins", "pythag_gap",
         "base_runs", "base_runs_gap",
-        "team_batting_war", "team_pitching_war", "team_total_war", "war_win_gap",
+        "team_batting_war", "team_pitching_war", "team_total_war", "war_source", "war_win_gap",
         "payroll", "max_salary", "median_salary",
         "top_1_salary_share", "top_3_salary_share", "top_5_salary_share", "gini_salary", "dead_money_share",
         "payroll_per_win", "wins_per_10m", "run_diff_per_10m",
@@ -374,11 +400,21 @@ def build_all(settings: dict) -> tuple[pd.DataFrame, ...]:
     log.info("Building fact_salary")
     fact_salary = build_fact_salary(salaries, min_year)
 
+    team_map_path = (settings.get("war_sources") or {}).get(
+        "team_map", "data/crosswalks/br_team_map.csv"
+    )
+    log.info("Loading real WAR (Baseball-Reference rWAR)")
+    real_war = load_real_war(raw_dir, people, min_year, team_map_path=team_map_path)
+
     log.info("Building fact_player_season")
-    fact_player_season = build_fact_player_season(batting, pitching, salaries, min_year)
+    fact_player_season = build_fact_player_season(
+        batting, pitching, salaries, min_year, real_war=real_war
+    )
 
     log.info("Building fact_team_season")
-    fact_team_season = build_fact_team_season(teams, salaries, batting, pitching, min_year)
+    fact_team_season = build_fact_team_season(
+        teams, salaries, batting, pitching, min_year, player_season=fact_player_season
+    )
 
     return dim_team, dim_season, dim_player, fact_salary, fact_player_season, fact_team_season
 
