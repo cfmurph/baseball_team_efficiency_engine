@@ -231,4 +231,112 @@ CREATE OR REPLACE TABLE fact_sr_injuries (
     fetched_at      TIMESTAMP,
     PRIMARY KEY (sr_player_id, start_date)
 );
+
+-- ----------------------------------------------------------------
+-- MLB Stats API: Team ID crosswalk (MLB id ↔ Lahman teamID)
+-- ----------------------------------------------------------------
+CREATE OR REPLACE TABLE dim_mlb_team_map (
+    mlb_team_id      INTEGER PRIMARY KEY,
+    mlb_abbr         VARCHAR,
+    mlb_name         VARCHAR,
+    league_id        INTEGER,
+    lahman_team_id   VARCHAR,
+    lahman_franch_id VARCHAR
+);
+
+-- ----------------------------------------------------------------
+-- MLB Stats API: Player ID crosswalk (MLB id ↔ Lahman playerID)
+-- ----------------------------------------------------------------
+CREATE OR REPLACE TABLE dim_mlb_player_map (
+    mlb_player_id    INTEGER PRIMARY KEY,
+    lahman_player_id VARCHAR,
+    player_name      VARCHAR
+);
+
+-- ----------------------------------------------------------------
+-- MLB Stats API: Team season (standings + hitting/pitching)
+-- No WAR columns — BR rWAR remains the WAR source of truth.
+-- ----------------------------------------------------------------
+CREATE OR REPLACE TABLE fact_mlb_team_season (
+    mlb_team_id      INTEGER,
+    season_year      INTEGER,
+    lahman_team_id   VARCHAR,
+    team_name        VARCHAR,
+    wins             INTEGER,
+    losses           INTEGER,
+    games            INTEGER,
+    runs_scored      INTEGER,
+    runs_allowed     INTEGER,
+    run_diff         INTEGER,
+    winning_pct      DOUBLE,
+    batting_hits     INTEGER,
+    batting_hr       INTEGER,
+    batting_bb       INTEGER,
+    batting_so       INTEGER,
+    avg              DOUBLE,
+    obp              DOUBLE,
+    slg              DOUBLE,
+    ops              DOUBLE,
+    ip               DOUBLE,
+    era              DOUBLE,
+    whip             DOUBLE,
+    pitching_so      INTEGER,
+    pitching_bb      INTEGER,
+    as_of_date       VARCHAR,
+    PRIMARY KEY (mlb_team_id, season_year)
+);
+
+-- ----------------------------------------------------------------
+-- MLB Stats API: Player season (hitting + pitching)
+-- Grain: player × year × team. No WAR columns.
+-- ----------------------------------------------------------------
+CREATE OR REPLACE TABLE fact_mlb_player_season (
+    mlb_player_id    INTEGER,
+    season_year      INTEGER,
+    mlb_team_id      INTEGER,
+    lahman_player_id VARCHAR,
+    lahman_team_id   VARCHAR,
+    player_name      VARCHAR,
+    player_type      VARCHAR,
+    games            INTEGER,
+    pa               DOUBLE,
+    ab               DOUBLE,
+    hits             DOUBLE,
+    hr               DOUBLE,
+    bb               DOUBLE,
+    so               DOUBLE,
+    avg              DOUBLE,
+    obp              DOUBLE,
+    slg              DOUBLE,
+    ops              DOUBLE,
+    ip               DOUBLE,
+    era              DOUBLE,
+    whip             DOUBLE,
+    pitching_so      DOUBLE,
+    pitching_bb      DOUBLE,
+    as_of_date       VARCHAR,
+    PRIMARY KEY (mlb_player_id, season_year, mlb_team_id)
+);
+
+-- ----------------------------------------------------------------
+-- MLB Stats API: Games (schedule + scores)
+-- ----------------------------------------------------------------
+CREATE OR REPLACE TABLE fact_mlb_game (
+    game_pk              INTEGER PRIMARY KEY,
+    game_date            DATE,
+    season_year          INTEGER,
+    status               VARCHAR,
+    venue_name           VARCHAR,
+    home_mlb_team_id     INTEGER,
+    away_mlb_team_id     INTEGER,
+    home_lahman_team_id  VARCHAR,
+    away_lahman_team_id  VARCHAR,
+    home_score           INTEGER,
+    away_score           INTEGER,
+    home_wins            INTEGER,
+    home_losses          INTEGER,
+    away_wins            INTEGER,
+    away_losses          INTEGER,
+    as_of_date           VARCHAR
+);
 """

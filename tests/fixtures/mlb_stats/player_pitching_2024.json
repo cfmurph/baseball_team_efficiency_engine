@@ -1,0 +1,34 @@
+{
+  "stats": [
+    {
+      "splits": [
+        {
+          "season": "2024",
+          "player": {"id": 605400, "fullName": "Aaron Nola"},
+          "team": {"id": 143, "name": "Philadelphia Phillies"},
+          "stat": {
+            "gamesPlayed": 33,
+            "inningsPitched": "199.1",
+            "era": "3.57",
+            "whip": "1.20",
+            "strikeOuts": 197,
+            "baseOnBalls": 50
+          }
+        },
+        {
+          "season": "2024",
+          "player": {"id": 660271, "fullName": "Shohei Ohtani"},
+          "team": {"id": 119, "name": "Los Angeles Dodgers"},
+          "stat": {
+            "gamesPlayed": 2,
+            "inningsPitched": "12.0",
+            "era": "2.25",
+            "whip": "0.92",
+            "strikeOuts": 16,
+            "baseOnBalls": 3
+          }
+        }
+      ]
+    }
+  ]
+}

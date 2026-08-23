@@ -29,6 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PIPELINE_STEPS: tuple[tuple[str, str], ...] = (
     ("pull_sources", "pipeline.extract.pull_sources"),
     ("pull_war", "pipeline.extract.pull_war"),
+    ("pull_mlb_stats", "pipeline.extract.pull_mlb_stats"),
     ("build_warehouse", "pipeline.transform.build_warehouse"),
     ("build_metrics", "pipeline.transform.build_metrics"),
     ("train_win_model", "models.train_win_model"),

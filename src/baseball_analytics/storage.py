@@ -66,6 +66,7 @@ REQUIRED_MANIFEST_FIELDS = (
 DEFAULT_PIPELINE_STEPS = (
     "pull_sources",
     "pull_war",
+    "pull_mlb_stats",
     "build_warehouse",
     "build_metrics",
     "train_win_model",

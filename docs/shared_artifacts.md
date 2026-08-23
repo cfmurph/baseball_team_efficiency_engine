@@ -46,6 +46,18 @@ s3://my-bucket/baseball-analytics/current/manifest.json
 Local pipeline output stays flat under `artifacts/` (plus `artifacts/fantasy/cards.jsonl`).
 The `runs/` + `current/` tree is the shared URI layout.
 
+MLB Stats API raw (#108) is a **sibling** of that published tree, not a second
+layout. See [mlb_stats.md](mlb_stats.md) and
+[ADR 0003](adr/0003-mlb-stats-api-ingest.md):
+
+```text
+{ARTIFACTS_URI}/raw/mlb_stats/{endpoint}/{as_of_date}/…json
+```
+
+`current/` is the published SoT. `latest/` is a deprecated one-release
+read-only fallback and will be dropped next release. Stats API raw does
+not use `latest/`.
+
 ## Configuration
 
 ```yaml

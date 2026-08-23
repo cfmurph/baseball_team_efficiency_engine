@@ -19,6 +19,7 @@ def test_pipeline_steps_match_documented_chain() -> None:
     assert [module for _, module in PIPELINE_STEPS] == [
         "pipeline.extract.pull_sources",
         "pipeline.extract.pull_war",
+        "pipeline.extract.pull_mlb_stats",
         "pipeline.transform.build_warehouse",
         "pipeline.transform.build_metrics",
         "models.train_win_model",
@@ -32,6 +33,14 @@ def test_pull_war_follows_pull_sources_in_nightly_steps() -> None:
     assert "pull_war" in names, "PIPELINE_STEPS omitted pull_war (would rebuild on approx WAR)"
     assert names.index("pull_war") == names.index("pull_sources") + 1
     assert dict(PIPELINE_STEPS)["pull_war"] == "pipeline.extract.pull_war"
+
+
+def test_pull_mlb_stats_follows_pull_war_in_nightly_steps() -> None:
+    """#108: Stats API extract is after rWAR and soft-fails; warehouse stays Lahman-capable."""
+    names = [name for name, _ in PIPELINE_STEPS]
+    assert names.index("pull_mlb_stats") == names.index("pull_war") + 1
+    assert dict(PIPELINE_STEPS)["pull_mlb_stats"] == "pipeline.extract.pull_mlb_stats"
+    assert names.index("build_warehouse") == names.index("pull_mlb_stats") + 1
 
 
 def test_step_command_forwards_config_path() -> None:
@@ -90,6 +99,7 @@ def test_run_pipeline_stops_after_first_failure(tmp_path) -> None:
     assert calls == [
         "pipeline.extract.pull_sources",
         "pipeline.extract.pull_war",
+        "pipeline.extract.pull_mlb_stats",
         "pipeline.transform.build_warehouse",
         "pipeline.transform.build_metrics",
     ]

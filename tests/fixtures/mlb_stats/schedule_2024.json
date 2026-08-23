@@ -1,0 +1,29 @@
+{
+  "dates": [
+    {
+      "date": "2024-08-23",
+      "games": [
+        {
+          "gamePk": 745460,
+          "season": "2024",
+          "officialDate": "2024-08-23",
+          "gameDate": "2024-08-23T22:40:00Z",
+          "status": {"detailedState": "Final", "abstractGameState": "Final"},
+          "venue": {"id": 31, "name": "PNC Park"},
+          "teams": {
+            "away": {
+              "team": {"id": 113, "name": "Cincinnati Reds"},
+              "score": 5,
+              "leagueRecord": {"wins": 62, "losses": 67}
+            },
+            "home": {
+              "team": {"id": 134, "name": "Pittsburgh Pirates"},
+              "score": 6,
+              "leagueRecord": {"wins": 61, "losses": 67}
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

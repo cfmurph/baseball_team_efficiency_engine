@@ -1,0 +1,24 @@
+{
+  "stats": [
+    {
+      "splits": [
+        {
+          "season": "2024",
+          "team": {"id": 147, "name": "New York Yankees"},
+          "stat": {
+            "gamesPlayed": 162,
+            "runs": 815,
+            "hits": 1378,
+            "homeRuns": 237,
+            "baseOnBalls": 688,
+            "strikeOuts": 1393,
+            "avg": ".248",
+            "obp": ".333",
+            "slg": ".429",
+            "ops": ".762"
+          }
+        }
+      ]
+    }
+  ]
+}

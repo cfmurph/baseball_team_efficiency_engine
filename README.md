@@ -20,6 +20,7 @@ A production-grade MLB analytics platform that turns Lahman baseball data into a
 Raw CSV / Lahman API
     → pipeline/extract/pull_sources.py
     → pipeline/extract/pull_war.py            (Baseball-Reference rWAR)
+    → pipeline/extract/pull_mlb_stats.py      (MLB Stats API majors; soft-fail)
     → pipeline/transform/build_warehouse.py   (DuckDB star schema + validation)
     → pipeline/transform/build_metrics.py     (CSV artifacts per analysis)
     → models/train_win_model.py               (LinearRegression + XGBoost + frontier)
@@ -35,6 +36,7 @@ config/                         YAML configuration (sources, modeling knobs, WAR
 pipeline/
   extract/pull_sources.py       Download Lahman CSVs
   extract/pull_war.py           Download Baseball-Reference rWAR (optional; approx fallback)
+  extract/pull_mlb_stats.py     MLB Stats API majors → versioned raw (soft-fail)
   transform/build_warehouse.py  Build star schema + WAR + metrics + validation
   transform/build_metrics.py    Export CSVs for team, player, contract analysis
 src/baseball_analytics/
@@ -73,6 +75,7 @@ artifacts/                      Output CSVs and plots (gitignored, generated at 
 | `fact_team_season` | team × season | team_total_war, war_source, cost_per_war, surplus_value, dead_money_share, base_runs, window_phase |
 | `fact_player_season` | player × season × team | batting_war, pitching_war, player_war, war_source, surplus_value, contract_label |
 | `fact_salary` | player × season × team | salary |
+| `fact_mlb_*` | Stats API team / player / game | MLB ids + Lahman bridges; **no WAR** |
 
 ## Key metrics
 
@@ -121,6 +124,7 @@ pip install -r requirements.txt
 # Full pipeline (runs in ~2–3 minutes)
 python3 -m pipeline.extract.pull_sources
 python3 -m pipeline.extract.pull_war
+python3 -m pipeline.extract.pull_mlb_stats
 python3 -m pipeline.transform.build_warehouse
 python3 -m pipeline.transform.build_metrics
 python3 -m models.train_win_model
@@ -136,14 +140,15 @@ Season, team, and league widgets share `st.session_state` keys `season_year`, `s
 
 ## Nightly refresh
 
-The six pipeline steps above are also wrapped by a fail-fast orchestrator:
+The pipeline steps above are also wrapped by a fail-fast orchestrator
+(`pull_mlb_stats` soft-fails so an API blip does not stop the nightly):
 
 ```bash
 python3 -m pipeline.run_nightly
 # optional: --config-path config/settings.yaml
 ```
 
-That command runs extract → rWAR extract → warehouse → metrics → win model → clustering in order, logs timing for each step, and **stops on the first non-zero exit** (later steps are named in the error and are not run). Use the same command locally whenever you want a full refresh.
+That command runs extract → rWAR extract → Stats API extract → warehouse → metrics → win model → clustering in order, logs timing for each step, and **stops on the first non-zero exit** (later steps are named in the error and are not run). Use the same command locally whenever you want a full refresh.
 
 GitHub Actions runs it overnight via `.github/workflows/nightly-refresh.yml`:
 
@@ -204,15 +209,16 @@ python3 -m pytest tests/test_dashboard_apptest.py tests/test_run_nightly.py test
 ```
 
 - **AppTest** — every sidebar page boots without exception (empty `artifacts/` is fine).
-- **Nightly contract** — `pull_war` stays in `PIPELINE_STEPS` immediately after `pull_sources`.
+- **Nightly contract** — `pull_war` stays in `PIPELINE_STEPS` immediately after `pull_sources`. `pull_mlb_stats` follows `pull_war` (soft-fail).
 - **Golden WAR** — Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023 stay `war_source=real` against committed fixtures. Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
 
 ## Data sources
 
 - **Lahman Baseball Database** via the [Rdatasets CDN](https://vincentarelbundock.github.io/Rdatasets/csv/Lahman/) — teams, people, batting, pitching, salaries (salary coverage ends ~2016).
 - **Baseball-Reference rWAR** — [war_daily_bat.txt](https://www.baseball-reference.com/data/war_daily_bat.txt) and [war_daily_pitch.txt](https://www.baseball-reference.com/data/war_daily_pitch.txt), 1871–present. Player IDs join through Lahman `People.bbrefID`; team IDs through `data/crosswalks/br_team_map.csv`. See [docs/war_sources.md](docs/war_sources.md).
+- **MLB Stats API** — public majors team / player / game feeds (no API key). Versioned raw under `{ARTIFACTS_URI}/raw/mlb_stats/{endpoint}/{as_of_date}/` or local `data/raw/mlb_stats/`. Warehouse loaders join via MLB ids + Lahman bridges. Soft-fail extract; Lahman-only warehouse if empty. Does not replace rWAR. See [docs/mlb_stats.md](docs/mlb_stats.md).
 
-Lahman extract (`pull_sources`) and WAR extract (`pull_war`) are separate. The warehouse builds without rWAR files and marks every row `war_source=approx`.
+Lahman extract (`pull_sources`) and WAR extract (`pull_war`) are separate. The warehouse builds without rWAR files and marks every row `war_source=approx`. The warehouse also builds without Stats API raw.
 
 ## High-value next additions
 
