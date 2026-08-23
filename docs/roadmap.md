@@ -26,7 +26,7 @@
 - [ ] Add CI/CD
 - [ ] Publish dashboard
 - [ ] Add API layer
-- [ ] Schedule refresh jobs
+- [x] Schedule refresh jobs
 
 ## Phase 5: Simulation
 - [ ] Payroll redistribution simulator

@@ -53,11 +53,12 @@ This is where metric logic becomes standardized and reusable:
 
 ### Current state
 - Local batch pipeline
-- Manual execution
+- Fail-fast nightly orchestrator (`python3 -m pipeline.run_nightly`)
+- GitHub Actions schedule at 08:00 UTC (2:00 AM Mountain Daylight Time)
 - File-based configuration
 
 ### Next production milestones
-1. Add orchestration with Prefect or Dagster.
+1. Add heavier orchestration (Prefect or Dagster) if the refresh outgrows Actions.
 2. Add source contracts and validation checks.
 3. Containerize with Docker.
 4. Persist warehouse in Postgres for shared use.
