@@ -4,9 +4,9 @@ warehouse_path: data/warehouse/baseball_analytics.duckdb
 raw_dir: data/raw
 staging_dir: data/staging
 artifacts_dir: artifacts
-# Shared object storage (S3-compatible: AWS S3 or Cloudflare R2).
+# Shared object storage (s3://, r2://, gs://, file://).
 # Leave empty to use local artifacts/ only. ARTIFACTS_URI env overrides this.
-# Layout: {uri}/{league}/{level}/{run_date|latest}/ — see docs/shared_artifacts.md
+# Layout: {uri}/runs/{run_id}/ + {uri}/current/ — see docs/adr/0001-shared-artifact-contract.md
 artifacts_uri: ""
 artifacts_partition:
   league: mlb

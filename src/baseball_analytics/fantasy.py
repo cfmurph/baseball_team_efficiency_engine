@@ -1,0 +1,92 @@
+"""Phase 0 fantasy card stub for the shared artifact lake.
+
+Locked path (architect SoT): ``fantasy/cards.jsonl`` under ``runs/{run_id}/``
+and ``current/``. ``as_of_date`` and ``schema_version`` live on each JSONL
+record and on ``manifest.json`` — never in the filename.
+
+``edge.war_source`` on card records is ``bbref`` | ``approx`` (warehouse
+``real`` maps to ``bbref``). An empty stub is valid until the #111 emitter.
+"""
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping
+import json
+from pathlib import Path
+
+FANTASY_CARDS_RELPATH = "fantasy/cards.jsonl"
+FANTASY_SCHEMA_VERSION = "1.0"
+FANTASY_WAR_SOURCES = frozenset({"bbref", "approx"})
+# Voided draft filename — never emit or consume.
+VOID_DATED_CARDS_PREFIX = "fantasy_cards_"
+RECOMMENDATION_TYPES = ("start", "sit", "pickup", "stream")
+
+
+def map_card_war_source(value: object) -> str:
+    """Map warehouse / alias values onto card ``edge.war_source``: ``bbref`` | ``approx``.
+
+    ``fangraphs`` is never emitted (no FG WAR ingest yet) and collapses to ``approx``.
+    """
+    text = str(value or "").strip().lower()
+    if text in {"real", "bbref"}:
+        return "bbref"
+    return "approx"
+
+
+def cards_record(
+    row: Mapping[str, object],
+    *,
+    as_of_date: str,
+    schema_version: str = FANTASY_SCHEMA_VERSION,
+) -> dict[str, object]:
+    """Build one JSONL record. ``edge.war_source`` is ``bbref`` | ``approx`` only."""
+    payload = dict(row)
+    payload["schema_version"] = schema_version
+    payload["as_of_date"] = as_of_date
+    edge = dict(payload.get("edge") or {})
+    raw_source = edge.get("war_source", payload.pop("war_source", None))
+    source = map_card_war_source(raw_source)
+    edge["war_source"] = source
+    edge["is_approx"] = source == "approx"
+    if "war" in payload and "war" not in edge:
+        edge["war"] = payload["war"]
+    if "vs_replacement" in payload and "vs_replacement" not in edge:
+        edge["vs_replacement"] = payload["vs_replacement"]
+    payload["edge"] = edge
+    return payload
+
+
+def render_cards_jsonl(
+    records: Iterable[Mapping[str, object]] | None = None,
+    *,
+    as_of_date: str,
+    schema_version: str = FANTASY_SCHEMA_VERSION,
+) -> str:
+    """Return JSONL text. Empty / omitted records yield an empty stub file."""
+    if not records:
+        return ""
+    lines = [
+        json.dumps(
+            cards_record(row, as_of_date=as_of_date, schema_version=schema_version),
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        for row in records
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def write_fantasy_cards_stub(
+    local_dir: str | Path,
+    *,
+    as_of_date: str,
+    schema_version: str = FANTASY_SCHEMA_VERSION,
+    records: Iterable[Mapping[str, object]] | None = None,
+) -> Path:
+    """Write ``fantasy/cards.jsonl`` under ``local_dir`` (empty stub by default)."""
+    dest = Path(local_dir) / FANTASY_CARDS_RELPATH
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(
+        render_cards_jsonl(records, as_of_date=as_of_date, schema_version=schema_version),
+        encoding="utf-8",
+    )
+    return dest

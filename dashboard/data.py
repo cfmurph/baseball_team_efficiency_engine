@@ -3,16 +3,17 @@
 Pages call named loaders only — never ``Path("artifacts")`` or raw CSV names.
 
 Resolution is ``resolve_artifact()`` from ``src.baseball_analytics.storage``
-(PR #109 / #105 contract):
+(#105 / ADR 0001 contract):
 
 1. Fresh disk cache under ``artifacts/.remote_cache/`` (TTL)
-2. ``{league}/{level}/latest/<file>`` when ``ARTIFACTS_URI`` is set
-3. Stale remote cache if the store is unreachable
-4. Local ``artifacts/<file>``
-5. Missing → ``None`` (pages show the existing empty-state card)
+2. ``current/<metrics|models|fantasy>/<file>`` when ``ARTIFACTS_URI`` is set
+3. Deprecated one-release compat: ``{league}/{level}/latest/<file>``
+4. Stale remote cache if the store is unreachable
+5. Local ``artifacts/<file>``
+6. Missing → ``None`` (pages show the existing empty-state card)
 
 ``ARTIFACTS_URI`` env overrides ``artifacts_uri`` in ``config/settings.yaml``.
-Schemes: ``s3://…`` and ``file:///…``.
+Schemes: ``s3://``, ``r2://``, ``gs://``, ``file://``.
 """
 from __future__ import annotations
 
@@ -50,7 +51,7 @@ def artifact_settings() -> ArtifactSettings:
 
 
 def source_label(settings: ArtifactSettings | None = None) -> str:
-    """Sidebar Source: ``local`` | ``shared s3://…`` | ``shared filesystem``."""
+    """Sidebar Source: ``remote`` | ``local`` | ``missing``."""
     return artifact_source_label(settings or artifact_settings())
 
 

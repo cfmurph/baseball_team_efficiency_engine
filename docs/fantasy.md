@@ -22,23 +22,15 @@ streamlit run dashboard/fantasy_app.py --server.port 8502 --server.headless true
 
 ## Card feed
 
-The shell reads **only** this lake key through `resolve_artifact()` / `ARTIFACTS_URI`:
+The shell reads published files through the same `resolve_artifact()` / `ARTIFACTS_URI` helpers as the FO dashboard.
 
-```text
-current/fantasy/cards.jsonl
-```
+**Locked path (schema 1.0):** `current/fantasy/cards.jsonl` — that is `fantasy/cards.jsonl` under the `current/` prefix.
 
-Same relative file under a dated run:
+Fallback only if that file is missing: `fantasy/cards.jsonl`, then `fantasy_cards_{as_of_date}.json`. If none exist the waitlist still works and labeled stub cards render.
 
-```text
-runs/{run_id}/fantasy/cards.jsonl
-```
+JSONL schema 1.0. `as_of_date` is on each record and `manifest.json`. `edge.war_source` is `bbref` or `approx` only. The lake file may be an empty stub until #111. Until that emitter publishes cards, the shell renders bundled stubs in `fantasy/stub_cards.jsonl` (pickup / stream / start / sit). `approx` rows set `is_approx: true` and show an **early model** badge.
 
-`fantasy_cards_{as_of_date}.json` is retired — do not emit or load it.
-
-Until #111 publishes `current/fantasy/cards.jsonl`, the shell renders bundled stubs in `fantasy/stub_cards.jsonl` (pickup / stream / start / sit). `edge.war_source` is `bbref` or `approx` only. `approx` rows set `is_approx: true` and show an **early model** badge.
-
-Local fallback path: `artifacts/current/fantasy/cards.jsonl`.
+Recommendation labels (schema v1.0): `start` → START, `sit` → BENCH, `pickup` → PICK UP, `stream` → STREAM.
 
 ## Soft-launch UX
 
