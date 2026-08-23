@@ -10,30 +10,29 @@ There is no HTTP API. Schemes: `s3://`, `r2://`, `gs://`, `file://`.
 ## Layout
 
 ```text
-{ARTIFACTS_URI}/
-  runs/{run_id}/
-    manifest.json
-    metrics/*.csv
-    models/*
-    fantasy/cards.jsonl
-  current/
-    manifest.json
-    metrics/*.csv
-    models/*
-    fantasy/cards.jsonl
+{league}/{level}/{run_date}/<relative-file>
+{league}/{level}/{run_date}/manifest.json
+{league}/{level}/latest/<relative-file>
+{league}/{level}/latest/manifest.json
 ```
 
-| Piece | Rule |
-|---|---|
-| `run_id` | `YYYYMMDDTHHMMSSZ` or `GITHUB_RUN_ID` / `ARTIFACTS_RUN_ID` |
-| `current/` | Written only after a fully successful nightly |
-| `runs/{run_id}/` | Immutable after first write |
-| `fantasy/cards.jsonl` | Fixed name. `as_of_date` is inside the manifest / records |
-| `manifest.json` | `schema_version`, `as_of_date`, `created_at`, `git_sha`, `pipeline_steps`, `war_source_summary`, `files[]` |
+`<relative-file>` is any path under local `artifacts/` (not only the top
+level). New product files are added beside today's CSVs — same URI and
+partition. See [ADR 0001](adr/0001-shared-artifact-layout.md).
 
-Readers still accept the retired `#109` prefix `{league}/{level}/latest/`
-for **one release** so already-published objects keep loading. `latest/` is
-**deprecated and will be dropped next release**. New publishes do not write it.
+Reserved for a Fantasy Phase 0 follow-up (not emitted by #105):
+
+```text
+{league}/{level}/{run_date}/fantasy/cards.jsonl
+{league}/{level}/latest/fantasy/cards.jsonl
+```
+
+| Segment | Current default | Future example |
+|---|---|---|
+| `league` | `mlb` | `milb` |
+| `level` | `mlb` | `aaa`, `aa`, `a+` |
+| `run_date` | UTC `YYYY-MM-DD` | `2026-08-23` |
+| `latest` | copy of the newest successful publish | dashboards always read this |
 
 Example with `ARTIFACTS_URI=s3://my-bucket/baseball-analytics`:
 

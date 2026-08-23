@@ -2,16 +2,17 @@
 
 Locked lake layout (``docs/adr/0001-shared-artifact-contract.md``)::
 
-    {ARTIFACTS_URI}/
-      runs/{run_id}/                 # immutable
-        manifest.json
-        metrics/*.csv
-        models/*
-        fantasy/cards.jsonl
-      current/                       # latest fully successful nightly
+    {league}/{level}/{run_date}/<relative-file>
+    {league}/{level}/latest/<relative-file>
+    {league}/{level}/latest/manifest.json
 
-Dashboard load order: ``current/`` → deprecated ``latest/`` (one release) →
-local ``artifacts/`` → empty. Source badge: ``remote`` | ``local`` | ``missing``.
+``<relative-file>`` is any path under local ``artifacts/`` (flat CSVs today;
+nested files are first-class). ``run_date`` is ``YYYY-MM-DD`` (UTC unless
+``ARTIFACTS_RUN_DATE`` is set). ``latest/`` is a copy of the most recent
+successful publish so dashboards do not need to list history. Future
+minor-league feeds use the same shape (e.g. ``milb/aaa/2026-08-23/``).
+Reserved (unpublished in this slice): ``fantasy/cards.jsonl``.
+See ``docs/adr/0001-shared-artifact-layout.md``.
 
 A brief read-only compat bridge still accepts the #109
 ``{league}/{level}/latest/`` prefix so already-published objects keep working.
@@ -178,9 +179,27 @@ def partition_key(league: str, level: str, run_date: str) -> str:
     )
 
 
+def relative_artifact_key(filename: str | Path) -> str:
+    """Return a partition-relative key (``foo.csv`` or ``dir/foo.csv``).
+
+    Absolute paths keep only the basename so existing dashboard ``Path``
+    objects keep working. Relative paths keep subdirectories so a later
+    file such as ``fantasy/cards.jsonl`` needs no URI redesign.
+    """
+    text = str(filename).replace("\\", "/").strip()
+    if not text:
+        raise ValueError("artifact filename is empty")
+    path = Path(text)
+    rel = path.name if path.is_absolute() else text.lstrip("/")
+    if rel.startswith("./"):
+        rel = rel[2:]
+    if not rel or rel.endswith("/") or ".." in Path(rel).parts:
+        raise ValueError(f"Invalid artifact filename: {filename!r}")
+    return rel
+
+
 def object_key(league: str, level: str, run_date: str, filename: str) -> str:
-    """Legacy #109 object key (compat bridge only)."""
-    return f"{partition_key(league, level, run_date)}/{_relpath(filename)}"
+    return f"{partition_key(league, level, run_date)}/{relative_artifact_key(filename)}"
 
 
 def default_as_of_date(
@@ -613,7 +632,7 @@ def resolve_named_artifacts(
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
     resolved: dict[str, Path | None] = {}
     for key, filename in files.items():
-        resolved[key] = resolve_artifact(str(filename), cfg, backend=backend, environ=environ)
+        resolved[key] = resolve_artifact(filename, cfg, backend=backend, environ=environ)
     return resolved
 
 

@@ -59,11 +59,9 @@ This is where metric logic becomes standardized and reusable:
 - GitHub Actions schedule at 08:00 UTC (2:00 AM Mountain Daylight Time)
 - Optional shared-lake publish (`ARTIFACTS_URI`) to `runs/{run_id}/` + `current/` with dashboard remote load + local fallback
 - File-based configuration
-- Optional S3-compatible artifact publish (`ARTIFACTS_URI`) with dashboard remote load + local fallback
+- Dashboard pages call `dashboard.data` named loaders; ARTIFACTS_URI is a loader swap, not a page rewrite
 
-See [shared_artifacts.md](shared_artifacts.md) for the `{league}/{level}/{run_date}` layout.
-
-See [adr/0001-shared-artifact-contract.md](adr/0001-shared-artifact-contract.md) for the locked layout and [shared_artifacts.md](shared_artifacts.md) for operator setup.
+See [shared_artifacts.md](shared_artifacts.md) and [ADR 0001](adr/0001-shared-artifact-layout.md) for the `{league}/{level}/{run_date}` layout (extra files such as a later `fantasy/cards.jsonl` use the same prefix).
 
 ### Next production milestones
 1. Add heavier orchestration (Prefect or Dagster) if the refresh outgrows Actions.
