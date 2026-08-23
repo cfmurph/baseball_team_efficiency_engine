@@ -45,8 +45,8 @@ The dashboard Source badge is exactly `remote` | `local` | `missing`.
 
 Path is `fantasy/cards.jsonl` under both `runs/{run_id}/` and `current/`.
 `as_of_date` and `schema_version` belong on `manifest.json` and on each JSONL
-record. `edge.war_source` is `bbref` | `approx` only. An empty stub is OK
-until the #111 emitter.
+record. `edge.war_source` is `bbref` | `approx` only. A small schema-valid
+sample (start / sit / pickup / stream) ships until the #111 emitter.
 
 ## Interface
 
