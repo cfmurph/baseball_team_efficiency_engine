@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import pytest
+
 from datetime import datetime, timezone
 from pathlib import Path
 
 from fantasy.copy import EMAIL_ERROR
 from fantasy.waitlist import capture_signup, normalize_email
+
+pytestmark = pytest.mark.unit
 
 
 def test_normalize_email_accepts_simple_addresses() -> None:

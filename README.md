@@ -196,21 +196,20 @@ Each section stays usable when its CSV is missing: the UI shows a short empty st
 
 ## Running tests
 
+Three layers (markers in `pytest.ini`). See [docs/testing.md](docs/testing.md) for the mapping and CI contract.
+
 ```bash
+python3 -m pytest -m unit -v
+python3 -m pytest -m integration -v
+python3 -m pytest -m e2e -v
+# or everything
 python3 -m pytest tests/ -v
 ```
 
-Unit tests covering: metrics helpers, approximate WAR, Baseball-Reference rWAR overlay + ID mapping, BaseRuns, contract classification, window detection, data validation checks.
+PRs to `master` run `.github/workflows/ci.yml` as three checks: **Unit tests**, **Integration tests**, **E2E tests**. That replaces the old `ci-smoke.yml` job. Smoke coverage is preserved:
 
-CI smokes on PRs to `master` (`.github/workflows/ci-smoke.yml`):
-
-```bash
-python3 -m pytest tests/test_dashboard_apptest.py tests/test_run_nightly.py tests/test_golden_war.py -v
-```
-
-- **AppTest** — every sidebar page boots without exception (empty `artifacts/` is fine).
-- **Nightly contract** — `pull_war` stays in `PIPELINE_STEPS` immediately after `pull_sources`. `pull_mlb_stats` follows `pull_war` (soft-fail).
-- **Golden WAR** — Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023 stay `war_source=real` against committed fixtures. Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
+- **E2E** — AppTest every sidebar page (empty `artifacts/` is fine) + golden WAR (Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023, `war_source=real`). Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
+- **Integration** — nightly `PIPELINE_STEPS` keeps `pull_war` immediately after `pull_sources` and `pull_mlb_stats` after `pull_war` (soft-fail). Warehouse / storage / fantasy emitter / Stats API ingest use fixtures or `file://` only.
 
 ## Data sources
 

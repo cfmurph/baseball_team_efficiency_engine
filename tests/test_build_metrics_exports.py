@@ -10,6 +10,8 @@ from pipeline.transform.build_metrics import (
     enrich_player_season_phase0,
 )
 
+pytestmark = pytest.mark.integration
+
 
 def test_efficiency_labels_bucket_wins_per_10m() -> None:
     df = pd.DataFrame({"wins_per_10m": [0.3, 0.8, 1.2, 2.0]})

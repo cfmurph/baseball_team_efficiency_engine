@@ -19,6 +19,8 @@ from src.baseball_analytics.war import (
     team_war_from_players,
 )
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture
 def team_map(tmp_path: Path) -> Path:

@@ -6,6 +6,8 @@ import pytest
 
 from pipeline.transform.build_metrics import _PLAYER_QUERY
 
+pytestmark = pytest.mark.integration
+
 
 def _register_player_query_tables(con: duckdb.DuckDBPyConnection) -> None:
     player_rows = pd.DataFrame(

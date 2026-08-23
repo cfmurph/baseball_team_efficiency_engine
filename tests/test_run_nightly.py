@@ -14,6 +14,8 @@ from pipeline.run_nightly import (
     run_pipeline,
 )
 
+pytestmark = pytest.mark.integration
+
 
 def test_pipeline_steps_match_documented_chain() -> None:
     assert [module for _, module in PIPELINE_STEPS] == [
@@ -26,7 +28,6 @@ def test_pipeline_steps_match_documented_chain() -> None:
         "models.cluster_teams",
     ]
 
-
 def test_pull_war_follows_pull_sources_in_nightly_steps() -> None:
     """#110 contract: nightly refresh must download rWAR after Lahman extract."""
     names = [name for name, _ in PIPELINE_STEPS]
@@ -34,14 +35,12 @@ def test_pull_war_follows_pull_sources_in_nightly_steps() -> None:
     assert names.index("pull_war") == names.index("pull_sources") + 1
     assert dict(PIPELINE_STEPS)["pull_war"] == "pipeline.extract.pull_war"
 
-
 def test_pull_mlb_stats_follows_pull_war_in_nightly_steps() -> None:
     """#108: Stats API extract is after rWAR and soft-fails; warehouse stays Lahman-capable."""
     names = [name for name, _ in PIPELINE_STEPS]
     assert names.index("pull_mlb_stats") == names.index("pull_war") + 1
     assert dict(PIPELINE_STEPS)["pull_mlb_stats"] == "pipeline.extract.pull_mlb_stats"
     assert names.index("build_warehouse") == names.index("pull_mlb_stats") + 1
-
 
 def test_step_command_forwards_config_path() -> None:
     cmd = _step_command("pipeline.extract.pull_sources", "config/settings.yaml", "/usr/bin/python3")
@@ -52,7 +51,6 @@ def test_step_command_forwards_config_path() -> None:
         "--config-path",
         "config/settings.yaml",
     ]
-
 
 def test_run_pipeline_executes_every_step_in_order(tmp_path) -> None:
     calls: list[list[str]] = []
@@ -75,6 +73,32 @@ def test_run_pipeline_executes_every_step_in_order(tmp_path) -> None:
     assert [cmd[2] for cmd in calls] == [module for _, module in PIPELINE_STEPS]
     assert all(cmd[-1] == "config/custom.yaml" for cmd in calls)
 
+def test_pull_war_failure_is_hard_and_skips_warehouse(tmp_path) -> None:
+    """rWAR extract is fail-fast. Only pull_mlb_stats is allowed to soft-fail (exit 0)."""
+    calls: list[str] = []
+
+    def fake_runner(cmd, cwd, check):
+        module = cmd[2]
+        calls.append(module)
+        returncode = 1 if module == "pipeline.extract.pull_war" else 0
+        return SimpleNamespace(returncode=returncode)
+
+    with pytest.raises(PipelineStepError) as exc_info:
+        run_pipeline(
+            python_executable="python3",
+            cwd=tmp_path,
+            runner=fake_runner,
+        )
+
+    err = exc_info.value
+    assert err.name == "pull_war"
+    assert err.returncode == 1
+    assert "build_warehouse" in err.remaining
+    assert "pull_mlb_stats" in err.remaining
+    assert calls == [
+        "pipeline.extract.pull_sources",
+        "pipeline.extract.pull_war",
+    ]
 
 def test_run_pipeline_stops_after_first_failure(tmp_path) -> None:
     calls: list[str] = []
@@ -105,7 +129,6 @@ def test_run_pipeline_stops_after_first_failure(tmp_path) -> None:
     ]
     assert "Not run: train_win_model, cluster_teams" in str(err)
 
-
 def test_refresh_and_publish_uploads_only_after_success(tmp_path) -> None:
     published: list[str] = []
 
@@ -118,7 +141,6 @@ def test_refresh_and_publish_uploads_only_after_success(tmp_path) -> None:
         publish=lambda path: published.append(path),
     )
     assert published == ["config/settings.yaml"]
-
 
 def test_refresh_and_publish_skips_upload_when_pipeline_fails(tmp_path) -> None:
     published: list[str] = []
@@ -138,7 +160,6 @@ def test_refresh_and_publish_skips_upload_when_pipeline_fails(tmp_path) -> None:
             publish=lambda path: published.append(path),
         )
     assert published == []
-
 
 def test_workflow_schedules_2am_mountain_and_manual_trigger() -> None:
     text = Path(".github/workflows/nightly-refresh.yml").read_text(encoding="utf-8")

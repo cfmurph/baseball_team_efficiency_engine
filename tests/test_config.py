@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from src.baseball_analytics.config import load_artifact_settings, load_settings, resolve_artifacts_uri
+
+pytestmark = pytest.mark.unit
 
 
 def test_load_settings() -> None:

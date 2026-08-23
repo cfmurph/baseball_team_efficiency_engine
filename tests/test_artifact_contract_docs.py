@@ -1,10 +1,14 @@
 """Locked contract text lives in ADRs and the operator QA guide."""
 from __future__ import annotations
 
+import pytest
+
 from pathlib import Path
 
 from src.baseball_analytics.fantasy import FANTASY_CARDS_RELPATH
 from src.baseball_analytics.storage import REQUIRED_MANIFEST_FIELDS
+
+pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[1]
 

@@ -6,6 +6,8 @@ import pytest
 
 from pipeline.transform.build_metrics import _PLAYER_QUERY
 
+pytestmark = pytest.mark.integration
+
 
 def test_player_query_collapses_traded_player_stints_without_team_fanout() -> None:
     """The exported player metrics should remain one row per player-season."""

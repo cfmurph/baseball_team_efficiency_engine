@@ -13,7 +13,7 @@ from dashboard import ui as ui_mod
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = ROOT / "dashboard" / "app.py"
-
+FANTASY_APP_PATH = ROOT / "dashboard" / "fantasy_app.py"
 
 def _fail_if_exception(at: AppTest, label: str) -> None:
     if len(at.exception) == 0:
@@ -25,7 +25,6 @@ def _fail_if_exception(at: AppTest, label: str) -> None:
         details.append(f"{msg}\n{''.join(stack)}")
     pytest.fail(f"{label} raised:\n" + "\n---\n".join(details))
 
-
 def _nav_button(at: AppTest, label: str):
     """Numbered rail buttons are labeled ``01  Overview``, keyed ``nav_<key>``."""
     page = next((p for p in NAV_PAGES if p["label"] == label), None)
@@ -36,7 +35,7 @@ def _nav_button(at: AppTest, label: str):
             return button
     pytest.fail(f"No sidebar nav button for {label} (key={key})")
 
-
+@pytest.mark.e2e
 def test_all_sidebar_pages_boot_without_exception(monkeypatch: pytest.MonkeyPatch) -> None:
     """Would have caught #103: missing _status / page_* aliases / NameError on boot."""
     monkeypatch.chdir(ROOT)
@@ -54,6 +53,12 @@ def test_all_sidebar_pages_boot_without_exception(monkeypatch: pytest.MonkeyPatc
         _nav_button(at, label).click().run()
         _fail_if_exception(at, label)
 
+@pytest.mark.e2e
+def test_fantasy_app_boots_without_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    """BenchOrStart entrypoint boots on missing cards (empty-state + stubs)."""
+    monkeypatch.chdir(ROOT)
+    at = AppTest.from_file(str(FANTASY_APP_PATH), default_timeout=15).run()
+    _fail_if_exception(at, "fantasy boot")
 
 _REQUIRED_UI_EXPORTS = (
     "inject_theme",
@@ -66,13 +71,13 @@ _REQUIRED_UI_EXPORTS = (
     "SCATTER_MARKER",
 )
 
-
+@pytest.mark.unit
 def test_ui_module_exports_chrome_app_uses() -> None:
     """Incomplete views split: app.py imported `ui` that did not exist / export chrome."""
     missing = [name for name in _REQUIRED_UI_EXPORTS if not hasattr(ui_mod, name)]
     assert not missing, f"dashboard.ui missing {missing}"
 
-
+@pytest.mark.unit
 def test_app_binds_ui_before_any_use() -> None:
     """Regression for NameError: ui is not defined after a partial merge."""
     tree = ast.parse(APP_PATH.read_text(encoding="utf-8"), filename=str(APP_PATH))
