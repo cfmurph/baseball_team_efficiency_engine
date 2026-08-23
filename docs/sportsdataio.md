@@ -15,6 +15,11 @@ When the key is missing the extract **soft-fails** (exit 0), writes
 `extract_report.json` with `ok: false` / `skipped_reason: missing_api_key`,
 and the warehouse skips the spine. CI smoke without the secret still passes.
 
+To prove the secret itself (nightly cannot — it soft-fails), run Actions →
+**SportsDataIO auth probe** (`sdio-probe.yml`, `workflow_dispatch` only).
+That job fails if the key is empty or the cheap `CurrentSeason` call is
+not 2xx. It prints HTTP status and payload shape only — never the key.
+
 ## Raw landing
 
 ```text

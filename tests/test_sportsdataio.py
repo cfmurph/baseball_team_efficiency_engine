@@ -400,6 +400,19 @@ def test_load_sdio_frames_reads_file_uri_when_local_missing(tmp_path: Path) -> N
     assert int(frames.teams.iloc[0]["sdio_team_id"]) in {31, 20}
 
 
+def test_sdio_probe_workflow_is_dispatch_only() -> None:
+    text = Path(".github/workflows/sdio-probe.yml").read_text(encoding="utf-8")
+    assert "workflow_dispatch:" in text
+    assert "schedule:" not in text
+    assert "pull_request:" not in text
+    assert "SPORTSDATAIO_API_KEY: ${{ secrets.SPORTSDATAIO_API_KEY }}" in text
+    assert "Ocp-Apim-Subscription-Key" in text
+    assert "SPORTSDATAIO_API_KEY missing" in text
+    assert "CurrentSeason" in text
+    assert "print(key" not in text
+    assert "?key=" not in text
+
+
 def test_warehouse_ddl_has_no_forked_stat_tables() -> None:
     assert "CREATE OR REPLACE TABLE fantasy_" not in WAREHOUSE_DDL
     assert "CREATE OR REPLACE TABLE scout_" not in WAREHOUSE_DDL
