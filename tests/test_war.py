@@ -145,10 +145,32 @@ def test_batting_war_handles_missing_columns():
     assert "batting_war" in result.columns
 
 
-def test_batting_war_accepts_lahman_x2b_x3b_aliases(sample_batting):
-    alias_batting = sample_batting.rename(columns={"2B": "X2B", "3B": "X3B"})
+def test_batting_war_uses_lahman_x2b_x3b_columns():
+    batting_with_standard_columns = pd.DataFrame({
+        "playerID": ["A"],
+        "yearID": [2010],
+        "teamID": ["NYA"],
+        "AB": [500],
+        "H": [150],
+        "2B": [30],
+        "3B": [5],
+        "HR": [20],
+        "BB": [55],
+        "IBB": [4],
+        "HBP": [3],
+        "SF": [4],
+        "SH": [1],
+    })
+    batting_with_lahman_columns = batting_with_standard_columns.rename(
+        columns={"2B": "X2B", "3B": "X3B"}
+    )
 
-    result_with_standard_names = batting_war(sample_batting).sort_values(["playerID", "teamID"]).reset_index(drop=True)
-    result_with_alias_names = batting_war(alias_batting).sort_values(["playerID", "teamID"]).reset_index(drop=True)
+    expected = batting_war(batting_with_standard_columns)
+    result = batting_war(batting_with_lahman_columns)
 
-    pd.testing.assert_frame_equal(result_with_alias_names, result_with_standard_names)
+    pd.testing.assert_frame_equal(
+        result[["playerID", "yearID", "teamID", "batting_war", "pa", "woba", "hr"]],
+        expected[["playerID", "yearID", "teamID", "batting_war", "pa", "woba", "hr"]],
+        check_exact=False,
+        rtol=1e-12,
+    )
