@@ -16,6 +16,7 @@ from src.baseball_analytics.storage import (
     object_key,
     parse_artifacts_uri,
     partition_key,
+    relative_artifact_key,
     publish_nightly_artifacts,
     resolve_artifact,
     resolve_named_artifacts,
@@ -92,6 +93,14 @@ def test_partition_and_object_key_are_league_level_date() -> None:
     assert (
         object_key("mlb", "mlb", "2026-08-23", "team_onfield_contract_metrics.csv")
         == "mlb/mlb/2026-08-23/team_onfield_contract_metrics.csv"
+    )
+    assert relative_artifact_key("fantasy/cards.jsonl") == "fantasy/cards.jsonl"
+    assert (
+        object_key("mlb", "mlb", "latest", "fantasy/cards.jsonl")
+        == "mlb/mlb/latest/fantasy/cards.jsonl"
+    )
+    assert relative_artifact_key("/abs/artifacts/team_onfield_contract_metrics.csv") == (
+        "team_onfield_contract_metrics.csv"
     )
     with pytest.raises(ValueError, match="run_date"):
         partition_key("mlb", "mlb", "08-23-2026")
@@ -248,6 +257,27 @@ def test_resolve_named_artifacts_maps_keys(tmp_path: Path) -> None:
     )
     assert resolved["metrics"] == local / "team_onfield_contract_metrics.csv"
     assert resolved["players"] is None
+
+
+def test_nested_relative_key_uploads_and_resolves_without_redesign(tmp_path: Path) -> None:
+    """A later product file under a subdirectory uses the same URI prefix."""
+    local = tmp_path / "artifacts"
+    nested = local / "extra"
+    nested.mkdir(parents=True)
+    (nested / "nested.csv").write_text("ok\n")
+    (local / "team_onfield_contract_metrics.csv").write_text("metrics\n")
+
+    backend = MemoryBackend()
+    settings = _settings(tmp_path, uri="s3://bucket/prefix")
+    result = upload_artifacts(local, settings, run_date="2026-08-23", backend=backend)
+    assert "extra/nested.csv" in result.files
+    assert "mlb/mlb/latest/extra/nested.csv" in backend.objects
+
+    (nested / "nested.csv").unlink()
+    path = resolve_artifact("extra/nested.csv", settings, backend=backend)
+    assert path is not None
+    assert path.read_text() == "ok\n"
+    assert path.as_posix().endswith("extra/nested.csv")
 
 
 def test_file_uri_upload_then_resolve_without_local_copy(tmp_path: Path) -> None:

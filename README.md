@@ -49,7 +49,7 @@ models/
   cluster_teams.py              KMeans team archetype clustering
 dbt/                            dbt scaffold (staging + mart SQL models)
 dashboard/app.py                Streamlit multi-section dashboard
-docs/                           Architecture, schema, metrics framework, shared artifacts, roadmap
+docs/                           Architecture, schema, metrics framework, shared artifacts, ADRs, roadmap
 tests/                          Unit tests covering metrics, WAR, validation, artifact storage
 artifacts/                      Output CSVs and plots (gitignored, generated at runtime)
 ```

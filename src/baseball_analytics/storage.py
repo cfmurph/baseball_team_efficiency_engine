@@ -2,14 +2,17 @@
 
 Object layout under the configured URI prefix::
 
-    {league}/{level}/{run_date}/<filename>
-    {league}/{level}/latest/<filename>
+    {league}/{level}/{run_date}/<relative-file>
+    {league}/{level}/latest/<relative-file>
     {league}/{level}/latest/manifest.json
 
-``run_date`` is ``YYYY-MM-DD`` (UTC unless ``ARTIFACTS_RUN_DATE`` is set).
-``latest/`` is a copy of the most recent successful publish so dashboards do
-not need to list history. Future minor-league feeds use the same shape
-(e.g. ``milb/aaa/2026-08-23/``).
+``<relative-file>`` is any path under local ``artifacts/`` (flat CSVs today;
+nested files are first-class). ``run_date`` is ``YYYY-MM-DD`` (UTC unless
+``ARTIFACTS_RUN_DATE`` is set). ``latest/`` is a copy of the most recent
+successful publish so dashboards do not need to list history. Future
+minor-league feeds use the same shape (e.g. ``milb/aaa/2026-08-23/``).
+Reserved (unpublished in this slice): ``fantasy/cards.jsonl``.
+See ``docs/adr/0001-shared-artifact-layout.md``.
 
 URI schemes:
 - ``s3://bucket/optional-prefix`` — AWS S3 or any S3-compatible store (R2 via
@@ -110,11 +113,27 @@ def partition_key(league: str, level: str, run_date: str) -> str:
     )
 
 
-def object_key(league: str, level: str, run_date: str, filename: str) -> str:
-    rel = str(filename).replace("\\", "/").lstrip("/")
+def relative_artifact_key(filename: str | Path) -> str:
+    """Return a partition-relative key (``foo.csv`` or ``dir/foo.csv``).
+
+    Absolute paths keep only the basename so existing dashboard ``Path``
+    objects keep working. Relative paths keep subdirectories so a later
+    file such as ``fantasy/cards.jsonl`` needs no URI redesign.
+    """
+    text = str(filename).replace("\\", "/").strip()
+    if not text:
+        raise ValueError("artifact filename is empty")
+    path = Path(text)
+    rel = path.name if path.is_absolute() else text.lstrip("/")
+    if rel.startswith("./"):
+        rel = rel[2:]
     if not rel or rel.endswith("/") or ".." in Path(rel).parts:
         raise ValueError(f"Invalid artifact filename: {filename!r}")
-    return f"{partition_key(league, level, run_date)}/{rel}"
+    return rel
+
+
+def object_key(league: str, level: str, run_date: str, filename: str) -> str:
+    return f"{partition_key(league, level, run_date)}/{relative_artifact_key(filename)}"
 
 
 def default_run_date(
@@ -320,8 +339,9 @@ def resolve_artifact(
     loads from disk when the store is unreachable.
     """
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
-    name = Path(filename).name
-    if not name:
+    try:
+        name = relative_artifact_key(filename)
+    except ValueError:
         return None
     local_path = cfg.local_dir / name
     cache_path = cfg.cache_dir / cfg.league / cfg.level / LATEST_LABEL / name
@@ -361,9 +381,7 @@ def resolve_named_artifacts(
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
     resolved: dict[str, Path | None] = {}
     for key, filename in files.items():
-        resolved[key] = resolve_artifact(
-            Path(filename).name, cfg, backend=backend, environ=environ
-        )
+        resolved[key] = resolve_artifact(filename, cfg, backend=backend, environ=environ)
     return resolved
 
 
