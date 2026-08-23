@@ -14,6 +14,8 @@ def test_load_settings() -> None:
     assert settings["artifacts_partition"]["level"] == "mlb"
     assert settings["mlb_stats"]["base_url"] == "https://statsapi.mlb.com"
     assert settings["mlb_stats"]["team_crosswalk"] == "data/crosswalks/mlb_team_map.csv"
+    assert settings["sportsdataio"]["base_url"] == "https://api.sportsdata.io"
+    assert settings["sportsdataio"]["team_crosswalk"] == "data/crosswalks/mlb_team_map.csv"
 
 
 def test_resolve_artifacts_uri_precedence() -> None:

@@ -1,0 +1,25 @@
+[
+  {
+    "StatID": 8001,
+    "TeamID": 31,
+    "PlayerID": 10001967,
+    "Season": 2024,
+    "Name": "Aaron Judge",
+    "Team": "NYY",
+    "Position": "RF",
+    "Games": 158,
+    "PlateAppearances": 704,
+    "AtBats": 559,
+    "Hits": 180,
+    "HomeRuns": 58,
+    "Walks": 133,
+    "Strikeouts": 171,
+    "RunsBattedIn": 144,
+    "StolenBases": 10,
+    "InningsPitchedDecimal": 0,
+    "EarnedRunAverage": null,
+    "WalksHitsPerInningsPitched": null,
+    "PitchingStrikeouts": 0,
+    "PitchingWalks": 0
+  }
+]

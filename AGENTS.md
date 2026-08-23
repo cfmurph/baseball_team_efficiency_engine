@@ -34,6 +34,7 @@ The pipeline must be run in order. Each step is idempotent:
 python3 -m pipeline.extract.pull_sources          # downloads CSVs to data/raw/ (needs internet)
 python3 -m pipeline.extract.pull_war              # Baseball-Reference rWAR (needs internet)
 python3 -m pipeline.extract.pull_mlb_stats        # MLB Stats API majors (soft-fail; no API key)
+python3 -m pipeline.extract.pull_sportsdataio     # SportsDataIO Phase 0 (soft-fail without SPORTSDATAIO_API_KEY)
 python3 -m pipeline.transform.build_warehouse     # builds DuckDB warehouse + validates
 python3 -m pipeline.transform.build_metrics       # exports metric CSVs to artifacts/
 python3 -m models.train_win_model                 # trains LR + XGBoost, generates plots
@@ -51,3 +52,4 @@ python3 -m models.cluster_teams                   # KMeans team archetypes
 - **All pipeline modules use `-m` syntax**: Run as `python3 -m pipeline.extract.pull_sources`, not `python3 pipeline/extract/pull_sources.py`.
 - **Real WAR is Baseball-Reference rWAR**, not the Lahman wOBA/FIP approximation. Run `python3 -m pipeline.extract.pull_war` before `build_warehouse`. Player IDs map via Lahman `People.bbrefID`; team IDs via `data/crosswalks/br_team_map.csv`. Rows without a match keep approximate WAR and `war_source=approx`. See `docs/war_sources.md`.
 - **MLB Stats API** is optional enrichment (`pull_mlb_stats`). Raw lands at `{ARTIFACTS_URI}/raw/mlb_stats/{endpoint}/{as_of_date}/` or `data/raw/mlb_stats/`. Soft-fail if the API blips. Warehouse builds Lahman-only when that tree is empty. Do not replace BR rWAR. See `docs/mlb_stats.md` and `docs/adr/0003-mlb-stats-api-ingest.md`.
+- **SportsDataIO** is the Phase 0 live ingest (`pull_sportsdataio`). Key is `SPORTSDATAIO_API_KEY` only (never hardcoded). Soft-fail when the key is missing so CI/nightly still pass. Raw lands at `{ARTIFACTS_URI}/raw/sportsdataio/{endpoint}/{as_of_date}/` or `data/raw/sportsdataio/`. Warehouse spine: `external_id_alias` + `player_game_stat`. Schema v0.1 is LOCKED. See `docs/architecture/phase0-schema-v0.1.md` and `docs/sportsdataio.md`.

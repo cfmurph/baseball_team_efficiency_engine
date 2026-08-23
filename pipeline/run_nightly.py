@@ -30,6 +30,7 @@ PIPELINE_STEPS: tuple[tuple[str, str], ...] = (
     ("pull_sources", "pipeline.extract.pull_sources"),
     ("pull_war", "pipeline.extract.pull_war"),
     ("pull_mlb_stats", "pipeline.extract.pull_mlb_stats"),
+    ("pull_sportsdataio", "pipeline.extract.pull_sportsdataio"),
     ("build_warehouse", "pipeline.transform.build_warehouse"),
     ("build_metrics", "pipeline.transform.build_metrics"),
     ("train_win_model", "models.train_win_model"),

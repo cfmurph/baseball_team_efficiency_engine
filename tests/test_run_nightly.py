@@ -20,6 +20,7 @@ def test_pipeline_steps_match_documented_chain() -> None:
         "pipeline.extract.pull_sources",
         "pipeline.extract.pull_war",
         "pipeline.extract.pull_mlb_stats",
+        "pipeline.extract.pull_sportsdataio",
         "pipeline.transform.build_warehouse",
         "pipeline.transform.build_metrics",
         "models.train_win_model",
@@ -40,7 +41,16 @@ def test_pull_mlb_stats_follows_pull_war_in_nightly_steps() -> None:
     names = [name for name, _ in PIPELINE_STEPS]
     assert names.index("pull_mlb_stats") == names.index("pull_war") + 1
     assert dict(PIPELINE_STEPS)["pull_mlb_stats"] == "pipeline.extract.pull_mlb_stats"
-    assert names.index("build_warehouse") == names.index("pull_mlb_stats") + 1
+    assert names.index("pull_sportsdataio") == names.index("pull_mlb_stats") + 1
+    assert names.index("build_warehouse") == names.index("pull_sportsdataio") + 1
+
+
+def test_pull_sportsdataio_follows_mlb_stats_in_nightly_steps() -> None:
+    """#128: SDIO extract is after Stats API and soft-fails without the key."""
+    names = [name for name, _ in PIPELINE_STEPS]
+    assert dict(PIPELINE_STEPS)["pull_sportsdataio"] == "pipeline.extract.pull_sportsdataio"
+    assert names.index("pull_sportsdataio") == names.index("pull_mlb_stats") + 1
+    assert names.index("build_warehouse") == names.index("pull_sportsdataio") + 1
 
 
 def test_step_command_forwards_config_path() -> None:
@@ -100,6 +110,7 @@ def test_run_pipeline_stops_after_first_failure(tmp_path) -> None:
         "pipeline.extract.pull_sources",
         "pipeline.extract.pull_war",
         "pipeline.extract.pull_mlb_stats",
+        "pipeline.extract.pull_sportsdataio",
         "pipeline.transform.build_warehouse",
         "pipeline.transform.build_metrics",
     ]
@@ -149,3 +160,4 @@ def test_workflow_schedules_2am_mountain_and_manual_trigger() -> None:
     assert "ARTIFACTS_URI: ${{ secrets.ARTIFACTS_URI }}" in text
     assert "AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL }}" in text
     assert "AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}" in text
+    assert "SPORTSDATAIO_API_KEY: ${{ secrets.SPORTSDATAIO_API_KEY }}" in text

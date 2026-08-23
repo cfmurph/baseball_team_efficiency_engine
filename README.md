@@ -21,6 +21,7 @@ Raw CSV / Lahman API
     → pipeline/extract/pull_sources.py
     → pipeline/extract/pull_war.py            (Baseball-Reference rWAR)
     → pipeline/extract/pull_mlb_stats.py      (MLB Stats API majors; soft-fail)
+    → pipeline/extract/pull_sportsdataio.py   (SportsDataIO Phase 0; soft-fail without key)
     → pipeline/transform/build_warehouse.py   (DuckDB star schema + validation)
     → pipeline/transform/build_metrics.py     (CSV artifacts per analysis)
     → models/train_win_model.py               (LinearRegression + XGBoost + frontier)
@@ -37,6 +38,7 @@ pipeline/
   extract/pull_sources.py       Download Lahman CSVs
   extract/pull_war.py           Download Baseball-Reference rWAR (optional; approx fallback)
   extract/pull_mlb_stats.py     MLB Stats API majors → versioned raw (soft-fail)
+  extract/pull_sportsdataio.py  SportsDataIO Phase 0 → raw + spine (soft-fail without key)
   transform/build_warehouse.py  Build star schema + WAR + metrics + validation
   transform/build_metrics.py    Export CSVs for team, player, contract analysis
 src/baseball_analytics/
@@ -47,6 +49,8 @@ src/baseball_analytics/
   metrics.py                    All metric functions (Pythag, Gini, WAR efficiency, contract labels)
   war.py                        rWAR overlay + Lahman approx (wOBA / FIP) + BaseRuns
   schema.py                     DuckDB DDL for all fact/dim tables
+  mlb_stats.py                  MLB Stats API client + raw landing
+  sportsdataio.py               SportsDataIO client + Phase 0 spine
   validation.py                 Data quality checks + ValidationReport
 models/
   train_win_model.py            LinearRegression + XGBoost win models + efficiency frontier
@@ -125,6 +129,7 @@ pip install -r requirements.txt
 python3 -m pipeline.extract.pull_sources
 python3 -m pipeline.extract.pull_war
 python3 -m pipeline.extract.pull_mlb_stats
+python3 -m pipeline.extract.pull_sportsdataio
 python3 -m pipeline.transform.build_warehouse
 python3 -m pipeline.transform.build_metrics
 python3 -m models.train_win_model
@@ -141,14 +146,20 @@ Season, team, and league widgets share `st.session_state` keys `season_year`, `s
 ## Nightly refresh
 
 The pipeline steps above are also wrapped by a fail-fast orchestrator
-(`pull_mlb_stats` soft-fails so an API blip does not stop the nightly):
+(`pull_mlb_stats` and `pull_sportsdataio` soft-fail so a missing key or API
+blip does not stop the nightly):
 
 ```bash
 python3 -m pipeline.run_nightly
 # optional: --config-path config/settings.yaml
 ```
 
-That command runs extract → rWAR extract → Stats API extract → warehouse → metrics → win model → clustering in order, logs timing for each step, and **stops on the first non-zero exit** (later steps are named in the error and are not run). Use the same command locally whenever you want a full refresh.
+That command runs extract → rWAR extract → Stats API extract → SportsDataIO
+extract → warehouse → metrics → win model → clustering in order, logs timing
+for each step, and **stops on the first non-zero exit** (later steps are named
+in the error and are not run). Use the same command locally whenever you want
+a full refresh. `SPORTSDATAIO_API_KEY` is optional; without it the SDIO step
+exits 0 and the warehouse skips the spine.
 
 GitHub Actions runs it overnight via `.github/workflows/nightly-refresh.yml`:
 
@@ -205,11 +216,11 @@ Unit tests covering: metrics helpers, approximate WAR, Baseball-Reference rWAR o
 CI smokes on PRs to `master` (`.github/workflows/ci-smoke.yml`):
 
 ```bash
-python3 -m pytest tests/test_dashboard_apptest.py tests/test_run_nightly.py tests/test_golden_war.py -v
+python3 -m pytest tests/test_dashboard_apptest.py tests/test_run_nightly.py tests/test_golden_war.py tests/test_sportsdataio.py -v
 ```
 
 - **AppTest** — every sidebar page boots without exception (empty `artifacts/` is fine).
-- **Nightly contract** — `pull_war` stays in `PIPELINE_STEPS` immediately after `pull_sources`. `pull_mlb_stats` follows `pull_war` (soft-fail).
+- **Nightly contract** — `pull_war` stays in `PIPELINE_STEPS` immediately after `pull_sources`. `pull_mlb_stats` follows `pull_war` (soft-fail). `pull_sportsdataio` follows Stats API (soft-fail without `SPORTSDATAIO_API_KEY`).
 - **Golden WAR** — Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023 stay `war_source=real` against committed fixtures. Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
 
 ## Data sources
