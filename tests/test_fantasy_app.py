@@ -6,7 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from fantasy.cards import CARD_LAKE_KEY, OPTIONAL_CARD_KEY
+from fantasy.cards import CARD_LAKE_KEY, RUN_CARD_TEMPLATE
 from fantasy.copy import (
     COPY_TEXT,
     CTA,
@@ -58,10 +58,10 @@ def test_fantasy_entrypoint_bootstraps_before_local_imports() -> None:
 
 def test_fantasy_app_uses_shared_cards_jsonl_and_marketing_copy() -> None:
     source = APP_PATH.read_text(encoding="utf-8")
-    assert "resolve_artifact" in source
     assert "resolve_player_artifacts" in source
     assert CARD_LAKE_KEY in source
-    assert OPTIONAL_CARD_KEY in source
+    assert RUN_CARD_TEMPLATE in source
+    assert "Dated JSON filenames are ignored" in source
     for name in (
         "PRODUCT_NAME",
         "HEADLINE",
