@@ -10,6 +10,7 @@ from pipeline.run_nightly import (
     PIPELINE_STEPS,
     PipelineStepError,
     _step_command,
+    refresh_and_publish,
     run_pipeline,
 )
 
@@ -87,9 +88,46 @@ def test_run_pipeline_stops_after_first_failure(tmp_path) -> None:
     assert "Not run: train_win_model, cluster_teams" in str(err)
 
 
+def test_refresh_and_publish_uploads_only_after_success(tmp_path) -> None:
+    published: list[str] = []
+
+    def fake_pipeline(config_path, **kwargs):
+        return []
+
+    refresh_and_publish(
+        "config/settings.yaml",
+        pipeline=fake_pipeline,
+        publish=lambda path: published.append(path),
+    )
+    assert published == ["config/settings.yaml"]
+
+
+def test_refresh_and_publish_skips_upload_when_pipeline_fails(tmp_path) -> None:
+    published: list[str] = []
+
+    def fake_pipeline(config_path, **kwargs):
+        raise PipelineStepError(
+            name="build_metrics",
+            module="pipeline.transform.build_metrics",
+            returncode=2,
+            remaining=["train_win_model"],
+        )
+
+    with pytest.raises(PipelineStepError):
+        refresh_and_publish(
+            "config/settings.yaml",
+            pipeline=fake_pipeline,
+            publish=lambda path: published.append(path),
+        )
+    assert published == []
+
+
 def test_workflow_schedules_2am_mountain_and_manual_trigger() -> None:
     text = Path(".github/workflows/nightly-refresh.yml").read_text(encoding="utf-8")
     assert 'cron: "0 8 * * *"' in text
     assert "workflow_dispatch:" in text
     assert "python3 -m pipeline.run_nightly" in text
     assert "actions/upload-artifact" in text
+    assert "ARTIFACTS_URI: ${{ secrets.ARTIFACTS_URI }}" in text
+    assert "AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL }}" in text
+    assert "AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}" in text
