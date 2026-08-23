@@ -14,5 +14,11 @@ STUB_CAPTION = "Sample cards until the weekly feed is live."
 EMPTY_TITLE = "This week's card isn't up yet."
 EMPTY_BODY = (
     "Weekly pickup, bench, and stream picks land here once the feed is published. "
-    "Join the list above."
+    "Join the list below."
 )
+INVITE_CHIP = "Invite only"
+COPY_TEXT = "Copy text"
+DOWNLOAD_IMAGE = "Download image"
+COPIED = "Copied"
+EMPTY_TAB = "No cards in this bucket yet."
+TAB_ALL = "All"

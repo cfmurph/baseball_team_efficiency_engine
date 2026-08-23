@@ -10,7 +10,7 @@ import textwrap
 
 from PIL import Image, ImageDraw, ImageFont
 
-from fantasy.cards import LABEL_TONES, ShareCardView
+from fantasy.cards import LABEL_TONES, ShareCardView, normalize_stat_line
 from fantasy.copy import EARLY_MODEL_BADGE, PRODUCT_NAME
 
 _WIDTH = 840
@@ -83,10 +83,11 @@ def render_share_card_png(view: ShareCardView) -> bytes:
     asof_font = _font(15)
 
     reason_lines = _wrap(view.reason, 52)
+    stat_line = normalize_stat_line(view.stat_line)
     content_h = 220 + (28 if view.rank_line else 0)
     content_h += 48 if view.headline else 0
     content_h += 28 if view.subtitle else 0
-    content_h += 32 if view.stat_line else 0
+    content_h += 32 if stat_line else 0
     content_h += 28 * max(len(reason_lines), 0)
     content_h += 36 if view.as_of_date else 0
     height = max(420, content_h + 2 * _PAD)
@@ -135,8 +136,8 @@ def render_share_card_png(view: ShareCardView) -> bytes:
     if view.subtitle:
         draw.text((x, y), view.subtitle, font=body_font, fill=_MUTED)
         y += 30
-    if view.stat_line:
-        draw.text((x, y), view.stat_line, font=stat_font, fill=_INK)
+    if stat_line:
+        draw.text((x, y), stat_line, font=stat_font, fill=_INK)
         y += 32
     for line in reason_lines:
         draw.text((x, y), line, font=body_font, fill=_MUTED)
