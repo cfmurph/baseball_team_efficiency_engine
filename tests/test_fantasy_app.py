@@ -59,7 +59,6 @@ def test_fantasy_app_uses_shared_cards_jsonl_and_marketing_copy() -> None:
     assert "resolve_player_artifacts" in source
     assert CARD_LAKE_KEY in source
     assert OPTIONAL_CARD_KEY in source
-    assert "fantasy_cards_" not in source
     for name in (
         "PRODUCT_NAME",
         "HEADLINE",

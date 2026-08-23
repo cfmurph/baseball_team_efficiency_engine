@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 from src.baseball_analytics.config import ArtifactSettings
@@ -8,16 +9,17 @@ from fantasy.cards import (
     CARD_LAKE_KEY,
     OPTIONAL_CARD_KEY,
     PLAYER_ARTIFACTS,
-    RETIRED_CARD_NAMES,
     SOURCE_MISSING,
     card_feed_keys,
     card_headline,
     card_rank_line,
     card_stat_line,
     card_subtitle,
+    dated_card_keys,
     is_approx,
     load_share_cards,
     load_stub_cards,
+    parse_card_payload,
     parse_cards_jsonl,
     present_card,
     recommendation_label,
@@ -41,16 +43,13 @@ def _settings(tmp_path: Path, **overrides) -> ArtifactSettings:
     return ArtifactSettings(**defaults)
 
 
-def test_feed_keys_are_current_then_optional_cards_jsonl() -> None:
+def test_feed_keys_prefer_marketing_jsonl() -> None:
     assert CARD_LAKE_KEY == "current/fantasy/cards.jsonl"
     assert OPTIONAL_CARD_KEY == "fantasy/cards.jsonl"
     assert card_feed_keys() == (
         "current/fantasy/cards.jsonl",
         "fantasy/cards.jsonl",
     )
-    for retired in RETIRED_CARD_NAMES:
-        assert retired not in CARD_LAKE_KEY
-        assert retired not in OPTIONAL_CARD_KEY
 
 
 def test_recommendation_labels_map_sit_to_bench() -> None:
@@ -242,6 +241,61 @@ def test_remote_optional_fantasy_cards_jsonl(tmp_path: Path) -> None:
     feed = load_share_cards(_settings(tmp_path, uri="s3://bucket/prefix"), backend=backend)
     assert feed.cards[0]["recommendation_type"] == "sit"
     assert feed.key == "fantasy/cards.jsonl"
+
+
+def test_parse_fantasy_cards_json_array_and_wrapper() -> None:
+    array = parse_card_payload(
+        '[{"recommendation_type": "start"}, {"recommendation_type": "sit"}]',
+        filename="fantasy_cards_2026-08-23.json",
+    )
+    assert [row["recommendation_type"] for row in array] == ["start", "sit"]
+    wrapped = parse_card_payload(
+        '{"schema_version": "1.0", "cards": [{"recommendation_type": "pickup"}]}',
+        filename="fantasy_cards_2026-08-23.json",
+    )
+    assert wrapped[0]["recommendation_type"] == "pickup"
+
+
+def test_dated_json_used_when_jsonl_missing(tmp_path: Path) -> None:
+    local = tmp_path / "artifacts"
+    local.mkdir()
+    (local / "fantasy_cards_2026-08-23.json").write_text(
+        '{"cards": [{"recommendation_type": "stream", "player": {"name": "Dated"}}]}',
+        encoding="utf-8",
+    )
+    feed = load_share_cards(
+        _settings(tmp_path),
+        now=datetime(2026, 8, 23, tzinfo=timezone.utc),
+        environ={},
+    )
+    assert feed.cards[0]["player"]["name"] == "Dated"
+    assert feed.key == "fantasy_cards_2026-08-23.json"
+
+
+def test_jsonl_wins_over_dated_fantasy_cards(tmp_path: Path) -> None:
+    local = tmp_path / "artifacts"
+    current = local / "current" / "fantasy"
+    current.mkdir(parents=True)
+    (current / "cards.jsonl").write_text(
+        '{"recommendation_type": "start", "player": {"name": "Jsonl"}}',
+        encoding="utf-8",
+    )
+    (local / "fantasy_cards_2026-08-23.json").write_text(
+        '{"cards": [{"recommendation_type": "sit", "player": {"name": "Dated"}}]}',
+        encoding="utf-8",
+    )
+    feed = load_share_cards(_settings(tmp_path), environ={})
+    assert feed.cards[0]["player"]["name"] == "Jsonl"
+    assert feed.key == "current/fantasy/cards.jsonl"
+
+
+def test_dated_card_keys_include_configured_date(tmp_path: Path) -> None:
+    keys = dated_card_keys(
+        _settings(tmp_path),
+        environ={"ARTIFACTS_RUN_DATE": "2026-07-04"},
+    )
+    assert "fantasy_cards_2026-07-04.json" in keys
+    assert "current/fantasy/fantasy_cards_2026-07-04.json" in keys
 
 
 def test_player_artifacts_use_shared_resolve(tmp_path: Path) -> None:
