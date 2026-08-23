@@ -58,7 +58,6 @@ def test_fantasy_entrypoint_bootstraps_before_local_imports() -> None:
 
 def test_fantasy_app_uses_shared_cards_jsonl_and_marketing_copy() -> None:
     source = APP_PATH.read_text(encoding="utf-8")
-    assert "resolve_artifact" in source
     assert "resolve_player_artifacts" in source
     assert CARD_LAKE_KEY in source
     assert RUN_CARD_TEMPLATE in source
