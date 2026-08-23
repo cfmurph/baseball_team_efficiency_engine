@@ -6,6 +6,7 @@ __pycache__/
 *.duckdb
 artifacts/*.png
 artifacts/*.csv
+artifacts/.remote_cache/
 data/raw/*.csv
 data/raw/*.txt
 data/staging/*.csv
