@@ -19,6 +19,7 @@ from src.baseball_analytics.metrics import (
     classify_contract,
     payroll_underperformer_share,
     detect_team_window,
+    war_concentration,
 )
 
 
@@ -225,3 +226,20 @@ def test_detect_team_window_developing_team():
     })
     result = detect_team_window(df)
     assert result.iloc[-1]["window_phase"] == "developing"
+
+def test_classify_contract_fair_value_band():
+    surplus = pd.Series([-2_000_000.0, 0.0, 2_000_000.0])
+    war = pd.Series([1.0, 2.0, 3.0])
+    result = classify_contract(surplus, war)
+    assert result.tolist() == ["fair_value", "fair_value", "fair_value"]
+
+
+def test_war_concentration_returns_top_n_share():
+    df = pd.DataFrame({"player_war": [5.0, 3.0, 2.0, 1.0]})
+    assert war_concentration(df, top_n=2) == pytest.approx(8.0 / 11.0)
+
+
+def test_war_concentration_returns_nan_when_team_war_non_positive():
+    df = pd.DataFrame({"player_war": [0.0, -1.0]})
+    assert np.isnan(war_concentration(df))
+
