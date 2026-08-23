@@ -1,0 +1,51 @@
+name: Nightly data refresh
+
+on:
+  schedule:
+    # 08:00 UTC = 02:00 America/Edmonton during MDT (UTC-6).
+    # During MST (UTC-7) this is 01:00 local. Actions cron cannot follow DST.
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-refresh
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+  TZ: America/Edmonton
+
+jobs:
+  refresh:
+    name: Refresh warehouse, metrics, and models
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run nightly pipeline
+        run: python3 -m pipeline.run_nightly --config-path config/settings.yaml
+
+      - name: Upload generated artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-artifacts
+          path: |
+            artifacts/
+            data/warehouse/*.duckdb
+          if-no-files-found: warn
+          retention-days: 14
