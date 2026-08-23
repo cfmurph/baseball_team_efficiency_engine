@@ -11,6 +11,11 @@ sources:
   batting: https://vincentarelbundock.github.io/Rdatasets/csv/Lahman/Batting.csv
   pitching: https://vincentarelbundock.github.io/Rdatasets/csv/Lahman/Pitching.csv
   fielding: https://vincentarelbundock.github.io/Rdatasets/csv/Lahman/Fielding.csv
+# Baseball-Reference rWAR (player × year × team). Separate extract: pull_war.py
+war_sources:
+  batting: https://www.baseball-reference.com/data/war_daily_bat.txt
+  pitching: https://www.baseball-reference.com/data/war_daily_pitch.txt
+  team_map: data/crosswalks/br_team_map.csv
 modeling:
   random_state: 42
   test_size: 0.2

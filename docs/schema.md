@@ -23,21 +23,22 @@ Contains:
 - payroll aggregates
 - salary concentration metrics
 - efficiency metrics
+- `team_total_war` / `team_batting_war` / `team_pitching_war` rolled up from effective player WAR
+- `war_source`: `real` | `approx` | `mixed`
 
 ### fact_salary
 Grain: one row per player-team-season salary record
 
-## Planned facts
-
 ### fact_player_season
 Grain: one row per player-team-season
 
-Planned columns:
-- WAR
-- PA / IP
-- offensive and defensive value
-- role indicators
-- age
+Contains:
+- `batting_war` / `pitching_war` / `player_war` (effective: BR rWAR when mapped, else Lahman approx)
+- `war_source`: `real` | `approx`
+- PA / IP / wOBA / FIP / ERA
+- salary, surplus value, contract label
+
+## Planned facts
 
 ### fact_game
 Grain: one row per game-team

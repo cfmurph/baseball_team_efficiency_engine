@@ -12,7 +12,8 @@ Turn a simple historical baseball CSV merge into an analytics platform that can 
 ## Layers
 
 ### 1. Ingestion
-- Pull raw CSVs into `data/raw`
+- Pull raw Lahman CSVs into `data/raw` (`pull_sources`)
+- Pull Baseball-Reference rWAR text files (`pull_war`) — optional; warehouse falls back to approx
 - Maintain one file per source
 - Preserve raw column names for traceability
 
@@ -53,11 +54,12 @@ This is where metric logic becomes standardized and reusable:
 
 ### Current state
 - Local batch pipeline
-- Manual execution
+- Fail-fast nightly orchestrator (`python3 -m pipeline.run_nightly`)
+- GitHub Actions schedule at 08:00 UTC (2:00 AM Mountain Daylight Time)
 - File-based configuration
 
 ### Next production milestones
-1. Add orchestration with Prefect or Dagster.
+1. Add heavier orchestration (Prefect or Dagster) if the refresh outgrows Actions.
 2. Add source contracts and validation checks.
 3. Containerize with Docker.
 4. Persist warehouse in Postgres for shared use.
