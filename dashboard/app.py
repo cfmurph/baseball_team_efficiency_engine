@@ -50,7 +50,6 @@ from dashboard.helpers import (
     teams_from_frame,
     years_from_frame,
 )
-from dashboard.theme import inject_theme as _inject_theme
 from dashboard import ui
 from dashboard.views import compare as compare_view
 from dashboard.views import contracts as contracts_view
@@ -61,7 +60,7 @@ from dashboard.views import overview as overview_view
 from dashboard.views import roster as roster_view
 from dashboard.views import whatif as whatif_view
 
-_inject_theme()
+ui.inject_theme()
 
 # Literal layout so AST regression tests can exec `_chart` without imports.
 _PLOTLY_LAYOUT = dict(

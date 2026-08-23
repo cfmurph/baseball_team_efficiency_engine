@@ -15,6 +15,11 @@ from pathlib import Path
 
 import typer
 
+from src.baseball_analytics.storage import (
+    ArtifactUploadError,
+    publish_nightly_artifacts,
+)
+
 log = logging.getLogger(__name__)
 app = typer.Typer(add_completion=False)
 
@@ -106,6 +111,21 @@ def run_pipeline(
     return results
 
 
+def refresh_and_publish(
+    config_path: str = "config/settings.yaml",
+    *,
+    pipeline: Callable[..., list[StepResult]] | None = None,
+    publish: Callable[..., object] | None = None,
+    **pipeline_kwargs,
+) -> list[StepResult]:
+    """Run the pipeline, then upload artifacts when shared storage is configured."""
+    run = pipeline or run_pipeline
+    results = run(config_path, **pipeline_kwargs)
+    publisher = publish or publish_nightly_artifacts
+    publisher(config_path)
+    return results
+
+
 def _configure_logging() -> None:
     if logging.getLogger().handlers:
         return
@@ -121,10 +141,13 @@ def main(config_path: str = "config/settings.yaml") -> None:
     """Refresh raw data, warehouse, metrics, and models."""
     _configure_logging()
     try:
-        results = run_pipeline(config_path)
+        results = refresh_and_publish(config_path)
     except PipelineStepError as exc:
         log.error("%s", exc)
         raise typer.Exit(code=exc.returncode or 1) from exc
+    except ArtifactUploadError as exc:
+        log.error("Pipeline succeeded but artifact upload failed: %s", exc)
+        raise typer.Exit(code=1) from exc
 
     total = sum(step.duration_s for step in results)
     for step in results:

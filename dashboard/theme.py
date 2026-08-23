@@ -57,7 +57,6 @@ PLOTLY_LAYOUT = dict(
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
     font=dict(family="IBM Plex Sans, sans-serif", color=TEXT_MUTED, size=11),
-    title_font=dict(size=0, color=TEXT),
     title=dict(text="", x=0.0, pad=dict(t=0, b=0)),
     xaxis=dict(
         gridcolor="#121826",

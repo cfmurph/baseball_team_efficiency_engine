@@ -1,0 +1,45 @@
+{
+  "notes": "Pinned rWAR for CI. If Baseball-Reference revises a season, copy the new WAR from a local pull_war extract into war_daily_*.txt and update player_war / component fields here. Do not hit the live BR URLs in CI.",
+  "seasons": [
+    {
+      "name": "Aaron Judge",
+      "player_id": "judgeaa01",
+      "year_id": 2022,
+      "team_id": "NYA",
+      "batting_war": 10.8,
+      "pitching_war": null,
+      "player_war": 10.8,
+      "war_source": "real"
+    },
+    {
+      "name": "Mike Trout",
+      "player_id": "troutmi01",
+      "year_id": 2012,
+      "team_id": "LAA",
+      "batting_war": 10.5,
+      "pitching_war": null,
+      "player_war": 10.5,
+      "war_source": "real"
+    },
+    {
+      "name": "Jacob deGrom",
+      "player_id": "degroja01",
+      "year_id": 2018,
+      "team_id": "NYN",
+      "batting_war": null,
+      "pitching_war": 9.4,
+      "player_war": 9.4,
+      "war_source": "real"
+    },
+    {
+      "name": "Shohei Ohtani",
+      "player_id": "ohtansh01",
+      "year_id": 2023,
+      "team_id": "LAA",
+      "batting_war": 6.0,
+      "pitching_war": 3.9,
+      "player_war": 9.9,
+      "war_source": "real"
+    }
+  ]
+}

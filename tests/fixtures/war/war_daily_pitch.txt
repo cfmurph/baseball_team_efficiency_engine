@@ -1,0 +1,3 @@
+name_common,player_ID,year_ID,team_ID,stint_ID,WAR
+Jacob deGrom,degroja01,2018,NYM,1,9.4
+Shohei Ohtani,ohtansh01,2023,LAA,1,3.9
