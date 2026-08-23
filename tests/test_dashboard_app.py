@@ -89,6 +89,12 @@ class _FakeStreamlit:
     def title(self, *args, **kwargs) -> None:
         return None
 
+    def markdown(self, *args, **kwargs) -> None:
+        return None
+
+    def metric(self, *args, **kwargs) -> None:
+        return None
+
     def caption(self, text: str, *args, **kwargs) -> None:
         self.captions.append(str(text))
 
@@ -150,13 +156,24 @@ class _FakeFigure:
     def update_traces(self, *args, **kwargs) -> None:
         return None
 
+    def add_hline(self, *args, **kwargs) -> None:
+        return None
+
 
 def test_slider_max_expression_handles_empty_and_non_empty_years():
     expr = _slider_max_expr()
     compiled = compile(ast.Expression(expr), str(APP_PATH), "eval")
 
-    empty_result = eval(compiled, {"all_years": [], "_current_year": 2026})
-    non_empty_result = eval(compiled, {"all_years": [2018, 2024], "_current_year": 2020})
+    from src.baseball_analytics.dashboard_helpers import compute_slider_max
+
+    empty_result = eval(
+        compiled,
+        {"all_years": [], "_current_year": 2026, "compute_slider_max": compute_slider_max},
+    )
+    non_empty_result = eval(
+        compiled,
+        {"all_years": [2018, 2024], "_current_year": 2020, "compute_slider_max": compute_slider_max},
+    )
 
     assert empty_result == 2026
     assert non_empty_result == 2024
@@ -245,8 +262,19 @@ def test_player_explorer_shows_player_id_when_name_collides():
             return None
         return None
 
+    from dashboard.helpers import (
+        empty_state_copy,
+        metric_label,
+        salary_coverage_note,
+        scale_money_columns,
+        teams_from_frame,
+        years_from_frame,
+    )
+    from src.baseball_analytics.dashboard_utils import player_id_columns_for_duplicate_names
+
     namespace = _load_app_symbols(
-        functions=("page_player_explorer",),
+        functions=("page_player_explorer", "_empty", "_salary_note", "_page_header"),
+        assignments=("_SCATTER_MARKER",),
         globals_dict={
             "pd": pd,
             "st": st,
@@ -254,6 +282,18 @@ def test_player_explorer_shows_player_id_when_name_collides():
             "_scale_payroll": lambda df: df,
             "_PLAYER_COL_CFG": {},
             "_show_table": lambda df, *args, **kwargs: captured_tables.append(df.copy()),
+            "years_from_frame": years_from_frame,
+            "teams_from_frame": teams_from_frame,
+            "metric_label": metric_label,
+            "empty_state_copy": empty_state_copy,
+            "salary_coverage_note": salary_coverage_note,
+            "scale_money_columns": scale_money_columns,
+            "player_id_columns_for_duplicate_names": player_id_columns_for_duplicate_names,
+            "html": __import__("html"),
+            "nav_page": lambda label: {"kicker": "", "label": label, "blurb": ""},
+            "px": SimpleNamespace(scatter=lambda *args, **kwargs: _FakeFigure()),
+            "_chart": lambda *args, **kwargs: None,
+            "CONTRACT_COLORS": {},
         },
     )
 
@@ -349,8 +389,11 @@ def test_team_profile_roster_includes_player_id_for_name_collisions():
         bar=lambda *args, **kwargs: _FakeFigure(),
     )
 
+    from dashboard.helpers import empty_state_copy, salary_coverage_note
+    from src.baseball_analytics.dashboard_utils import player_id_columns_for_duplicate_names
+
     namespace = _load_app_symbols(
-        functions=("page_team_profile",),
+        functions=("page_team_deep_dive", "_page_header", "_empty", "_salary_note"),
         globals_dict={
             "pd": pd,
             "st": st,
@@ -364,10 +407,20 @@ def test_team_profile_roster_includes_player_id_for_name_collisions():
             "_PLAYER_COL_CFG": {},
             "px": fake_px,
             "_chart": lambda *args, **kwargs: None,
+            "empty_state_copy": empty_state_copy,
+            "salary_coverage_note": salary_coverage_note,
+            "player_id_columns_for_duplicate_names": player_id_columns_for_duplicate_names,
+            "html": __import__("html"),
+            "nav_page": lambda label: {"kicker": "League", "label": label, "blurb": ""},
+            "format_signed_int": lambda v: str(v),
+            "format_money_millions": lambda v, **kwargs: str(v),
+            "format_war": lambda v, **kwargs: str(v),
+            "add_payroll_millions": lambda df: df,
+            "scale_money_columns": lambda df: df,
         },
     )
 
-    namespace["page_team_profile"]()
+    namespace["page_team_deep_dive"]()
 
     roster_tables = [df for df in captured_tables if "name_full" in df.columns]
     assert roster_tables, "Expected at least one roster table render call"

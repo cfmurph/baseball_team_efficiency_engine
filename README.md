@@ -120,7 +120,7 @@ python3 -m pipeline.transform.build_metrics
 python3 -m models.train_win_model
 python3 -m models.cluster_teams
 
-# Dashboard
+# Dashboard (run from the repo root)
 streamlit run dashboard/app.py
 ```
 
