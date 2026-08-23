@@ -114,12 +114,19 @@ def test_build_fact_team_season_dead_money_share_counts_two_way_player_once(
 ) -> None:
     _stub_two_way_war(monkeypatch)
 
+    player_season = build_warehouse.build_fact_player_season(
+        _batting_frame(),
+        _pitching_frame(),
+        _salaries_frame(),
+        min_year=2020,
+    )
     result = build_warehouse.build_fact_team_season(
         _teams_frame(),
         _salaries_frame(),
         _batting_frame(),
         _pitching_frame(),
         min_year=2020,
+        player_season=player_season,
     )
 
     assert len(result) == 1
