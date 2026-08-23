@@ -24,7 +24,8 @@ Raw CSV / Lahman API
     → pipeline/transform/build_metrics.py     (CSV artifacts per analysis)
     → models/train_win_model.py               (LinearRegression + XGBoost + frontier)
     → models/cluster_teams.py                 (KMeans team archetypes)
-    → dashboard/app.py                        (Streamlit 8-section UI)
+    → dashboard/app.py                        (Streamlit 8-section FO / GM UI)
+    → dashboard/fantasy_app.py                (BenchOrStart waitlist + share cards)
 ```
 
 ## Repo layout
@@ -48,7 +49,9 @@ models/
   train_win_model.py            LinearRegression + XGBoost win models + efficiency frontier
   cluster_teams.py              KMeans team archetype clustering
 dbt/                            dbt scaffold (staging + mart SQL models)
-dashboard/app.py                Streamlit multi-section dashboard
+dashboard/app.py                Streamlit multi-section FO / GM dashboard
+dashboard/fantasy_app.py        BenchOrStart waitlist + share-card shell
+fantasy/                        Card loader, stub cards.jsonl, waitlist helper
 docs/                           Architecture, schema, metrics framework, shared artifacts, roadmap
 tests/                          Unit tests covering metrics, WAR, validation, artifact storage
 artifacts/                      Output CSVs and plots (gitignored, generated at runtime)
@@ -121,9 +124,14 @@ python3 -m pipeline.transform.build_metrics
 python3 -m models.train_win_model
 python3 -m models.cluster_teams
 
-# Dashboard (run from the repo root)
+# Front-office dashboard (run from the repo root)
 streamlit run dashboard/app.py
+
+# BenchOrStart — waitlist + weekly share cards (separate surface)
+streamlit run dashboard/fantasy_app.py
 ```
+
+Front office and BenchOrStart are **two Streamlit entrypoints**. Do not add start/sit pages to the 8-section GM app. BenchOrStart details, card path, and the waitlist webhook hook: [docs/fantasy.md](docs/fantasy.md).
 
 ## Nightly refresh
 

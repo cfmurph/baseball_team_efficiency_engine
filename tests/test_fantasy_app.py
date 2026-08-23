@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+import ast
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+from fantasy.cards import CARD_LAKE_KEY
+from fantasy.copy import CTA, FOOTER, HEADLINE, MICROCOPY, PRODUCT_NAME, SUBHEAD, SUCCESS
+
+APP_PATH = Path(__file__).resolve().parents[1] / "dashboard" / "fantasy_app.py"
+ROOT = APP_PATH.resolve().parents[1]
+GM_APP = Path(__file__).resolve().parents[1] / "dashboard" / "app.py"
+
+
+def _is_local_import(node: ast.AST) -> str | None:
+    if isinstance(node, ast.ImportFrom) and node.module:
+        module = node.module
+        if module.startswith(("src", "dashboard", "fantasy")):
+            return module
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            if alias.name.startswith(("src", "dashboard", "fantasy")):
+                return alias.name
+    return None
+
+
+def _is_path_bootstrap(node: ast.AST) -> bool:
+    return isinstance(node, ast.If) and "sys.path.insert" in ast.unparse(node)
+
+
+def test_fantasy_entrypoint_bootstraps_before_local_imports() -> None:
+    tree = ast.parse(APP_PATH.read_text(encoding="utf-8"), filename=str(APP_PATH))
+    saw_bootstrap = False
+    for node in tree.body:
+        if _is_path_bootstrap(node):
+            saw_bootstrap = True
+            continue
+        module = _is_local_import(node)
+        if module is not None:
+            assert saw_bootstrap, f"{module} is imported before the sys.path bootstrap"
+    assert saw_bootstrap
+
+
+def test_fantasy_app_uses_shared_cards_jsonl_and_marketing_copy() -> None:
+    source = APP_PATH.read_text(encoding="utf-8")
+    assert "resolve_artifact" in source
+    assert "CARD_LAKE_KEY" in source or CARD_LAKE_KEY in source
+    assert "fantasy_cards_" not in source
+    assert PRODUCT_NAME in source
+    assert HEADLINE in source
+    assert SUBHEAD in source
+    assert CTA in source
+    assert MICROCOPY in source
+    assert SUCCESS in source
+    assert FOOTER in source
+
+
+def test_gm_dashboard_not_rewritten_for_fantasy() -> None:
+    source = GM_APP.read_text(encoding="utf-8")
+    assert "BenchOrStart" not in source
+    assert "fantasy_app" not in source
+    assert "current/fantasy/cards.jsonl" not in source
+
+
+def test_fantasy_app_imports_without_pythonpath() -> None:
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    code = r"""
+import sys
+from pathlib import Path
+
+script_dir = Path("dashboard").resolve()
+root = script_dir.parent
+sys.path = [str(script_dir)] + [p for p in sys.path if Path(p).resolve() != root]
+
+_ROOT = Path("dashboard/fantasy_app.py").resolve().parents[1]
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from fantasy.cards import CARD_LAKE_KEY, load_stub_cards
+from fantasy.copy import PRODUCT_NAME
+from src.baseball_analytics.storage import resolve_artifact
+
+assert CARD_LAKE_KEY == "current/fantasy/cards.jsonl"
+assert PRODUCT_NAME == "BenchOrStart"
+assert callable(resolve_artifact)
+assert len(load_stub_cards()) == 4
+print("ok")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "ok" in result.stdout

@@ -250,6 +250,28 @@ def test_resolve_named_artifacts_maps_keys(tmp_path: Path) -> None:
     assert resolved["players"] is None
 
 
+def test_resolve_nested_current_fantasy_cards_jsonl(tmp_path: Path) -> None:
+    backend = MemoryBackend()
+    backend.put("current/fantasy/cards.jsonl", b'{"recommendation_type":"start"}\n')
+    path = resolve_artifact(
+        "current/fantasy/cards.jsonl",
+        _settings(tmp_path, uri="s3://bucket/prefix"),
+        backend=backend,
+    )
+    assert path is not None
+    assert path.read_text() == '{"recommendation_type":"start"}\n'
+    assert backend.gets[0] == "current/fantasy/cards.jsonl"
+    assert not any("fantasy_cards_" in key for key in backend.gets)
+
+
+def test_resolve_nested_local_current_fantasy_cards_jsonl(tmp_path: Path) -> None:
+    lake = tmp_path / "artifacts" / "current" / "fantasy"
+    lake.mkdir(parents=True)
+    (lake / "cards.jsonl").write_text("local-cards\n", encoding="utf-8")
+    path = resolve_artifact("current/fantasy/cards.jsonl", _settings(tmp_path, uri=None))
+    assert path == lake / "cards.jsonl"
+
+
 def test_file_uri_upload_then_resolve_without_local_copy(tmp_path: Path) -> None:
     local = tmp_path / "artifacts"
     local.mkdir()

@@ -11,5 +11,7 @@ data/raw/*.csv
 data/raw/*.txt
 data/staging/*.csv
 data/sr_cache/
+data/waitlist/*.jsonl
+artifacts/current/
 .env
 *.env
