@@ -182,11 +182,12 @@ class _FakeFigure:
         return None
 
 
-def test_dashboard_resolves_artifacts_through_shared_storage() -> None:
+def test_dashboard_pages_do_not_import_storage() -> None:
+    """#105 remote/local swap lives in dashboard.data — not Streamlit pages."""
     source = APP_PATH.read_text(encoding="utf-8")
-    assert "from src.baseball_analytics.storage import" in source
-    assert "resolve_artifact" in source
-    assert "load_artifact_settings" in source
+    assert "from src.baseball_analytics.storage import" not in source
+    assert "resolve_artifact" not in source
+    assert "from dashboard.data import" in source
     tree = _read_app_tree()
     func_names = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
     assert "_resolve_file" in func_names

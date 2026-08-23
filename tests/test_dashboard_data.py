@@ -23,6 +23,19 @@ def test_named_loaders_exist_and_pages_avoid_raw_paths() -> None:
         assert 'Path("artifacts")' not in source
         assert "team_onfield_contract_metrics.csv" not in source
         assert "player_season_metrics.csv" not in source
+        assert "src.baseball_analytics.storage" not in source
+        assert "ARTIFACTS_URI" not in source
+
+
+def test_only_data_module_calls_resolve_artifact() -> None:
+    dashboard = Path("dashboard")
+    for path in dashboard.rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        if path.name == "data.py":
+            assert "resolve_artifact" in source
+            continue
+        assert "resolve_artifact" not in source
+        assert "from src.baseball_analytics.storage import" not in source
 
 
 def test_data_module_has_named_loaders() -> None:
@@ -54,6 +67,24 @@ def test_resolve_file_uses_local_fallback(tmp_path: Path) -> None:
     path = resolve_file("metrics", settings)
     assert path == local / "team_onfield_contract_metrics.csv"
     assert resolve_file("players", settings) is None
+
+
+def test_resolve_file_uses_shared_latest_when_uri_set(tmp_path: Path) -> None:
+    shared = tmp_path / "shared"
+    latest = shared / "mlb" / "mlb" / "latest"
+    latest.mkdir(parents=True)
+    (latest / "team_onfield_contract_metrics.csv").write_text("year_id\n2015\n")
+    settings = ArtifactSettings(
+        uri=f"file://{shared}",
+        local_dir=tmp_path / "artifacts",
+        league="mlb",
+        level="mlb",
+        cache_dir=tmp_path / "cache",
+        cache_ttl_s=0,
+    )
+    path = resolve_file("metrics", settings)
+    assert path is not None
+    assert path.read_text() == "year_id\n2015\n"
 
 
 def test_app_keeps_resolve_file_and_load_helpers() -> None:

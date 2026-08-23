@@ -16,6 +16,7 @@ from src.baseball_analytics.storage import (
     object_key,
     parse_artifacts_uri,
     partition_key,
+    relative_artifact_key,
     publish_nightly_artifacts,
     resolve_artifact,
     resolve_named_artifacts,
@@ -92,6 +93,14 @@ def test_partition_and_object_key_are_league_level_date() -> None:
     assert (
         object_key("mlb", "mlb", "2026-08-23", "team_onfield_contract_metrics.csv")
         == "mlb/mlb/2026-08-23/team_onfield_contract_metrics.csv"
+    )
+    assert relative_artifact_key("fantasy/cards.jsonl") == "fantasy/cards.jsonl"
+    assert (
+        object_key("mlb", "mlb", "latest", "fantasy/cards.jsonl")
+        == "mlb/mlb/latest/fantasy/cards.jsonl"
+    )
+    assert relative_artifact_key("/abs/artifacts/team_onfield_contract_metrics.csv") == (
+        "team_onfield_contract_metrics.csv"
     )
     with pytest.raises(ValueError, match="run_date"):
         partition_key("mlb", "mlb", "08-23-2026")

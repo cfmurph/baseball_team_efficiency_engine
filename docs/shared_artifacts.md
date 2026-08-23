@@ -7,10 +7,21 @@ Nightly pipeline outputs live in object storage so every dashboard instance read
 Under the configured URI prefix:
 
 ```text
-{league}/{level}/{run_date}/<filename>
+{league}/{level}/{run_date}/<relative-file>
 {league}/{level}/{run_date}/manifest.json
-{league}/{level}/latest/<filename>
+{league}/{level}/latest/<relative-file>
 {league}/{level}/latest/manifest.json
+```
+
+`<relative-file>` is any path under local `artifacts/` (not only the top
+level). New product files are added beside today's CSVs — same URI and
+partition. See [ADR 0001](adr/0001-shared-artifact-layout.md).
+
+Reserved for a Fantasy Phase 0 follow-up (not emitted by #105):
+
+```text
+{league}/{level}/{run_date}/fantasy/cards.jsonl
+{league}/{level}/latest/fantasy/cards.jsonl
 ```
 
 | Segment | Current default | Future example |
