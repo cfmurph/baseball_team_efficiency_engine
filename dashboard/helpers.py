@@ -107,6 +107,7 @@ NAV_PAGES = (
 
 FULL_PIPELINE = (
     "python3 -m pipeline.extract.pull_sources\n"
+    "python3 -m pipeline.extract.pull_war\n"
     "python3 -m pipeline.transform.build_warehouse\n"
     "python3 -m pipeline.transform.build_metrics\n"
     "python3 -m models.train_win_model\n"

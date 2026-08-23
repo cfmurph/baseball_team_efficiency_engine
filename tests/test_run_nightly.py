@@ -17,6 +17,7 @@ from pipeline.run_nightly import (
 def test_pipeline_steps_match_documented_chain() -> None:
     assert [module for _, module in PIPELINE_STEPS] == [
         "pipeline.extract.pull_sources",
+        "pipeline.extract.pull_war",
         "pipeline.transform.build_warehouse",
         "pipeline.transform.build_metrics",
         "models.train_win_model",
@@ -79,6 +80,7 @@ def test_run_pipeline_stops_after_first_failure(tmp_path) -> None:
     assert err.remaining == ["train_win_model", "cluster_teams"]
     assert calls == [
         "pipeline.extract.pull_sources",
+        "pipeline.extract.pull_war",
         "pipeline.transform.build_warehouse",
         "pipeline.transform.build_metrics",
     ]

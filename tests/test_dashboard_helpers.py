@@ -277,6 +277,5 @@ def test_app_bootstraps_sys_path_before_package_imports() -> None:
                 assert saw_root_bootstrap, f"{node.module} imported before _ROOT sys.path bootstrap"
     assert saw_root_bootstrap
     assert "dashboard.helpers" in package_imports
-    assert "src.baseball_analytics.dashboard_helpers" in package_imports
     assert "src.baseball_analytics.dashboard_utils" in package_imports
     assert package_imports[0].startswith("src.") or package_imports[0].startswith("dashboard.")

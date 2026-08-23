@@ -28,15 +28,8 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-from src.baseball_analytics.dashboard_helpers import (
-    apply_layout_and_render_chart,
-    compute_slider_max,
-)
 from src.baseball_analytics.dashboard_utils import (
-    apply_plotly_layout,
-    calculate_slider_max,
     player_id_columns_for_duplicate_names,
-    render_plotly_chart,
     scale_payroll_for_display,
 )
 from dashboard.helpers import (
@@ -434,30 +427,36 @@ _SCATTER_MARKER = dict(size=8, opacity=0.82, line=dict(width=0.5, color="#0d1117
 
 def _apply_layout(fig) -> None:
     """Apply the Baseball Savant dark layout to any Plotly figure."""
-    apply_plotly_layout(fig, _PLOTLY_LAYOUT)
+    fig.update_layout(**_PLOTLY_LAYOUT)
 
 
 def _chart(fig, height: int = 400) -> None:
     """Apply dark layout and render a Plotly chart."""
-    apply_layout_and_render_chart(
-        fig,
-        apply_layout=_apply_layout,
-        plotly_chart=st.plotly_chart,
-        height=height,
-    )
+    _apply_layout(fig)
+    fig.update_layout(height=height)
+    st.plotly_chart(fig, use_container_width=True)
 
 
-# ── Global state ───────────────────────────────────────────────────────────────
-metrics = _load("metrics")
-if metrics is None:
-    st.error(
-        "No artifacts found. Run the full pipeline first:\n\n"
-        "```\npython3 -m pipeline.extract.pull_sources\n"
-        "python3 -m pipeline.extract.pull_war\n"
-        "python3 -m pipeline.transform.build_warehouse\n"
-        "python3 -m pipeline.transform.build_metrics\n"
-        "python3 -m models.train_win_model\n"
-        "python3 -m models.cluster_teams\n```"
+def _page_header(label: str) -> None:
+    page_meta = nav_page(label)
+    st.markdown(f'<div class="page-kicker">{html.escape(page_meta["kicker"])}</div>', unsafe_allow_html=True)
+    st.title(page_meta["label"])
+    st.caption(page_meta["blurb"])
+
+
+def _empty(kind: str) -> None:
+    copy = empty_state_copy(kind)
+    cmd = copy.get("command") or ""
+    cmd_html = f"<pre><code>{html.escape(cmd)}</code></pre>" if cmd else ""
+    st.markdown(
+        f"""
+        <div class="empty-card" role="status">
+          <h3>{html.escape(copy["title"])}</h3>
+          <p>{html.escape(copy["body"])}</p>
+          {cmd_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
 
@@ -470,9 +469,11 @@ def _salary_note(year: int | None) -> None:
 # ── Global state ───────────────────────────────────────────────────────────────
 metrics = _load("metrics")
 _current_year = datetime.date.today().year
-all_years = sorted(metrics["year_id"].dropna().astype(int).unique().tolist())
-_slider_max = compute_slider_max(all_years, _current_year)
-all_teams = sorted(metrics["team_name"].dropna().unique().tolist())
+all_years = years_from_frame(metrics)
+_slider_max = max(all_years[-1], _current_year) if all_years else _current_year
+_slider_lo = all_years[0] if all_years else _current_year
+all_teams = teams_from_frame(metrics)
+_status = artifact_status(_FILES)
 
 
 def _season_picker(key: str = "season", default_latest: bool = True) -> int | None:
@@ -529,11 +530,14 @@ st.sidebar.markdown(
 # 1. OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════════
 def page_league_snapshot() -> None:
-    st.title("League Snapshot")
+    _page_header("Overview")
     st.caption(
-        "Full sortable team table for any season. Team WAR is Baseball-Reference rWAR "
-        "rolled up from players (`war_source=real`); Lahman wOBA/FIP approx is the fallback."
+        "Team WAR is Baseball-Reference rWAR rolled up from players (`war_source=real`); "
+        "Lahman wOBA/FIP approx is the fallback."
     )
+    if metrics is None:
+        _empty("metrics")
+        return
 
     col_nav, col_lg = st.columns([3, 1])
     with col_nav:
@@ -666,10 +670,10 @@ def page_league_snapshot() -> None:
 # 2. ROSTER LAB
 # ══════════════════════════════════════════════════════════════════════════════
 def page_player_explorer() -> None:
-    st.title("Player Explorer")
+    _page_header("Roster Lab")
     st.caption(
-        "All player stats for any season. WAR is Baseball-Reference rWAR when the "
-        "player-season maps (`war_source=real`); otherwise the Lahman approximation."
+        "WAR is Baseball-Reference rWAR when the player-season maps (`war_source=real`); "
+        "otherwise the Lahman approximation."
     )
 
     players = _load("players")
@@ -730,6 +734,8 @@ def page_player_explorer() -> None:
             fig.add_hline(y=0, line_dash="dash", line_color="#30363d")
             fig.update_traces(marker=_SCATTER_MARKER)
             _chart(fig, height=420)
+
+    tab_bat, tab_pit, tab_contract, tab_all = st.tabs(["Batting", "Pitching", "Contract", "All Stats"])
 
     # Detect same-name players in the current filtered view so we can show player_id
     has_name_collision = (
@@ -996,7 +1002,7 @@ def page_compare_teams() -> None:
 # 5. CONTRACT WATCH
 # ══════════════════════════════════════════════════════════════════════════════
 def page_contract_analysis() -> None:
-    st.title("Contract Analysis")
+    _page_header("Contract Watch")
     st.caption(
         "Every player contract, classified and searchable. Salary data from Lahman (through 2016). "
         "Surplus value uses Baseball-Reference rWAR when `war_source=real`."
@@ -1336,6 +1342,14 @@ def page_model_insights() -> None:
                 fig.add_trace(go.Scatter(x=[lo, hi], y=[lo, hi], mode="lines", line=dict(dash="dash", color="#30363d"), name="Perfect"))
                 fig.update_traces(marker=_SCATTER_MARKER, selector=dict(mode="markers"))
                 _chart(fig, height=400)
+
+
+# Nav labels from the UX polish; page_* names from the real-WAR rewrite.
+page_overview = page_league_snapshot
+page_roster_lab = page_player_explorer
+page_contract_watch = page_contract_analysis
+page_team_profile = page_team_deep_dive
+page_season_compare = page_compare_teams
 
 
 # ── Routing ────────────────────────────────────────────────────────────────────
