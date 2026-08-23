@@ -15,6 +15,7 @@ from src.baseball_analytics.validation import (
     validate_fact_player_season,
     validate_fact_team_season,
     validate_dim_team,
+    validate_all,
 )
 
 
@@ -205,3 +206,34 @@ def test_validate_dim_team_passes():
     })
     report = validate_dim_team(df)
     assert report.passed
+
+def test_validate_all_aggregates_player_season_failures():
+    fact_team = pd.DataFrame({
+        "team_key": ["NYA_2010"],
+        "season_key": [2010],
+        "wins": [95],
+        "losses": [67],
+        "payroll": [200e6],
+        "pythag_wins": [93.0],
+        "gini_salary": [0.4],
+    })
+    fact_player = pd.DataFrame({
+        "player_id": ["playerA"],
+        "season_key": [2010],
+        "team_id": ["NYA"],
+        "salary": [-10_000],
+    })
+    dim_team = pd.DataFrame({
+        "team_key": ["NYA_2010"],
+        "team_id": ["NYA"],
+        "franchise_id": ["NYY"],
+        "team_name": ["New York Yankees"],
+        "league_id": ["AL"],
+    })
+
+    report = validate_all(fact_team, fact_player, dim_team)
+
+    assert not report.passed
+    assert report.n_failed == 1
+    assert "FAILED" in report.summary()
+
