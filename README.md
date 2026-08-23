@@ -12,7 +12,7 @@ A production-grade MLB analytics platform that turns Lahman baseball data into a
 - **Efficiency frontier** — polynomial envelope of payroll vs wins; teams above curve are efficient
 - **Team clustering** — KMeans archetypes: Big-Spend Contender, Low-Spend Overachiever, Rebuilding, Declining Spender
 - **Data validation** — lightweight but thorough checks on every pipeline stage
-- **8-section Streamlit dashboard** — Overview, Team Deep Dive, Compare Teams, Roster Lab, Contract Watch, Efficiency Frontier, What-If Sim, Model Insights
+- **8-section Streamlit dashboard** — Overview, Team Deep Dive, Compare Teams, Roster Lab, Contract Watch, Efficiency Frontier, What-If Sim, Model Insights (works with missing artifacts via empty states)
 
 ## Architecture
 
@@ -122,14 +122,16 @@ streamlit run dashboard/app.py
 
 ## Dashboard sections
 
-1. **Overview** — Season efficiency scatter (payroll vs wins), KPIs, ranking table
-2. **Team Deep Dive** — Win trajectory, payroll, WAR, window phase timeline
+1. **Overview** — Efficiency KPIs (most surplus, lowest $/WAR, best W/$10M), payroll-vs-wins scatter, ranking, standings, and window phases
+2. **Team Deep Dive** — Win trajectory, payroll, WAR, window phase, and season roster
 3. **Compare Teams** — Multi-team line chart across any metric, any date range
 4. **Roster Lab** — Player WAR vs salary scatter with contract classification
-5. **Contract Watch** — Top surplus value / worst contracts / dead money tables
+5. **Contract Watch** — Surplus value / overpaid / dead money / fair value tables
 6. **Efficiency Frontier** — Teams above/below polynomial payroll-wins envelope + cluster archetypes
 7. **What-If Sim** — Estimated win change from payroll increase
 8. **Model Insights** — Feature importance, actual vs predicted, largest model misses
+
+Each section stays usable when its CSV is missing: the UI shows a short empty state and the pipeline command to generate it. Lahman payroll typically ends in 2016 — recent seasons may show standings without dollar metrics.
 
 ## Running tests
 
@@ -137,7 +139,7 @@ streamlit run dashboard/app.py
 python3 -m pytest tests/ -v
 ```
 
-53 tests covering: metrics helpers, WAR computation, BaseRuns, contract classification, window detection, data validation checks.
+Dashboard helpers plus metrics, WAR, BaseRuns, contract classification, window detection, and data validation checks.
 
 ## Data sources
 
