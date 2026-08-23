@@ -95,7 +95,7 @@ def resolve_card_feed(
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
     path = resolve_artifact(CARD_LAKE_KEY, cfg, backend=backend, environ=environ)
     if path is not None:
-        return path, artifact_source_label(cfg)
+        return path, artifact_source_label(cfg, backend=backend, environ=environ)
     return None, SOURCE_STUB
 
 
