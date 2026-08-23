@@ -6,8 +6,8 @@
 - [x] Win model scaffold
 - [x] Team clustering scaffold
 - [x] Dashboard starter
-- [ ] Add player-level WAR source
-- [ ] Build cost-per-WAR outputs
+- [x] Add player-level WAR source (Baseball-Reference rWAR + Lahman approx fallback)
+- [x] Build cost-per-WAR outputs
 
 ## Phase 2: Roster intelligence
 - [ ] Add batting / pitching / fielding rollups at team-season level
