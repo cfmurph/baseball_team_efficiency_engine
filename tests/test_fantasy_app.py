@@ -7,7 +7,18 @@ import sys
 from pathlib import Path
 
 from fantasy.cards import CARD_LAKE_KEY
-from fantasy.copy import CTA, FOOTER, HEADLINE, MICROCOPY, PRODUCT_NAME, SUBHEAD, SUCCESS
+from fantasy.copy import (
+    COPY_TEXT,
+    CTA,
+    DOWNLOAD_IMAGE,
+    FOOTER,
+    HEADLINE,
+    INVITE_CHIP,
+    MICROCOPY,
+    PRODUCT_NAME,
+    SUBHEAD,
+    SUCCESS,
+)
 
 APP_PATH = Path(__file__).resolve().parents[1] / "dashboard" / "fantasy_app.py"
 ROOT = APP_PATH.resolve().parents[1]
@@ -68,6 +79,23 @@ def test_gm_dashboard_not_rewritten_for_fantasy() -> None:
     assert "BenchOrStart" not in source
     assert "fantasy_app" not in source
     assert "current/fantasy/cards.jsonl" not in source
+
+
+def test_fantasy_app_soft_launch_layout_and_share_actions() -> None:
+    source = APP_PATH.read_text(encoding="utf-8")
+    assert source.index("views = present_cards") < source.index('st.form("waitlist"')
+    assert "st.tabs" in source
+    assert "share_blurb" in source
+    assert "render_share_card_png" in source
+    assert "INVITE_CHIP" in source
+    assert "TAB_LABELS" in source
+    assert "fantasy_cards_" not in source
+    assert COPY_TEXT == "Copy text"
+    assert DOWNLOAD_IMAGE == "Download image"
+    assert INVITE_CHIP == "Invite only"
+    chrome = source.lower()
+    assert "efficiency engine" not in chrome
+    assert "front office" not in chrome
 
 
 def test_fantasy_app_imports_without_pythonpath() -> None:

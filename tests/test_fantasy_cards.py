@@ -4,20 +4,25 @@ from pathlib import Path
 
 from src.baseball_analytics.config import ArtifactSettings
 
+from fantasy.card_image import render_share_card_png
 from fantasy.cards import (
     CARD_LAKE_KEY,
     RETIRED_CARD_NAMES,
     card_feed_keys,
     card_headline,
     card_rank_line,
+    card_share_filename,
     card_stat_line,
     card_subtitle,
+    cards_for_label,
     is_approx,
     load_share_cards,
     load_stub_cards,
     parse_cards_jsonl,
     present_card,
+    present_cards,
     recommendation_label,
+    share_blurb,
     share_card_html,
     war_source,
 )
@@ -66,10 +71,13 @@ def test_share_fallbacks_and_approx_hides_confidence() -> None:
         "rank": {"among_rec_type": 1},
         "share": {},
     }
-    assert card_headline(card) == "PICK UP"
+    assert card_headline(card) == "Spencer Steer"
+    assert card_headline(card) != recommendation_label("pickup")
     assert card_subtitle(card) == "Spencer Steer · 1B · CIN"
-    assert card_stat_line(card) == "+1.6 vs repl · 81% conf"
+    assert card_stat_line(card) == "+1.6 edge · 81% conf"
+    assert "vs repl" not in card_stat_line(card)
     assert card_rank_line(card) == "#1 pickup tonight"
+    assert card["edge"]["vs_replacement"] == 1.6
 
     approx = {
         **card,
@@ -84,7 +92,8 @@ def test_share_fallbacks_and_approx_hides_confidence() -> None:
     }
     assert is_approx(approx) is True
     assert war_source(approx) == "approx"
-    assert card_stat_line(approx) == "-0.4 vs repl"
+    assert card_stat_line(approx) == "-0.4 edge"
+    assert "vs repl" not in share_card_html(present_card(approx))
     view = present_card(approx)
     assert view.label == "BENCH"
     assert view.early_model is True
@@ -133,6 +142,13 @@ def test_stub_cards_cover_all_decisions_and_bbref_or_approx() -> None:
     assert "BENCH" in html
     assert EARLY_MODEL_BADGE in html
     assert "as of 2026-08-23" in html
+    assert "Jorge Soler" in html
+    assert html.count("BENCH") == 1
+    assert "vs repl" not in html
+    pickup = next(card for card in cards if card["recommendation_type"] == "pickup")
+    pickup_html = share_card_html(present_card(pickup))
+    assert "Spencer Steer" in pickup_html
+    assert pickup_html.count("PICK UP") == 1
 
 
 def test_parse_cards_jsonl_skips_bad_lines() -> None:
@@ -191,3 +207,56 @@ def test_resolve_prefers_current_fantasy_cards_jsonl(tmp_path: Path) -> None:
     assert source.startswith("shared")
     assert "current/fantasy/cards.jsonl" in backend.gets
     assert not any("fantasy_cards_" in key for key in backend.gets)
+
+
+def test_empty_share_headline_falls_back_to_player_name_not_badge() -> None:
+    card = {
+        "recommendation_type": "pickup",
+        "player": {"name": "Spencer Steer"},
+        "share": {"headline": "   "},
+    }
+    assert card_headline(card) == "Spencer Steer"
+    nameless = {"recommendation_type": "pickup", "player": {}, "share": {}}
+    assert card_headline(nameless) == ""
+    assert recommendation_label("pickup") == "PICK UP"
+
+
+def test_share_blurb_is_league_chat_ready() -> None:
+    card = load_stub_cards()[0]
+    view = present_card(card)
+    blurb = share_blurb(view)
+    assert blurb.startswith("PICK UP — Spencer Steer")
+    assert "+1.6 edge" in blurb
+    assert "vs repl" not in blurb
+    assert "Quiet week on the wire" in blurb
+    assert "as of 2026-08-23" in blurb
+
+
+def test_share_blurb_keeps_custom_headline_and_player() -> None:
+    view = present_card(
+        {
+            "recommendation_type": "stream",
+            "player": {"name": "Ranger Suárez", "position": "SP", "team": "PHI"},
+            "share": {"headline": "Stream this arm"},
+            "reason": "Matchup.",
+            "as_of_date": "2026-08-23",
+        }
+    )
+    blurb = share_blurb(view)
+    assert "STREAM — Ranger Suárez · SP · PHI" in blurb
+    assert "Stream this arm" in blurb
+
+
+def test_tabs_filter_by_recommendation_label() -> None:
+    views = present_cards(load_stub_cards())
+    assert [v.label for v in cards_for_label(views, "START")] == ["START"]
+    assert [v.label for v in cards_for_label(views, "BENCH")] == ["BENCH"]
+    assert len(cards_for_label(views, "All")) == 4
+
+
+def test_share_card_png_and_filename() -> None:
+    view = present_card(load_stub_cards()[0])
+    png = render_share_card_png(view)
+    assert png.startswith(b"\x89PNG")
+    assert len(png) > 1000
+    assert card_share_filename(view) == "benchorstart-spencer-steer-pickup.png"
