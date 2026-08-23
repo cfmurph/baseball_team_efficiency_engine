@@ -180,6 +180,17 @@ class _FakeFigure:
         return None
 
 
+def test_dashboard_resolves_artifacts_through_shared_storage() -> None:
+    source = APP_PATH.read_text(encoding="utf-8")
+    assert "from src.baseball_analytics.storage import" in source
+    assert "resolve_artifact" in source
+    assert "load_artifact_settings" in source
+    tree = _read_app_tree()
+    func_names = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
+    assert "_resolve_file" in func_names
+    assert "_load" in func_names
+
+
 def test_nav_pages_resolve_to_defined_page_functions():
     tree = _read_app_tree()
     func_names = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}

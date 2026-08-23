@@ -249,6 +249,10 @@ def test_artifact_status_and_empty_copy(tmp_path: Path) -> None:
     assert status["ready"] is True
     assert status["missing"] == ["players"]
 
+    none_status = artifact_status({"metrics": None, "players": present})
+    assert none_status["n_present"] == 1
+    assert none_status["missing"] == ["metrics"]
+
     copy = empty_state_copy("players")
     assert "player_season_metrics.csv" in copy["body"]
     assert empty_state_copy("not-a-kind")["title"] == "Nothing to show"
