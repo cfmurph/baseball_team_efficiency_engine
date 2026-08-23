@@ -7,3 +7,6 @@ def test_load_settings() -> None:
     settings = load_settings("config/settings.yaml")
     assert settings["min_year"] == 1990
     assert "teams" in settings["sources"]
+    assert "batting" in settings["war_sources"]
+    assert "pitching" in settings["war_sources"]
+    assert settings["war_sources"]["batting"].endswith("war_daily_bat.txt")
