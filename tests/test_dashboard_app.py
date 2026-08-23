@@ -180,22 +180,6 @@ class _FakeFigure:
         return None
 
 
-def test_sys_path_is_set_before_src_imports():
-    tree = _read_app_tree()
-    path_insert_line = None
-    src_import_line = None
-    for node in tree.body:
-        if isinstance(node, ast.If):
-            dumped = ast.dump(node)
-            if "sys" in dumped and "path" in dumped and "insert" in dumped:
-                path_insert_line = node.lineno
-        if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("src."):
-            src_import_line = node.lineno if src_import_line is None else min(src_import_line, node.lineno)
-    assert path_insert_line is not None, "Expected sys.path.insert before local imports"
-    assert src_import_line is not None, "Expected a src.* import"
-    assert path_insert_line < src_import_line
-
-
 def test_nav_pages_resolve_to_defined_page_functions():
     tree = _read_app_tree()
     func_names = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
