@@ -20,7 +20,6 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 import streamlit as st
-import streamlit.components.v1 as components
 from src.baseball_analytics.config import load_artifact_settings
 from src.baseball_analytics.storage import resolve_artifact
 
@@ -263,13 +262,13 @@ html, body, [class*="css"] {
 )
 
 def _copy_text_button(text: str, *, key: str) -> None:
-    """Clipboard control. Iframe uses execCommand so it works without extra deps."""
+    """Clipboard control via ``st.html`` so the click runs in page context."""
     payload = json.dumps(text)
     label = json.dumps(COPY_TEXT)
     done = json.dumps(COPIED)
-    components.html(
+    st.html(
         f"""
-        <button id="{html.escape(key)}" style="
+        <button id="{html.escape(key)}" type="button" style="
             width:100%;
             min-height:2.4rem;
             background:#161b22;
@@ -282,35 +281,38 @@ def _copy_text_button(text: str, *, key: str) -> None:
             cursor:pointer;
         ">{html.escape(COPY_TEXT)}</button>
         <script>
-        const btn = document.getElementById({json.dumps(key)});
-        const text = {payload};
-        btn.addEventListener("click", async () => {{
-          let ok = false;
-          try {{
-            if (navigator.clipboard && navigator.clipboard.writeText) {{
-              await navigator.clipboard.writeText(text);
-              ok = true;
+        (function() {{
+          const btn = document.getElementById({json.dumps(key)});
+          if (!btn) {{ return; }}
+          const text = {payload};
+          btn.addEventListener("click", async () => {{
+            let ok = false;
+            try {{
+              if (navigator.clipboard && navigator.clipboard.writeText) {{
+                await navigator.clipboard.writeText(text);
+                ok = true;
+              }}
+            }} catch (err) {{ ok = false; }}
+            if (!ok) {{
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.setAttribute("readonly", "");
+              ta.style.position = "fixed";
+              ta.style.left = "-9999px";
+              document.body.appendChild(ta);
+              ta.select();
+              try {{ ok = document.execCommand("copy"); }} catch (err) {{ ok = false; }}
+              document.body.removeChild(ta);
             }}
-          }} catch (err) {{ ok = false; }}
-          if (!ok) {{
-            const ta = document.createElement("textarea");
-            ta.value = text;
-            ta.setAttribute("readonly", "");
-            ta.style.position = "fixed";
-            ta.style.left = "-9999px";
-            document.body.appendChild(ta);
-            ta.select();
-            try {{ ok = document.execCommand("copy"); }} catch (err) {{ ok = false; }}
-            document.body.removeChild(ta);
-          }}
-          if (ok) {{
-            btn.innerText = {done};
-            setTimeout(() => {{ btn.innerText = {label}; }}, 1600);
-          }}
-        }});
+            if (ok) {{
+              btn.innerText = {done};
+              setTimeout(() => {{ btn.innerText = {label}; }}, 1600);
+            }}
+          }});
+        }})();
         </script>
         """,
-        height=48,
+        unsafe_allow_javascript=True,
     )
 
 

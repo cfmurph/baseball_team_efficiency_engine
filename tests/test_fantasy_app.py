@@ -87,6 +87,8 @@ def test_fantasy_app_soft_launch_layout_and_share_actions() -> None:
     assert "st.tabs" in source
     assert "share_blurb" in source
     assert "render_share_card_png" in source
+    assert "import streamlit.components" not in source
+    assert "unsafe_allow_javascript" in source
     assert "INVITE_CHIP" in source
     assert "TAB_LABELS" in source
     assert "fantasy_cards_" not in source
