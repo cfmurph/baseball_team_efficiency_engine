@@ -324,3 +324,11 @@ def test_crosswalk_has_all_30_teams():
     assert len(df) >= 30, f"Expected >= 30 teams, got {len(df)}"
     assert "sr_team_id" in df.columns
     assert "lahman_team_id" in df.columns
+
+def test_parse_player_season_ignores_legacy_nested_team_players_shape():
+    legacy_payload = {"team": {"players": SEASONAL_STATS_FIXTURE["players"]}}
+
+    df = _parse_player_season(legacy_payload, "nyr-guid", 2024)
+
+    assert df.empty
+
