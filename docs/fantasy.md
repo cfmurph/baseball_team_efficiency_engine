@@ -24,11 +24,16 @@ streamlit run dashboard/fantasy_app.py --server.port 8502 --server.headless true
 
 The shell reads published files through the same `resolve_artifact()` / `ARTIFACTS_URI` helpers as the FO dashboard.
 
-**Locked path (schema 1.0):** `current/fantasy/cards.jsonl` — that is `fantasy/cards.jsonl` under the `current/` prefix.
+**Locked paths (schema 1.0):**
 
-Fallback only if that file is missing: `fantasy/cards.jsonl`, then `fantasy_cards_{as_of_date}.json`. If none exist the waitlist still works and labeled stub cards render.
+1. `current/fantasy/cards.jsonl` — live pointer (`fantasy/cards.jsonl` under the `current/` prefix)
+2. `runs/{run_id}/fantasy/cards.jsonl` — dated run, used when `current/` is missing
 
-JSONL schema 1.0. `as_of_date` is on each record and `manifest.json`. `edge.war_source` is `bbref` or `approx` only. The #111 nightly emitter ranks published `player_season_metrics` into top-N **start / sit / pickup / stream** cards at `fantasy/cards.jsonl` (never `fantasy_cards_*.json`). After a successful nightly the shell reads that file so it is not empty. Bundled stubs in `fantasy/stub_cards.jsonl` render only when the lake file is missing or empty. `approx` rows set `is_approx: true` and show an **early model** badge.
+`run_id` comes from `ARTIFACTS_RUN_ID` or `ARTIFACTS_RUN_DATE`, then any local `artifacts/runs/*/fantasy/cards.jsonl`.
+
+`as_of_date` lives inside each record and the lake `manifest.json`, not in the filename. `fantasy_cards_{as_of_date}.json` is ignored.
+
+JSONL schema 1.0. `edge.war_source` is `bbref` or `approx` only. The #111 nightly emitter ranks published `player_season_metrics` into top-N **start / sit / pickup / stream** cards at `fantasy/cards.jsonl`. After a successful nightly the shell reads `current/fantasy/cards.jsonl` so it is not empty. Bundled stubs in `fantasy/stub_cards.jsonl` render only when the lake file is missing or empty. `approx` rows set `is_approx: true` and show an **early model** badge.
 
 Recommendation labels (schema v1.0): `start` → START, `sit` → BENCH, `pickup` → PICK UP, `stream` → STREAM.
 

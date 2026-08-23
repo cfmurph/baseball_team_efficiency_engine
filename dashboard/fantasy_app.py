@@ -4,9 +4,12 @@ Separate entrypoint from the front-office GM dashboard::
 
     streamlit run dashboard/fantasy_app.py
 
-Reads locked ``current/fantasy/cards.jsonl`` (schema 1.0) via
-``resolve_artifact`` / ``ARTIFACTS_URI``. Missing feeds show an empty
-state plus labeled stubs. This entrypoint is not a page in the FO GM app.
+Reads locked ``current/fantasy/cards.jsonl`` (schema 1.0), then
+``runs/{run_id}/fantasy/cards.jsonl`` for dated runs, via
+``resolve_artifact`` / ``ARTIFACTS_URI``. ``as_of_date`` lives on each
+record and the lake manifest. Dated JSON filenames are ignored.
+Missing feeds show an empty state plus labeled stubs.
+This entrypoint is not a page in the FO GM app.
 """
 from __future__ import annotations
 
@@ -26,7 +29,6 @@ from src.baseball_analytics.storage import resolve_artifact
 
 from fantasy.card_image import render_share_card_png
 from fantasy.cards import (
-    OPTIONAL_CARD_KEY,
     SOURCE_MISSING,
     TAB_LABELS,
     ShareCardView,
