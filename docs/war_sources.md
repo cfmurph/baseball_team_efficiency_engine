@@ -40,6 +40,10 @@ Lahman-only wOBA batting WAR and FIP pitching WAR in `src/baseball_analytics/war
 
 `war_source` on `fact_player_season` is `real` or `approx`.
 `war_source` on `fact_team_season` is `real`, `approx`, or `mixed`.
+Fantasy cards (`fantasy/cards.jsonl`) publish the same WAR value with
+`war_source` mapped to `bbref` | `approx` (`real` → `bbref`). See
+[adr/0002-source-of-truth-map.md](adr/0002-source-of-truth-map.md). Do not
+dual-write a second WAR series.
 
 Cost-per-WAR, surplus value, dead money, and `team_total_war` all use the **effective** WAR (real when present).
 

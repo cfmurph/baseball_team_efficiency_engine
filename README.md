@@ -39,7 +39,8 @@ pipeline/
   transform/build_metrics.py    Export CSVs for team, player, contract analysis
 src/baseball_analytics/
   config.py                     Settings loader + ARTIFACTS_URI resolution
-  storage.py                    S3-compatible artifact upload + local fallback
+  storage.py                    Shared lake upload (runs/ + current/) + local fallback
+  fantasy.py                    Phase 0 fantasy/cards.jsonl stub
   io.py                         CSV I/O helpers
   metrics.py                    All metric functions (Pythag, Gini, WAR efficiency, contract labels)
   war.py                        rWAR overlay + Lahman approx (wOBA / FIP) + BaseRuns
@@ -52,7 +53,7 @@ dbt/                            dbt scaffold (staging + mart SQL models)
 dashboard/app.py                Streamlit multi-section FO / GM dashboard
 dashboard/fantasy_app.py        BenchOrStart waitlist + share-card shell
 fantasy/                        Card loader, stub cards.jsonl, waitlist helper
-docs/                           Architecture, schema, metrics framework, shared artifacts, roadmap
+docs/                           Architecture, ADRs, schema, metrics framework, shared artifacts, roadmap
 tests/                          Unit tests covering metrics, WAR, validation, artifact storage
 artifacts/                      Output CSVs and plots (gitignored, generated at runtime)
 ```
@@ -96,7 +97,7 @@ team_efficiency_frontier.csv         With efficiency_label (low/below_avg/above_
 team_window_phases.csv               Latest phase per franchise
 team_clusters.csv                    KMeans archetypes per team-season
 team_cluster_summary.csv             Mean stats per archetype
-player_season_metrics.csv            All player-season metrics
+player_season_metrics.csv            All player-season metrics (Phase 0 aliases + ranks)
 player_top_surplus_value.csv         Best-value players
 player_worst_contracts.csv           Most negative surplus value
 player_dead_money.csv                Players with WAR ≤ 0 and salary > 0
@@ -148,7 +149,7 @@ GitHub Actions runs it overnight via `.github/workflows/nightly-refresh.yml`:
 - **Schedule:** `0 8 * * *` UTC = **2:00 AM America/Edmonton during MDT** (UTC-6). During MST (UTC-7) that is 1:00 AM local. Actions cron is UTC-only and cannot follow DST.
 - **Manual trigger:** Actions → **Nightly data refresh** → **Run workflow** (`workflow_dispatch`).
 - **Outputs:** CSVs, plots, and the DuckDB warehouse stay gitignored. The workflow uploads them as the `nightly-artifacts` run artifact (14-day retention) instead of committing generated files.
-- **Shared storage (optional):** when `ARTIFACTS_URI` is set, the orchestrator also uploads `artifacts/` to an S3-compatible prefix (`{league}/{level}/{run_date}` plus `latest/`). The dashboard reads `latest/` and falls back to local `artifacts/` if the URI is unset or unreachable. See [docs/shared_artifacts.md](docs/shared_artifacts.md) for the layout and AWS S3 vs Cloudflare R2 (`AWS_ENDPOINT_URL`) setup.
+- **Shared storage (optional):** when `ARTIFACTS_URI` is set, the orchestrator uploads `artifacts/` to immutable `runs/{run_id}/` and promotes `current/` only after a full success. The dashboard reads `current/` and falls back to local `artifacts/` if the URI is unset or unreachable. Source badge: `remote` | `local` | `missing`. See [docs/adr/0001-shared-artifact-contract.md](docs/adr/0001-shared-artifact-contract.md) and [docs/shared_artifacts.md](docs/shared_artifacts.md).
 
 Optional Sportradar pulls are not part of this job; they still require `SPORTRADAR_API_KEY` and `python3 -m pipeline.extract.pull_sportradar`.
 
@@ -161,10 +162,13 @@ export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
 export AWS_DEFAULT_REGION=us-east-1
 
-# Cloudflare R2 — same s3:// URI, plus the account endpoint
-export ARTIFACTS_URI=s3://my-r2-bucket/baseball-analytics
+# Cloudflare R2 — r2:// or s3:// URI, plus the account endpoint
+export ARTIFACTS_URI=r2://my-r2-bucket/baseball-analytics
 export AWS_ENDPOINT_URL=https://<accountid>.r2.cloudflarestorage.com
 export AWS_DEFAULT_REGION=auto
+
+# CI / QA filesystem
+export ARTIFACTS_URI=file:///tmp/btee-qa
 ```
 
 Leave `ARTIFACTS_URI` empty for local-only. GitHub Actions reads these from repository secrets (never commit keys). Full variable list and QA steps: [docs/shared_artifacts.md](docs/shared_artifacts.md).
