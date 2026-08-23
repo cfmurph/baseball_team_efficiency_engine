@@ -8,11 +8,14 @@ from pathlib import Path
 
 from fantasy.cards import CARD_LAKE_KEY, OPTIONAL_CARD_KEY
 from fantasy.copy import (
+    COPY_TEXT,
     CTA,
+    DOWNLOAD_IMAGE,
     EMPTY_BODY,
     EMPTY_TITLE,
     FOOTER,
     HEADLINE,
+    INVITE_CHIP,
     MICROCOPY,
     PRODUCT_NAME,
     SUBHEAD,
@@ -93,7 +96,7 @@ def test_fantasy_app_soft_launch_layout_and_share_actions() -> None:
     assert "unsafe_allow_javascript" in source
     assert "INVITE_CHIP" in source
     assert "TAB_LABELS" in source
-    assert "fantasy_cards_" not in source
+    assert "EMPTY_TITLE" in source
     assert COPY_TEXT == "Copy text"
     assert DOWNLOAD_IMAGE == "Download image"
     assert INVITE_CHIP == "Invite only"

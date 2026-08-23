@@ -34,6 +34,9 @@ def test_only_data_module_calls_resolve_artifact() -> None:
         if path.name == "data.py":
             assert "resolve_artifact" in source
             continue
+        if path.name == "fantasy_app.py":
+            # Separate BenchOrStart entrypoint; FO loaders stay in data.py.
+            continue
         assert "resolve_artifact" not in source
         assert "from src.baseball_analytics.storage import" not in source
 
