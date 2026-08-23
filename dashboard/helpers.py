@@ -1,6 +1,7 @@
 """Pure helpers for the Streamlit dashboard. No Streamlit imports."""
 from __future__ import annotations
 
+import html
 from pathlib import Path
 from typing import Any
 
@@ -37,17 +38,17 @@ METRIC_LABELS = {
 }
 
 CONTRACT_COLORS = {
-    "surplus_value": "#3fb950",
-    "fair_value": "#58a6ff",
-    "overpaid": "#d29922",
-    "dead_money": "#f85149",
+    "surplus_value": "#3ee08f",
+    "fair_value": "#6ecbff",
+    "overpaid": "#f5c518",
+    "dead_money": "#ff2d3a",
 }
 
 EFFICIENCY_COLORS = {
-    "elite": "#3fb950",
-    "above_avg": "#58a6ff",
-    "below_avg": "#d29922",
-    "low": "#f85149",
+    "elite": "#3ee08f",
+    "above_avg": "#6ecbff",
+    "below_avg": "#f5c518",
+    "low": "#ff2d3a",
 }
 
 # Same bins as pipeline.transform.build_metrics._efficiency_labels
@@ -57,50 +58,66 @@ _EFFICIENCY_LABELS = ["low", "below_avg", "above_avg", "elite"]
 NAV_PAGES = (
     {
         "key": "overview",
+        "index": "01",
         "label": "Overview",
-        "kicker": "League",
+        "kicker": "Command",
+        "group": "League",
         "blurb": "Which teams bought the most wins per dollar this season?",
     },
     {
         "key": "deep_dive",
+        "index": "02",
         "label": "Team Deep Dive",
-        "kicker": "League",
+        "kicker": "Franchise",
+        "group": "League",
         "blurb": "Franchise trajectory: wins, payroll, WAR, and window phase.",
     },
     {
         "key": "compare",
+        "index": "03",
         "label": "Compare Teams",
         "kicker": "League",
+        "group": "League",
         "blurb": "Head-to-head trends across any metric and year range.",
     },
     {
         "key": "roster",
+        "index": "04",
         "label": "Roster Lab",
         "kicker": "Roster",
+        "group": "Roster",
         "blurb": "Player WAR versus salary, with contract classification.",
     },
     {
         "key": "contracts",
+        "index": "05",
         "label": "Contract Watch",
-        "kicker": "Roster",
+        "kicker": "Contracts",
+        "group": "Roster",
         "blurb": "Surplus value, overpays, and dead money — searchable by season.",
     },
     {
         "key": "frontier",
+        "index": "06",
         "label": "Efficiency Frontier",
         "kicker": "Models",
+        "group": "Models",
         "blurb": "Teams above the curve produce more wins per dollar than the baseline.",
     },
     {
         "key": "whatif",
+        "index": "07",
         "label": "What-If Sim",
         "kicker": "Models",
+        "group": "Models",
         "blurb": "Estimate win change from a payroll increase using league-wide regression.",
     },
     {
         "key": "models",
+        "index": "08",
         "label": "Model Insights",
         "kicker": "Models",
+        "group": "Models",
         "blurb": "Win-model accuracy, feature importance, and the largest misses.",
     },
 )
@@ -184,6 +201,170 @@ def nav_page(label: str) -> dict[str, str]:
         if page["label"] == label:
             return page
     return NAV_PAGES[0]
+
+
+def nav_groups() -> list[tuple[str, list[dict[str, str]]]]:
+    """Group nav pages for product-style sidebar sections."""
+    grouped: dict[str, list[dict[str, str]]] = {}
+    order: list[str] = []
+    for page in NAV_PAGES:
+        group = str(page.get("group") or "More")
+        if group not in grouped:
+            grouped[group] = []
+            order.append(group)
+        grouped[group].append(page)
+    return [(name, grouped[name]) for name in order]
+
+
+def delta_tone(delta: str | None) -> str:
+    """Return pos / neg / neu for a formatted delta string."""
+    if delta is None:
+        return "neu"
+    text = str(delta).strip()
+    if not text or text in {"—", "-", "0", "$0M", "+0", "+$0M"}:
+        return "neu"
+    if text.startswith("-"):
+        return "neg"
+    return "pos"
+
+
+def kpi_cards_html(cards: list[dict[str, Any]]) -> str:
+    """Dense command-center KPI strip. Values are escaped."""
+    cells: list[str] = []
+    for card in cards:
+        label = html.escape(str(card.get("label") or ""))
+        value = html.escape(str(card.get("value") if card.get("value") is not None else "—"))
+        delta = card.get("delta")
+        delta_html = ""
+        if delta:
+            tone = delta_tone(str(delta))
+            delta_html = f'<div class="kpi-delta {tone}">{html.escape(str(delta))}</div>'
+        cells.append(
+            f'<div class="kpi-card">'
+            f'<div class="kpi-label">{label}</div>'
+            f'<div class="kpi-value">{value}</div>'
+            f"{delta_html}"
+            f"</div>"
+        )
+    return f'<div class="kpi-grid">{"".join(cells)}</div>'
+
+
+def leaderboard_html(
+    df: pd.DataFrame,
+    *,
+    name_col: str = "team_name",
+    value_col: str,
+    value_format: str = "{:.1f}",
+    prefix: str = "",
+    suffix: str = "",
+) -> str:
+    """Compact ranked list with proportional bars for Overview leader panels."""
+    parsed: list[tuple[int, str, str, float]] = []
+    for idx, row in enumerate(df.itertuples(index=False), start=1):
+        data = row._asdict() if hasattr(row, "_asdict") else dict(zip(df.columns, row))
+        name = html.escape(str(data.get(name_col, "—")))
+        raw = data.get(value_col)
+        numeric = 0.0
+        if raw is None or (isinstance(raw, float) and pd.isna(raw)):
+            formatted = "—"
+        else:
+            try:
+                numeric = float(raw)
+                formatted = f"{prefix}{value_format.format(numeric)}{suffix}"
+            except (TypeError, ValueError):
+                formatted = str(raw)
+        parsed.append((idx, name, formatted, numeric))
+    peak = max((abs(item[3]) for item in parsed), default=1.0) or 1.0
+    rows: list[str] = []
+    for idx, name, formatted, numeric in parsed:
+        width = max(6, min(100, int(round(100 * abs(numeric) / peak))))
+        tone = " neg" if numeric < 0 else ""
+        rows.append(
+            f'<li class="lb-row{tone}">'
+            f'<span class="lb-rank">{idx:02d}</span>'
+            f'<span class="lb-name">{name}</span>'
+            f'<span class="lb-bar"><i style="width:{width}%"></i></span>'
+            f'<span class="lb-stat">{html.escape(formatted)}</span>'
+            f"</li>"
+        )
+    return f'<ol class="leaderboard">{"".join(rows)}</ol>'
+
+
+def masthead_html(label: str, extra_caption: str | None = None) -> str:
+    """Numbered page masthead — used instead of ``st.title``."""
+    meta = nav_page(label)
+    extra = (
+        f'<p class="war-note">{html.escape(extra_caption)}</p>' if extra_caption else ""
+    )
+    index = html.escape(str(meta.get("index") or ""))
+    kicker = html.escape(str(meta.get("kicker") or "Ops"))
+    return (
+        f'<div class="masthead">'
+        f'<div class="kicker">{index} · {kicker}</div>'
+        f"<h1>{html.escape(meta['label'])}</h1>"
+        f'<p class="blurb">{html.escape(meta["blurb"])}</p>'
+        f"{extra}"
+        f"</div>"
+    )
+
+
+def app_frame_html(
+    *,
+    seasons: str,
+    artifacts: str,
+    source: str,
+    page: str,
+) -> str:
+    """Top command bar — seasons / artifacts / source / active desk."""
+    meta = nav_page(page)
+    index = html.escape(str(meta.get("index") or ""))
+    return (
+        '<div class="app-frame">'
+        '<div class="frame-brand">EE<span>OPS</span></div>'
+        '<div class="frame-meta">'
+        f"<span>Seasons <b>{html.escape(seasons)}</b></span><i></i>"
+        f"<span>Artifacts <b>{html.escape(artifacts)}</b></span><i></i>"
+        f"<span>Source <b>{html.escape(source)}</b></span><i></i>"
+        f"<span>Desk <b>{index} {html.escape(page)}</b></span>"
+        "</div></div>"
+    )
+
+
+def dossier_html(
+    *,
+    team: str,
+    year: int | str | None,
+    wins: Any = None,
+    losses: Any = None,
+    phase: str = "",
+) -> str:
+    """Franchise identity block for Team Deep Dive."""
+    w = "—" if _is_missing(wins) else str(int(wins))
+    l = "—" if _is_missing(losses) else str(int(losses))
+    year_label = "—" if year is None else str(year)
+    badge = ""
+    if phase and phase.lower() not in {"nan", "none", "—"}:
+        badge = f'<span class="phase-badge">{html.escape(phase.title())}</span>'
+    return (
+        f'<div class="dossier">'
+        f'<div class="kicker">Club dossier · {html.escape(year_label)}</div>'
+        f'<div class="name">{html.escape(team)}</div>'
+        f'<div class="line"><span class="wl">{html.escape(w)}<span class="l">–{html.escape(l)}</span></span>{badge}</div>'
+        f"</div>"
+    )
+
+
+def scoreboard_html(items: list[tuple[str, Any]]) -> str:
+    """Dense stat strip used instead of a row of ``st.metric`` widgets."""
+    cells: list[str] = []
+    for label, value in items:
+        display = "—" if value is None or value == "" else str(value)
+        cells.append(
+            f'<div class="sb-cell"><span class="sb-k">{html.escape(str(label))}</span>'
+            f'<span class="sb-v">{html.escape(display)}</span></div>'
+        )
+    n = len(items) or 1
+    return f'<div class="scoreboard n{n}">{"".join(cells)}</div>'
 
 
 def metric_label(column: str) -> str:

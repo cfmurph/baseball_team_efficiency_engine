@@ -9,12 +9,14 @@ import pandas as pd
 from dashboard.helpers import (
     CONTRACT_COLORS,
     add_payroll_millions,
+    dossier_html,
     empty_state_copy,
     format_money_millions,
     format_signed_int,
     format_war,
     nav_page,
     scale_money_columns,
+    scoreboard_html,
     teams_from_frame,
     years_from_frame,
 )
@@ -254,8 +256,8 @@ def test_chart_applies_layout_and_renders_once():
 def test_player_explorer_shows_player_id_when_name_collides():
     st = _FakeStreamlit(
         selectbox_values={
-            "pe_year": 2024,
-            "pe_team": "All Teams",
+            "season_year": 2024,
+            "roster_team_filter": "All Teams",
             "pe_type": "All Types",
             "pe_sort": "player_war",
         }
@@ -327,14 +329,29 @@ def test_player_explorer_shows_player_id_when_name_collides():
     )
     from src.baseball_analytics.dashboard_utils import player_id_columns_for_duplicate_names
 
-    namespace = _load_app_symbols(
-        functions=("page_player_explorer", "_empty", "_salary_note", "_page_header"),
-        assignments=("_SCATTER_MARKER",),
+    roster_path = Path(__file__).resolve().parents[1] / "dashboard" / "views" / "roster.py"
+
+    def _load_view_symbols(**kwargs):
+        tree = ast.parse(roster_path.read_text())
+        selected: list[ast.stmt] = []
+        wanted = set(kwargs.get("functions", ()))
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef) and node.name in wanted:
+                selected.append(node)
+        module = ast.Module(body=selected, type_ignores=[])
+        ast.fix_missing_locations(module)
+        namespace: dict = dict(kwargs.get("globals_dict") or {})
+        exec(compile(module, str(roster_path), "exec"), namespace)
+        return namespace
+
+    namespace = _load_view_symbols(
+        functions=("page_player_explorer",),
         globals_dict={
             "pd": pd,
             "st": st,
             "px": fake_px,
-            "_load": _fake_load,
+            "load_player_season_metrics": lambda: players,
+            "load_sr_player_metrics": lambda: None,
             "_scale_payroll": lambda df: df,
             "_PLAYER_COL_CFG": {},
             "_show_table": lambda df, *args, **kwargs: captured_tables.append(df.copy()),
@@ -342,6 +359,7 @@ def test_player_explorer_shows_player_id_when_name_collides():
             "_page_header": lambda *args, **kwargs: None,
             "_salary_note": lambda *args, **kwargs: None,
             "_chart": lambda *args, **kwargs: None,
+            "panel_head": lambda *args, **kwargs: None,
             "_SCATTER_MARKER": {},
             "CONTRACT_COLORS": CONTRACT_COLORS,
             "years_from_frame": years_from_frame,
@@ -352,6 +370,8 @@ def test_player_explorer_shows_player_id_when_name_collides():
             "nav_page": nav_page,
             "empty_state_copy": empty_state_copy,
             "salary_coverage_note": salary_coverage_note,
+            "SEASON_YEAR": "season_year",
+            "SELECTED_TEAM": "selected_team",
             "html": __import__("html"),
         },
     )
@@ -365,7 +385,7 @@ def test_player_explorer_shows_player_id_when_name_collides():
 
 
 def test_team_deep_dive_roster_includes_player_id_for_name_collisions():
-    st = _FakeStreamlit(selectbox_values={"tp_team": "Alpha"})
+    st = _FakeStreamlit(selectbox_values={"selected_team": "Alpha"})
     metrics = pd.DataFrame(
         [
             {
@@ -451,36 +471,45 @@ def test_team_deep_dive_roster_includes_player_id_for_name_collisions():
     from dashboard.helpers import empty_state_copy, salary_coverage_note
     from src.baseball_analytics.dashboard_utils import player_id_columns_for_duplicate_names
 
-    namespace = _load_app_symbols(
-        functions=("page_team_deep_dive", "_page_header", "_empty", "_salary_note"),
-        globals_dict={
-            "pd": pd,
-            "st": st,
-            "metrics": metrics,
-            "all_teams": ["Alpha"],
-            "_season_picker": lambda *args, **kwargs: 2024,
-            "_load": _fake_load,
-            "_scale_payroll": lambda df: df,
-            "_show_table": lambda df, *args, **kwargs: captured_tables.append(df.copy()),
-            "_TEAM_COL_CFG": {},
-            "_PLAYER_COL_CFG": {},
-            "px": fake_px,
-            "_chart": lambda *args, **kwargs: None,
-            "_empty": lambda *args, **kwargs: None,
-            "_page_header": lambda *args, **kwargs: None,
-            "_salary_note": lambda *args, **kwargs: None,
-            "scale_money_columns": scale_money_columns,
-            "add_payroll_millions": add_payroll_millions,
-            "format_money_millions": format_money_millions,
-            "format_signed_int": format_signed_int,
-            "format_war": format_war,
-            "player_id_columns_for_duplicate_names": player_id_columns_for_duplicate_names,
-            "nav_page": nav_page,
-            "empty_state_copy": empty_state_copy,
-            "salary_coverage_note": salary_coverage_note,
-            "html": __import__("html"),
-        },
-    )
+    dive_path = Path(__file__).resolve().parents[1] / "dashboard" / "views" / "deep_dive.py"
+    tree = ast.parse(dive_path.read_text())
+    selected = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "page_team_deep_dive"]
+    module = ast.Module(body=selected, type_ignores=[])
+    ast.fix_missing_locations(module)
+    namespace = {
+        "pd": pd,
+        "st": st,
+        "metrics": metrics,
+        "all_teams": ["Alpha"],
+        "_season_picker": lambda *args, **kwargs: 2024,
+        "team_select": lambda teams, **kwargs: "Alpha",
+        "load_player_season_metrics": lambda: players,
+        "_scale_payroll": lambda df: df,
+        "_show_table": lambda df, *args, **kwargs: captured_tables.append(df.copy()),
+        "_TEAM_COL_CFG": {},
+        "_PLAYER_COL_CFG": {},
+        "px": fake_px,
+        "_chart": lambda *args, **kwargs: None,
+        "_empty": lambda *args, **kwargs: None,
+        "_page_header": lambda *args, **kwargs: None,
+        "_salary_note": lambda *args, **kwargs: None,
+        "panel_head": lambda *args, **kwargs: None,
+        "scale_money_columns": scale_money_columns,
+        "add_payroll_millions": add_payroll_millions,
+        "format_money_millions": format_money_millions,
+        "format_signed_int": format_signed_int,
+        "format_war": format_war,
+        "dossier_html": dossier_html,
+        "scoreboard_html": scoreboard_html,
+        "CRIMSON": "#ff2d3a",
+        "TEXT_DIM": "#5d6876",
+        "player_id_columns_for_duplicate_names": player_id_columns_for_duplicate_names,
+        "nav_page": nav_page,
+        "empty_state_copy": empty_state_copy,
+        "salary_coverage_note": salary_coverage_note,
+        "html": __import__("html"),
+    }
+    exec(compile(module, str(dive_path), "exec"), namespace)
 
     namespace["page_team_deep_dive"]()
 

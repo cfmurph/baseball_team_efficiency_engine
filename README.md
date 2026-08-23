@@ -124,14 +124,13 @@ python3 -m pipeline.transform.build_metrics
 python3 -m models.train_win_model
 python3 -m models.cluster_teams
 
-# Front-office dashboard (run from the repo root)
-streamlit run dashboard/app.py
-
-# BenchOrStart — waitlist + weekly share cards (separate surface)
-streamlit run dashboard/fantasy_app.py
+# Dashboard (run from the repo root)
+streamlit run dashboard/app.py --server.port 8501 --server.headless true
 ```
 
-Front office and BenchOrStart are **two Streamlit entrypoints**. Do not add start/sit pages to the 8-section GM app. BenchOrStart details, card path, and the waitlist webhook hook: [docs/fantasy.md](docs/fantasy.md).
+The dashboard is Streamlit + Plotly only. Pages load CSVs through named helpers in `dashboard/data.py` (`load_team_metrics()`, `load_player_season_metrics()`, …) — never raw `Path("artifacts")`. When `ARTIFACTS_URI` is set the loaders use `resolve_artifact()` (shared `s3://…` or `file:///…` `latest/` prefix, then local `artifacts/` if the store is unset or unreachable). Sidebar **Source** shows `local`, `shared filesystem`, or `shared s3://…`. See [docs/shared_artifacts.md](docs/shared_artifacts.md).
+
+Season, team, and league widgets share `st.session_state` keys `season_year`, `selected_team`, and `selected_league` (documented in `dashboard/state.py`) so a pick on Overview carries to Team Deep Dive.
 
 ## Nightly refresh
 
@@ -172,16 +171,18 @@ Leave `ARTIFACTS_URI` empty for local-only. GitHub Actions reads these from repo
 
 ## Dashboard sections
 
-1. **Overview** — Efficiency KPIs (most surplus, lowest $/WAR, best W/$10M), payroll-vs-wins scatter, ranking, standings, and window phases
-2. **Team Deep Dive** — Win trajectory, payroll, WAR, window phase, and season roster
-3. **Compare Teams** — Multi-team line chart across any metric, any date range
+Product nav is grouped in the sidebar (League / Roster / Models). Entrypoint is still `streamlit run dashboard/app.py`.
+
+1. **Overview** — Command-center KPIs, surplus leaderboards, payroll-vs-wins scatter, ranking, standings, and window phases
+2. **Team Deep Dive** — Franchise dossier: KPIs, history, trajectory charts, and season roster
+3. **Compare Teams** — Multi-team table + metric trends across a year range
 4. **Roster Lab** — Player WAR vs salary scatter with contract classification
 5. **Contract Watch** — Surplus value / overpaid / dead money / fair value tables
 6. **Efficiency Frontier** — Teams above/below polynomial payroll-wins envelope + cluster archetypes
-7. **What-If Sim** — Estimated win change from payroll increase
+7. **What-If Sim** — Estimated win change from a payroll increase
 8. **Model Insights** — Feature importance, actual vs predicted, largest model misses
 
-Each section stays usable when its CSV is missing: the UI shows a short empty state and the pipeline command to generate it. Lahman payroll typically ends in 2016 — recent seasons may show standings without dollar metrics.
+Each section stays usable when its CSV is missing: the UI shows a short empty state and the pipeline command to generate it. Lahman payroll typically ends in 2016 — recent seasons may show standings without dollar metrics. This app is the front-office GM dashboard (no fantasy start/sit, waitlist, or share cards).
 
 ## Running tests
 
@@ -190,6 +191,16 @@ python3 -m pytest tests/ -v
 ```
 
 Unit tests covering: metrics helpers, approximate WAR, Baseball-Reference rWAR overlay + ID mapping, BaseRuns, contract classification, window detection, data validation checks.
+
+CI smokes on PRs to `master` (`.github/workflows/ci-smoke.yml`):
+
+```bash
+python3 -m pytest tests/test_dashboard_apptest.py tests/test_run_nightly.py tests/test_golden_war.py -v
+```
+
+- **AppTest** — every sidebar page boots without exception (empty `artifacts/` is fine).
+- **Nightly contract** — `pull_war` stays in `PIPELINE_STEPS` immediately after `pull_sources`.
+- **Golden WAR** — Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023 stay `war_source=real` against committed fixtures. Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
 
 ## Data sources
 
