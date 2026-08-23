@@ -258,10 +258,21 @@ def _reason(rec_type: str, name: str, vs_replacement: float, position: str) -> s
     return _one_line(f"{name} is {vs_replacement:+.1f} vs replacement — {verb}.")
 
 
-def _share_stat_line(vs_replacement: float, confidence: float) -> str:
-    """Face copy for BenchOrStart: ``+X.X edge · NN% conf``. Never ``vs repl``."""
+def _share_stat_line(
+    vs_replacement: float,
+    confidence: float,
+    *,
+    is_approx: bool,
+) -> str:
+    """BenchOrStart face copy. Never ``vs repl``.
+
+    bbref: ``+X.X edge · NN% conf``. approx: ``+X.X edge`` (no confidence).
+    """
+    edge = f"{vs_replacement:+.1f} edge"
+    if is_approx:
+        return edge
     pct = confidence * 100 if confidence <= 1.0 else confidence
-    return f"{vs_replacement:+.1f} edge · {int(round(pct))}% conf"
+    return f"{edge} · {int(round(pct))}% conf"
 
 
 def load_player_season_metrics(local_dir: str | Path) -> pd.DataFrame:
@@ -388,7 +399,9 @@ def _build_card(
         "share": {
             "headline": SHARE_HEADLINES[rec_type],
             "subtitle": " · ".join(part for part in (name, position, team) if part),
-            "stat_line": _share_stat_line(vs_replacement, confidence),
+            "stat_line": _share_stat_line(
+                vs_replacement, confidence, is_approx=source == "approx"
+            ),
         },
     }
     return cards_record(payload, as_of_date=as_of_date, schema_version=schema_version)

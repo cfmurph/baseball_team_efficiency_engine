@@ -413,8 +413,12 @@ def _assert_schema_cards(cards: list[dict]) -> None:
         assert stat_line
         assert "vs repl" not in stat_line
         assert "vs replacement" not in stat_line
-        assert " edge · " in stat_line
-        assert stat_line.endswith("% conf")
+        if source == "approx":
+            assert stat_line.endswith(" edge")
+            assert "% conf" not in stat_line
+        else:
+            assert " edge · " in stat_line
+            assert stat_line.endswith("% conf")
 
 
 def test_resolve_prefers_current_fantasy_cards_jsonl(tmp_path: Path) -> None:
@@ -626,10 +630,18 @@ def test_failed_promote_leaves_run_cards_and_skips_current(tmp_path: Path) -> No
 def test_share_stat_line_uses_edge_not_vs_repl() -> None:
     cards = rank_fantasy_cards(_player_metrics_frame(), as_of_date="2026-08-23", top_n=1)
     start = next(card for card in cards if card["recommendation_type"] == "start")
+    sit = next(card for card in cards if card["recommendation_type"] == "sit")
+    assert start["edge"]["war_source"] == "bbref"
     assert start["share"]["stat_line"] == "+9.4 edge · 86% conf"
+    assert sit["edge"]["war_source"] == "approx"
+    assert sit["share"]["stat_line"] == "-0.6 edge"
     for card in cards:
         stat = str(card["share"]["stat_line"])
-        assert stat.endswith("% conf")
-        assert " edge · " in stat
         assert "vs repl" not in stat
         assert "vs replacement" not in stat
+        if card["edge"]["is_approx"]:
+            assert stat.endswith(" edge")
+            assert "% conf" not in stat
+        else:
+            assert " edge · " in stat
+            assert stat.endswith("% conf")
