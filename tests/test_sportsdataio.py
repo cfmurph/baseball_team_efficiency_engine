@@ -407,10 +407,18 @@ def test_sdio_probe_workflow_is_dispatch_only() -> None:
     assert "pull_request:" not in text
     assert "SPORTSDATAIO_API_KEY: ${{ secrets.SPORTSDATAIO_API_KEY }}" in text
     assert "Ocp-Apim-Subscription-Key" in text
-    assert "SPORTSDATAIO_API_KEY missing" in text
-    assert "CurrentSeason" in text
+    assert 'print("SPORTSDATAIO_API_KEY missing")' in text
+    assert "sys.exit(1)" in text
+    assert "soft-fail" not in text.split("if not key:", 1)[-1].split("url =", 1)[0]
+    assert "/v3/mlb/scores/json/Teams" in text
+    assert "HTTPError" in text
+    assert "http_status={int(exc.code)}" in text
     assert "print(key" not in text
     assert "?key=" not in text
+    nightly = Path(".github/workflows/nightly-refresh.yml").read_text(encoding="utf-8")
+    assert "SPORTSDATAIO_API_KEY: ${{ secrets.SPORTSDATAIO_API_KEY }}" in nightly
+    smoke = Path(".github/workflows/ci-smoke.yml").read_text(encoding="utf-8")
+    assert "secrets.SPORTSDATAIO_API_KEY" not in smoke
 
 
 def test_warehouse_ddl_has_no_forked_stat_tables() -> None:

@@ -15,10 +15,15 @@ When the key is missing the extract **soft-fails** (exit 0), writes
 `extract_report.json` with `ok: false` / `skipped_reason: missing_api_key`,
 and the warehouse skips the spine. CI smoke without the secret still passes.
 
-To prove the secret itself (nightly cannot — it soft-fails), run Actions →
-**SportsDataIO auth probe** (`sdio-probe.yml`, `workflow_dispatch` only).
-That job fails if the key is empty or the cheap `CurrentSeason` call is
-not 2xx. It prints HTTP status and payload shape only — never the key.
+Nightly ingest **soft-fails** when the key is absent (CI / forks stay green).
+The dedicated probe is the auth-proof path and **hard-fails**:
+
+**Actions → SportsDataIO auth probe → Run workflow**
+
+(`sdio-probe.yml`, `workflow_dispatch` only — not a pull_request check).
+Missing secret exits 1 with `SPORTSDATAIO_API_KEY missing`. A 2xx `Teams`
+response logs HTTP status plus payload shape (`len` / keys) only. Any
+non-2xx exits 1 with `http_status=<code>` only. The key is never echoed.
 
 ## Raw landing
 
@@ -60,7 +65,10 @@ python3 -m pipeline.extract.pull_sportsdataio
 ```
 
 Nightly (`python3 -m pipeline.run_nightly`) runs this after `pull_mlb_stats`
-and before `build_warehouse`.
+and before `build_warehouse`. GitHub Actions nightly injects
+`secrets.SPORTSDATAIO_API_KEY` but the extract still soft-fails if the
+secret is empty. To prove the key: **Actions → SportsDataIO auth probe →
+Run workflow** (hard-fail if missing or non-2xx).
 
 ## Warehouse spine
 

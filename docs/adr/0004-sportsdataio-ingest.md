@@ -25,6 +25,10 @@ tables.
   when `SPORTSDATAIO_API_KEY` is missing or an endpoint blips. Warehouse
   skips the spine when raw is empty.
 - Actions nightly maps `secrets.SPORTSDATAIO_API_KEY` → env.
+- Auth proof: Actions → **SportsDataIO auth probe** → **Run workflow**
+  (`sdio-probe.yml`, `workflow_dispatch` only). Hard-fails if the secret
+  is missing or the probe endpoint is not 2xx. Nightly ingest remains
+  soft-fail without the key.
 
 ## Non-goals
 
