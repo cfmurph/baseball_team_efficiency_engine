@@ -25,6 +25,14 @@ def test_pipeline_steps_match_documented_chain() -> None:
     ]
 
 
+def test_pull_war_follows_pull_sources_in_nightly_steps() -> None:
+    """#110 contract: nightly refresh must download rWAR after Lahman extract."""
+    names = [name for name, _ in PIPELINE_STEPS]
+    assert "pull_war" in names, "PIPELINE_STEPS omitted pull_war (would rebuild on approx WAR)"
+    assert names.index("pull_war") == names.index("pull_sources") + 1
+    assert dict(PIPELINE_STEPS)["pull_war"] == "pipeline.extract.pull_war"
+
+
 def test_step_command_forwards_config_path() -> None:
     cmd = _step_command("pipeline.extract.pull_sources", "config/settings.yaml", "/usr/bin/python3")
     assert cmd == [

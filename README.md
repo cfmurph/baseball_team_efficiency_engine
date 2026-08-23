@@ -164,6 +164,16 @@ python3 -m pytest tests/ -v
 
 Unit tests covering: metrics helpers, approximate WAR, Baseball-Reference rWAR overlay + ID mapping, BaseRuns, contract classification, window detection, data validation checks.
 
+CI smokes on PRs to `master` (`.github/workflows/ci-smoke.yml`):
+
+```bash
+python3 -m pytest tests/test_dashboard_apptest.py tests/test_run_nightly.py tests/test_golden_war.py -v
+```
+
+- **AppTest** — every sidebar page boots without exception (empty `artifacts/` is fine).
+- **Nightly contract** — `pull_war` stays in `PIPELINE_STEPS` immediately after `pull_sources`.
+- **Golden WAR** — Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023 stay `war_source=real` against committed fixtures. Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
+
 ## Data sources
 
 - **Lahman Baseball Database** via the [Rdatasets CDN](https://vincentarelbundock.github.io/Rdatasets/csv/Lahman/) — teams, people, batting, pitching, salaries (salary coverage ends ~2016).
