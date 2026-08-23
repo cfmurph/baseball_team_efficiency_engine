@@ -23,6 +23,10 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from src.baseball_analytics.dashboard_helpers import (
+    apply_layout_and_render_chart,
+    compute_slider_max,
+)
 
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -449,9 +453,12 @@ def _apply_layout(fig) -> None:
 
 def _chart(fig, height: int = 400) -> None:
     """Apply dark layout and render a Plotly chart."""
-    _apply_layout(fig)
-    fig.update_layout(height=height)
-    st.plotly_chart(fig, use_container_width=True)
+    apply_layout_and_render_chart(
+        fig,
+        apply_layout=_apply_layout,
+        plotly_chart=st.plotly_chart,
+        height=height,
+    )
 
 
 # ── Global state ───────────────────────────────────────────────────────────────
@@ -469,7 +476,7 @@ if metrics is None:
 
 _current_year = datetime.date.today().year
 all_years = sorted(metrics["year_id"].dropna().astype(int).unique().tolist())
-_slider_max = max(all_years[-1], _current_year) if all_years else _current_year
+_slider_max = compute_slider_max(all_years, _current_year)
 all_teams = sorted(metrics["team_name"].dropna().unique().tolist())
 
 
