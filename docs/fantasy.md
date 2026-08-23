@@ -28,9 +28,7 @@ The shell reads published files through the same `resolve_artifact()` / `ARTIFAC
 
 Fallback only if that file is missing: `fantasy/cards.jsonl`, then `fantasy_cards_{as_of_date}.json`. If none exist the waitlist still works and labeled stub cards render.
 
-Player CSVs (`player_season_metrics.csv` and the contract exports) are resolved the same way. This shell does not change FO data-access and is not a page in the GM 8-section app.
-
-`edge.war_source` is `bbref` or `approx` only. `approx` rows set `is_approx: true` and show an **early model** badge.
+JSONL schema 1.0. `as_of_date` is on each record and `manifest.json`. `edge.war_source` is `bbref` or `approx` only. The lake file may be an empty stub until #111. Until that emitter publishes cards, the shell renders bundled stubs in `fantasy/stub_cards.jsonl` (pickup / stream / start / sit). `approx` rows set `is_approx: true` and show an **early model** badge.
 
 Recommendation labels (schema v1.0): `start` → START, `sit` → BENCH, `pickup` → PICK UP, `stream` → STREAM.
 

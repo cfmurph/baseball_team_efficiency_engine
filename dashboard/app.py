@@ -3,10 +3,10 @@ MLB Team Efficiency Engine — Front-office dashboard
 
 Entrypoint: ``streamlit run dashboard/app.py`` (from repo root).
 
-Pages call named loaders in ``dashboard.data`` — never raw artifact paths.
-Shared session keys (``dashboard.state``): season_year, selected_team,
-selected_league. Artifact resolution uses ``resolve_artifact()``
-(ARTIFACTS_URI → local artifacts/ fallback).
+Pages call named loaders in ``dashboard.data`` — never raw artifact paths
+or S3. Shared session keys (``dashboard.state``): season_year,
+selected_team, selected_league. Remote vs local resolution is a loader
+swap inside ``dashboard.data`` (ARTIFACTS_URI → local fallback).
 """
 from __future__ import annotations
 
@@ -28,21 +28,17 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from src.baseball_analytics.config import load_artifact_settings
 from src.baseball_analytics.dashboard_helpers import compute_slider_max
 from src.baseball_analytics.dashboard_utils import (
     player_id_columns_for_duplicate_names,
     scale_payroll_for_display,
 )
-from src.baseball_analytics.storage import (
-    artifact_source_label,
-    resolve_artifact,
-)
 from dashboard.data import (
-    ARTIFACT_NAMES,
+    load_named_artifact,
     load_team_metrics,
-    resolve_file,
     resolve_all,
+    resolve_file,
+    source_label,
 )
 from dashboard.helpers import (
     artifact_status,
@@ -87,21 +83,14 @@ def _chart(fig, height: int = 400) -> None:
     st.plotly_chart(fig, use_container_width=True)
 
 
-_ARTIFACT_SETTINGS = load_artifact_settings(str(_ROOT / "config/settings.yaml"))
-ARTIFACTS = _ARTIFACT_SETTINGS.local_dir
-_FILES = {key: ARTIFACTS / name for key, name in ARTIFACT_NAMES.items()}
-
-
 def _resolve_file(key: str) -> str | None:
-    path = resolve_file(key, _ARTIFACT_SETTINGS)
+    path = resolve_file(key)
     return None if path is None else str(path)
 
 
 def _load(key: str) -> pd.DataFrame | None:
-    raw = _resolve_file(key)
-    if raw is None:
-        return None
-    return pd.read_csv(raw)
+    """Thin wrapper over ``dashboard.data`` for tests and leftover callers."""
+    return load_named_artifact(key)
 
 
 metrics = load_team_metrics()
@@ -110,8 +99,8 @@ all_years = years_from_frame(metrics)
 _slider_max = compute_slider_max(all_years, _current_year)
 _slider_lo = all_years[0] if all_years else _current_year
 all_teams = teams_from_frame(metrics)
-_status = artifact_status(resolve_all(_ARTIFACT_SETTINGS))
-_source_label = artifact_source_label(_ARTIFACT_SETTINGS)
+_status = artifact_status(resolve_all())
+_source_label = source_label()
 
 ui.ALL_YEARS = all_years
 overview_view.metrics = metrics

@@ -1,42 +1,81 @@
-"""Shared artifact storage (S3-compatible) with a local ``artifacts/`` fallback.
+"""Shared artifact storage with a vendor-agnostic URI and local fallback.
 
-Object layout under the configured URI prefix::
+Locked lake layout (``docs/adr/0001-shared-artifact-contract.md``)::
 
-    {league}/{level}/{run_date}/<filename>
-    {league}/{level}/latest/<filename>
+    {league}/{level}/{run_date}/<relative-file>
+    {league}/{level}/latest/<relative-file>
     {league}/{level}/latest/manifest.json
 
-``run_date`` is ``YYYY-MM-DD`` (UTC unless ``ARTIFACTS_RUN_DATE`` is set).
-``latest/`` is a copy of the most recent successful publish so dashboards do
-not need to list history. Future minor-league feeds use the same shape
-(e.g. ``milb/aaa/2026-08-23/``).
+``<relative-file>`` is any path under local ``artifacts/`` (flat CSVs today;
+nested files are first-class). ``run_date`` is ``YYYY-MM-DD`` (UTC unless
+``ARTIFACTS_RUN_DATE`` is set). ``latest/`` is a copy of the most recent
+successful publish so dashboards do not need to list history. Future
+minor-league feeds use the same shape (e.g. ``milb/aaa/2026-08-23/``).
+Reserved (unpublished in this slice): ``fantasy/cards.jsonl``.
+See ``docs/adr/0001-shared-artifact-layout.md``.
 
-URI schemes:
-- ``s3://bucket/optional-prefix`` — AWS S3 or any S3-compatible store (R2 via
-  ``AWS_ENDPOINT_URL``)
-- ``file:///absolute/path`` or a bare filesystem path — shared disk / tests
-- unset / empty — local ``artifacts_dir`` only
+A brief read-only compat bridge still accepts the #109
+``{league}/{level}/latest/`` prefix so already-published objects keep working.
+
+URI schemes: ``s3://``, ``r2://``, ``gs://``, ``file://`` (and bare paths).
+Backends implement a small put/get protocol (fsspec-style, no vendor lock).
+``file://`` works without boto3 and is the CI / QA path.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import logging
 import os
 from pathlib import Path
+import re
+import shutil
+import subprocess
 import time
-from typing import Protocol
+from typing import Literal, Protocol
 from urllib.parse import urlparse
 
 from src.baseball_analytics.config import ArtifactSettings, load_artifact_settings
+from src.baseball_analytics.fantasy import (
+    FANTASY_CARDS_RELPATH,
+    FANTASY_SCHEMA_VERSION,
+    write_fantasy_cards_stub,
+)
 
 log = logging.getLogger(__name__)
 
-LATEST_LABEL = "latest"
+SCHEMA_VERSION = FANTASY_SCHEMA_VERSION
+RUNS_PREFIX = "runs"
+CURRENT_PREFIX = "current"
+LEGACY_LATEST = "latest"
 MANIFEST_NAME = "manifest.json"
-SKIP_DIR_NAMES = {".remote_cache", ".cache", "__pycache__"}
+SKIP_DIR_NAMES = {".remote_cache", ".cache", "__pycache__", ".current_staging", ".current_prev"}
+PLOT_SUFFIXES = {".png", ".jpg", ".jpeg", ".svg", ".html", ".pdf", ".pkl", ".joblib"}
+RESERVED_RUN_IDS = frozenset({CURRENT_PREFIX, LEGACY_LATEST, RUNS_PREFIX})
+REQUIRED_MANIFEST_FIELDS = (
+    "schema_version",
+    "as_of_date",
+    "created_at",
+    "git_sha",
+    "pipeline_steps",
+    "war_source_summary",
+    "files",
+)
+DEFAULT_PIPELINE_STEPS = (
+    "pull_sources",
+    "pull_war",
+    "build_warehouse",
+    "build_metrics",
+    "train_win_model",
+    "cluster_teams",
+)
+
+_RUN_ID_TIMESTAMP = re.compile(r"^\d{8}T\d{6}Z$")
+_RUN_ID_GENERIC = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+SourceBadge = Literal["remote", "local", "missing"]
 
 
 class ArtifactStoreError(RuntimeError):
@@ -56,6 +95,8 @@ class ParsedURI:
 
 
 class ArtifactBackend(Protocol):
+    """fsspec-style object interface. Implementations must not assume a vendor."""
+
     def put(self, relative_key: str, data: bytes) -> None: ...
 
     def get(self, relative_key: str) -> bytes | None: ...
@@ -64,26 +105,41 @@ class ArtifactBackend(Protocol):
 @dataclass
 class UploadResult:
     uri: str
-    run_date: str
+    run_id: str
+    as_of_date: str
     relative_prefix: str
     files: list[str]
     skipped: bool = False
     reason: str | None = None
+    current_updated: bool = False
+
+    @property
+    def run_date(self) -> str:
+        """Alias of ``as_of_date`` (brief compat with the #109 field name)."""
+        return self.as_of_date
+
+
+@dataclass(frozen=True)
+class ArtifactHit:
+    path: Path
+    source: SourceBadge
 
 
 def parse_artifacts_uri(uri: str) -> ParsedURI:
-    """Parse an S3-compatible or filesystem artifacts URI."""
+    """Parse an object-store or filesystem artifacts URI."""
     text = str(uri).strip()
     if not text:
         raise ValueError("artifacts URI is empty")
     parsed = urlparse(text)
     scheme = (parsed.scheme or "").lower()
-    if scheme in {"s3", "s3a"}:
+    if scheme in {"s3", "s3a", "r2", "gs"}:
         bucket = parsed.netloc
         if not bucket:
-            raise ValueError(f"S3 URI is missing a bucket: {uri!r}")
+            raise ValueError(f"{scheme} URI is missing a bucket: {uri!r}")
         prefix = parsed.path.lstrip("/").rstrip("/")
-        return ParsedURI(scheme="s3", bucket=bucket, prefix=prefix, raw=text)
+        # r2/gs share the same put/get backend as s3 (endpoint via env).
+        normalized = "s3" if scheme in {"s3", "s3a", "r2"} else "gs"
+        return ParsedURI(scheme=normalized, bucket=bucket, prefix=prefix, raw=text)
     if scheme == "file":
         path = parsed.path
         if parsed.netloc and parsed.netloc not in {"localhost", ""}:
@@ -95,12 +151,25 @@ def parse_artifacts_uri(uri: str) -> ParsedURI:
         return ParsedURI(scheme="file", bucket=None, prefix=str(Path(text)), raw=text)
     raise ValueError(
         f"Unsupported artifacts URI scheme {scheme!r}. "
-        "Use s3://bucket/prefix or file:///path (see docs/shared_artifacts.md)."
+        "Use s3://, r2://, gs://, or file:///path "
+        "(see docs/adr/0001-shared-artifact-contract.md)."
     )
 
 
+def run_prefix(run_id: str) -> str:
+    return f"{RUNS_PREFIX}/{_run_id_token(run_id)}"
+
+
+def run_object_key(run_id: str, relpath: str) -> str:
+    return f"{run_prefix(run_id)}/{_relpath(relpath)}"
+
+
+def current_object_key(relpath: str) -> str:
+    return f"{CURRENT_PREFIX}/{_relpath(relpath)}"
+
+
 def partition_key(league: str, level: str, run_date: str) -> str:
-    """Return ``{league}/{level}/{run_date}`` after validating each segment."""
+    """Legacy #109 key ``{league}/{level}/{run_date}`` (compat bridge only)."""
     return "/".join(
         (
             _partition_token(league, "league"),
@@ -110,11 +179,43 @@ def partition_key(league: str, level: str, run_date: str) -> str:
     )
 
 
-def object_key(league: str, level: str, run_date: str, filename: str) -> str:
-    rel = str(filename).replace("\\", "/").lstrip("/")
+def relative_artifact_key(filename: str | Path) -> str:
+    """Return a partition-relative key (``foo.csv`` or ``dir/foo.csv``).
+
+    Absolute paths keep only the basename so existing dashboard ``Path``
+    objects keep working. Relative paths keep subdirectories so a later
+    file such as ``fantasy/cards.jsonl`` needs no URI redesign.
+    """
+    text = str(filename).replace("\\", "/").strip()
+    if not text:
+        raise ValueError("artifact filename is empty")
+    path = Path(text)
+    rel = path.name if path.is_absolute() else text.lstrip("/")
+    if rel.startswith("./"):
+        rel = rel[2:]
     if not rel or rel.endswith("/") or ".." in Path(rel).parts:
         raise ValueError(f"Invalid artifact filename: {filename!r}")
-    return f"{partition_key(league, level, run_date)}/{rel}"
+    return rel
+
+
+def object_key(league: str, level: str, run_date: str, filename: str) -> str:
+    return f"{partition_key(league, level, run_date)}/{relative_artifact_key(filename)}"
+
+
+def default_as_of_date(
+    *,
+    now: datetime | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> str:
+    env = os.environ if environ is None else environ
+    override = (
+        env.get("ARTIFACTS_AS_OF_DATE", "").strip()
+        or env.get("ARTIFACTS_RUN_DATE", "").strip()
+    )
+    if override:
+        return _iso_date_token(override)
+    current = now or datetime.now(timezone.utc)
+    return current.date().isoformat()
 
 
 def default_run_date(
@@ -122,22 +223,86 @@ def default_run_date(
     now: datetime | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> str:
+    """#109 name for ``default_as_of_date``."""
+    return default_as_of_date(now=now, environ=environ)
+
+
+def default_run_id(
+    *,
+    now: datetime | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> str:
     env = os.environ if environ is None else environ
-    override = env.get("ARTIFACTS_RUN_DATE", "").strip()
+    override = env.get("ARTIFACTS_RUN_ID", "").strip() or env.get("GITHUB_RUN_ID", "").strip()
     if override:
-        return _partition_token(override, "run_date")
+        return _run_id_token(override)
     current = now or datetime.now(timezone.utc)
-    return current.date().isoformat()
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    else:
+        current = current.astimezone(timezone.utc)
+    return current.strftime("%Y%m%dT%H%M%SZ")
 
 
-def artifact_source_label(settings: ArtifactSettings) -> str:
-    if not settings.uri:
+def detect_git_sha(
+    *,
+    environ: Mapping[str, str] | None = None,
+    cwd: str | Path | None = None,
+) -> str | None:
+    env = os.environ if environ is None else environ
+    sha = (env.get("GITHUB_SHA") or env.get("ARTIFACTS_GIT_SHA") or "").strip()
+    if sha:
+        return sha
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(cwd) if cwd is not None else None,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    text = out.strip()
+    return text or None
+
+
+def classify_artifact_relpath(relpath: str) -> str:
+    """Map a local relative path onto the locked lake tree."""
+    rel = _relpath(relpath)
+    name = Path(rel).name
+    if name == MANIFEST_NAME:
+        return MANIFEST_NAME
+    if rel.startswith(("metrics/", "models/", "fantasy/")):
+        if rel.startswith("fantasy/") and name != Path(FANTASY_CARDS_RELPATH).name:
+            return FANTASY_CARDS_RELPATH
+        return rel
+    if name == Path(FANTASY_CARDS_RELPATH).name:
+        return FANTASY_CARDS_RELPATH
+    suffix = Path(name).suffix.lower()
+    if suffix in PLOT_SUFFIXES:
+        return f"models/{name}"
+    if suffix == ".csv":
+        return f"metrics/{name}"
+    return f"models/{name}"
+
+
+def artifact_source_label(
+    settings: ArtifactSettings,
+    *,
+    backend: ArtifactBackend | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> SourceBadge:
+    """Return the locked source badge: ``remote`` | ``local`` | ``missing``."""
+    if settings.uri:
+        try:
+            store = backend if backend is not None else open_backend(settings.uri, environ=environ)
+            if _remote_pointer_present(store, settings):
+                return "remote"
+        except Exception as exc:
+            log.warning("Remote artifact probe failed (%s); checking local fallback", exc)
+    if _local_artifacts_present(settings.local_dir):
         return "local"
-    parsed = parse_artifacts_uri(settings.uri)
-    if parsed.scheme == "s3":
-        suffix = f"/{parsed.prefix}" if parsed.prefix else ""
-        return f"shared s3://{parsed.bucket}{suffix}"
-    return "shared filesystem"
+    return "missing"
 
 
 def iter_artifact_files(local_dir: Path) -> list[Path]:
@@ -149,6 +314,8 @@ def iter_artifact_files(local_dir: Path) -> list[Path]:
             continue
         relative_parts = path.relative_to(local_dir).parts
         if any(part in SKIP_DIR_NAMES or part.startswith(".") for part in relative_parts):
+            continue
+        if path.name == MANIFEST_NAME:
             continue
         files.append(path)
     return files
@@ -173,7 +340,7 @@ class FileBackend:
 
 
 class S3Backend:
-    """S3-compatible object store (AWS S3, Cloudflare R2, MinIO, …)."""
+    """S3-compatible object store (AWS S3, Cloudflare R2, GCS XML, MinIO, …)."""
 
     def __init__(self, bucket: str, prefix: str, client: object) -> None:
         self.bucket = bucket
@@ -202,7 +369,7 @@ class S3Backend:
 
 
 def build_s3_client(environ: Mapping[str, str] | None = None) -> object:
-    """Build a boto3 S3 client from standard AWS / R2 environment variables."""
+    """Build a boto3 S3 client from standard AWS / R2 / GCS-interop env vars."""
     import boto3
 
     env = os.environ if environ is None else environ
@@ -226,26 +393,88 @@ def open_backend(
     environ: Mapping[str, str] | None = None,
 ) -> ArtifactBackend:
     parsed = parse_artifacts_uri(uri)
-    if parsed.scheme == "s3":
+    if parsed.scheme in {"s3", "gs"}:
         client = s3_client if s3_client is not None else build_s3_client(environ)
         return S3Backend(parsed.bucket or "", parsed.prefix, client)
     return FileBackend(Path(parsed.prefix))
+
+
+def build_manifest(
+    *,
+    run_id: str,
+    as_of_date: str,
+    files: Sequence[str],
+    created_at: str,
+    git_sha: str | None,
+    pipeline_steps: Sequence[str] | None,
+    war_source_summary: Mapping[str, int] | None,
+    schema_version: str = SCHEMA_VERSION,
+) -> dict[str, object]:
+    manifest = {
+        "schema_version": schema_version,
+        "as_of_date": as_of_date,
+        "created_at": created_at,
+        "git_sha": git_sha,
+        "run_id": run_id,
+        "pipeline_steps": list(pipeline_steps or DEFAULT_PIPELINE_STEPS),
+        "war_source_summary": dict(war_source_summary or {"bbref": 0, "approx": 0, "mixed": 0}),
+        "files": list(files),
+    }
+    missing = [field for field in REQUIRED_MANIFEST_FIELDS if field not in manifest]
+    if missing:
+        raise ArtifactUploadError(f"manifest.json missing required fields: {missing}")
+    return manifest
+
+
+def summarize_war_sources(local_dir: str | Path) -> dict[str, int]:
+    """Count ``war_source`` on player metrics. Warehouse ``real`` → card ``bbref``."""
+    summary = {"bbref": 0, "approx": 0, "mixed": 0}
+    path = _find_player_metrics_csv(Path(local_dir))
+    if path is None:
+        return summary
+    try:
+        import csv
+
+        with path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                src = (row.get("war_source") or "approx").strip().lower()
+                if src in {"real", "bbref"}:
+                    summary["bbref"] += 1
+                elif src == "mixed":
+                    summary["mixed"] += 1
+                else:
+                    summary["approx"] += 1
+    except OSError:
+        return summary
+    return summary
 
 
 def upload_artifacts(
     local_dir: str | Path,
     settings: ArtifactSettings,
     *,
+    run_id: str | None = None,
     run_date: str | None = None,
+    as_of_date: str | None = None,
     backend: ArtifactBackend | None = None,
     now: datetime | None = None,
     environ: Mapping[str, str] | None = None,
+    pipeline_steps: Sequence[str] | None = None,
+    git_sha: str | None = None,
+    update_current: bool = True,
 ) -> UploadResult:
-    """Publish local artifact files to ``{league}/{level}/{run_date}`` and ``latest``."""
+    """Publish local artifacts to immutable ``runs/{run_id}/``, then ``current/``."""
+    env = os.environ if environ is None else environ
+    stamp = now or datetime.now(timezone.utc)
+    resolved_as_of = as_of_date or run_date or default_as_of_date(now=stamp, environ=env)
+    resolved_run = run_id or default_run_id(now=stamp, environ=env)
+
     if not settings.uri:
         return UploadResult(
             uri="",
-            run_date=run_date or default_run_date(now=now, environ=environ),
+            run_id=resolved_run,
+            as_of_date=resolved_as_of,
             relative_prefix="",
             files=[],
             skipped=True,
@@ -259,28 +488,46 @@ def upload_artifacts(
             f"No artifact files to upload from {source}. "
             "Run the pipeline before publishing."
         )
+    _ensure_fantasy_stub(source, resolved_as_of)
+    files = iter_artifact_files(source)
 
-    dated = run_date or default_run_date(now=now, environ=environ)
-    store = backend if backend is not None else open_backend(settings.uri, environ=environ)
-    relative_names = [path.relative_to(source).as_posix() for path in files]
-    created = (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ")
-    manifest = {
-        "league": settings.league,
-        "level": settings.level,
-        "run_date": dated,
-        "created_at": created,
-        "files": relative_names,
-    }
+    store = backend if backend is not None else open_backend(settings.uri, environ=env)
+    classified: list[tuple[Path, str]] = []
+    seen: set[str] = set()
+    for path in files:
+        rel = classify_artifact_relpath(path.relative_to(source).as_posix())
+        if rel == MANIFEST_NAME or rel in seen:
+            continue
+        seen.add(rel)
+        classified.append((path, rel))
+    relative_names = [rel for _, rel in classified]
+    if FANTASY_CARDS_RELPATH not in seen:
+        raise ArtifactUploadError(
+            f"Refusing to publish without {FANTASY_CARDS_RELPATH}"
+        )
+
+    created = stamp.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if stamp.tzinfo else stamp.strftime("%Y-%m-%dT%H:%M:%SZ")
+    manifest = build_manifest(
+        run_id=resolved_run,
+        as_of_date=resolved_as_of,
+        files=relative_names,
+        created_at=created,
+        git_sha=git_sha if git_sha is not None else detect_git_sha(environ=env),
+        pipeline_steps=pipeline_steps,
+        war_source_summary=summarize_war_sources(source),
+    )
     payload = json.dumps(manifest, indent=2).encode("utf-8")
+    run_root = run_prefix(resolved_run)
 
     try:
-        for dest in (dated, LATEST_LABEL):
-            for path, name in zip(files, relative_names, strict=True):
-                store.put(object_key(settings.league, settings.level, dest, name), path.read_bytes())
-            store.put(
-                object_key(settings.league, settings.level, dest, MANIFEST_NAME),
-                payload,
+        existing = store.get(run_object_key(resolved_run, MANIFEST_NAME))
+        if existing is not None:
+            raise ArtifactUploadError(
+                f"Refusing to mutate immutable run {resolved_run!r} under {run_root}/"
             )
+        for path, rel in classified:
+            store.put(run_object_key(resolved_run, rel), path.read_bytes())
+        store.put(run_object_key(resolved_run, MANIFEST_NAME), payload)
     except ArtifactStoreError:
         raise
     except Exception as exc:
@@ -288,20 +535,32 @@ def upload_artifacts(
             f"Failed to upload artifacts to {settings.uri}: {exc}"
         ) from exc
 
-    relative_prefix = partition_key(settings.league, settings.level, dated)
+    current_updated = False
+    if update_current:
+        try:
+            _promote_current(store, resolved_run, relative_names, payload)
+            current_updated = True
+        except ArtifactStoreError:
+            raise
+        except Exception as exc:
+            raise ArtifactUploadError(
+                f"Run {resolved_run} is stored but current/ promote failed: {exc}"
+            ) from exc
+
     log.info(
-        "Uploaded %d artifact files to %s/%s and %s/%s",
+        "Uploaded %d artifact files to %s/%s%s",
         len(relative_names),
         settings.uri.rstrip("/"),
-        relative_prefix,
-        settings.uri.rstrip("/"),
-        partition_key(settings.league, settings.level, LATEST_LABEL),
+        run_root,
+        f" and {CURRENT_PREFIX}/" if current_updated else "",
     )
     return UploadResult(
         uri=settings.uri,
-        run_date=dated,
-        relative_prefix=relative_prefix,
+        run_id=resolved_run,
+        as_of_date=resolved_as_of,
+        relative_prefix=run_root,
         files=relative_names,
+        current_updated=current_updated,
     )
 
 
@@ -312,33 +571,37 @@ def resolve_artifact(
     backend: ArtifactBackend | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> Path | None:
-    """Return a local path for ``filename``, preferring shared storage.
+    """Return a local path for ``filename``, preferring shared ``current/``.
 
-    Order: fresh remote cache → remote ``latest/`` (written to cache) →
+    Order: fresh remote cache → remote ``current/`` (compat ``latest/``) →
     stale remote cache → local ``artifacts_dir`` → ``None``.
     Remote errors are logged and treated as a miss so the dashboard still
     loads from disk when the store is unreachable.
     """
+    hit = resolve_artifact_hit(filename, settings, backend=backend, environ=environ)
+    return None if hit is None else hit.path
+
+
+def resolve_artifact_hit(
+    filename: str,
+    settings: ArtifactSettings | None = None,
+    *,
+    backend: ArtifactBackend | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> ArtifactHit | None:
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
-    rel = _relative_artifact_key(filename)
-    if rel is None:
+    rel = _lookup_relpath(filename)
+    if not rel:
         return None
-    name = Path(rel).name
-    nested = "/" in rel
-    local_path = cfg.local_dir / rel
-    if nested:
-        cache_path = cfg.cache_dir / rel
-        remote_keys = (rel, object_key(cfg.league, cfg.level, LATEST_LABEL, rel))
-    else:
-        cache_path = cfg.cache_dir / cfg.league / cfg.level / LATEST_LABEL / name
-        remote_keys = (object_key(cfg.league, cfg.level, LATEST_LABEL, name),)
+    cache_path = cfg.cache_dir / CURRENT_PREFIX / rel
+    local_path = _first_existing(_local_candidates(cfg.local_dir, rel))
 
     if cfg.uri:
         if _cache_is_fresh(cache_path, cfg.cache_ttl_s):
-            return cache_path
+            return ArtifactHit(cache_path, "remote")
         try:
             store = backend if backend is not None else open_backend(cfg.uri, environ=environ)
-            data = _first_remote_object(store, remote_keys)
+            data, key = _get_first(store, remote_lookup_keys(rel, cfg))
         except Exception as exc:
             log.warning(
                 "Remote artifact %s unavailable (%s); falling back to local",
@@ -347,14 +610,15 @@ def resolve_artifact(
             )
         else:
             if data is not None:
-                cache_path.parent.mkdir(parents=True, exist_ok=True)
-                cache_path.write_bytes(data)
-                return cache_path
+                dest = cfg.cache_dir / key
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(data)
+                return ArtifactHit(dest, "remote")
         if cache_path.is_file():
-            return cache_path
+            return ArtifactHit(cache_path, "remote")
 
-    if local_path.is_file():
-        return local_path
+    if local_path is not None:
+        return ArtifactHit(local_path, "local")
     return None
 
 
@@ -368,10 +632,30 @@ def resolve_named_artifacts(
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
     resolved: dict[str, Path | None] = {}
     for key, filename in files.items():
-        resolved[key] = resolve_artifact(
-            Path(filename).name, cfg, backend=backend, environ=environ
-        )
+        resolved[key] = resolve_artifact(filename, cfg, backend=backend, environ=environ)
     return resolved
+
+
+def remote_lookup_keys(relpath: str, settings: ArtifactSettings) -> list[str]:
+    """Candidate remote keys: ``current/`` first, then the #109 latest/ bridge."""
+    rel = _lookup_relpath(relpath)
+    name = Path(rel).name
+    rels = [rel]
+    if not rel.startswith("metrics/") and name.endswith(".csv"):
+        rels.append(f"metrics/{name}")
+    if not rel.startswith("models/"):
+        rels.append(f"models/{name}")
+    if name == Path(FANTASY_CARDS_RELPATH).name:
+        rels.append(FANTASY_CARDS_RELPATH)
+    rels.append(name)
+    keys: list[str] = []
+    for item in rels:
+        keys.append(current_object_key(item))
+    for item in rels:
+        keys.append(f"{LEGACY_LATEST}/{item}")
+        keys.append(object_key(settings.league, settings.level, LEGACY_LATEST, item))
+        keys.append(object_key(settings.league, settings.level, LEGACY_LATEST, name))
+    return list(dict.fromkeys(keys))
 
 
 def publish_nightly_artifacts(
@@ -379,8 +663,12 @@ def publish_nightly_artifacts(
     *,
     settings: ArtifactSettings | None = None,
     backend: ArtifactBackend | None = None,
+    run_id: str | None = None,
     run_date: str | None = None,
+    as_of_date: str | None = None,
     environ: Mapping[str, str] | None = None,
+    pipeline_steps: Sequence[str] | None = None,
+    git_sha: str | None = None,
 ) -> UploadResult:
     """Upload ``artifacts_dir`` after a successful nightly pipeline run."""
     cfg = settings if settings is not None else load_artifact_settings(config_path, environ=environ)
@@ -388,7 +676,8 @@ def publish_nightly_artifacts(
         log.info("ARTIFACTS_URI unset; skipping shared-storage upload")
         return UploadResult(
             uri="",
-            run_date=run_date or default_run_date(environ=environ),
+            run_id=run_id or default_run_id(environ=environ),
+            as_of_date=as_of_date or run_date or default_as_of_date(environ=environ),
             relative_prefix="",
             files=[],
             skipped=True,
@@ -397,25 +686,145 @@ def publish_nightly_artifacts(
     return upload_artifacts(
         cfg.local_dir,
         cfg,
+        run_id=run_id,
         run_date=run_date,
+        as_of_date=as_of_date,
         backend=backend,
         environ=environ,
+        pipeline_steps=pipeline_steps,
+        git_sha=git_sha,
+        update_current=True,
     )
 
 
-def _relative_artifact_key(filename: str) -> str | None:
+def _ensure_fantasy_stub(local_dir: Path, as_of_date: str) -> Path:
+    dest = local_dir / FANTASY_CARDS_RELPATH
+    if dest.is_file():
+        return dest
+    return write_fantasy_cards_stub(local_dir, as_of_date=as_of_date)
+
+
+def _promote_current(
+    store: ArtifactBackend,
+    run_id: str,
+    files: Sequence[str],
+    manifest: bytes,
+) -> None:
+    """Copy a finished run onto ``current/``. Never writes back into ``runs/``."""
+    if isinstance(store, FileBackend):
+        _promote_current_filesystem(store.root, run_id)
+        return
+    for rel in files:
+        data = store.get(run_object_key(run_id, rel))
+        if data is None:
+            raise ArtifactUploadError(f"Run object missing during current/ promote: {rel}")
+        store.put(current_object_key(rel), data)
+    store.put(current_object_key(MANIFEST_NAME), manifest)
+
+
+def _promote_current_filesystem(root: Path, run_id: str) -> None:
+    src = root / RUNS_PREFIX / run_id
+    if not src.is_dir():
+        raise ArtifactUploadError(f"Run directory missing; cannot promote current/: {src}")
+    staging = root / ".current_staging"
+    previous = root / ".current_prev"
+    dest = root / CURRENT_PREFIX
+    if staging.exists():
+        shutil.rmtree(staging)
+    shutil.copytree(src, staging)
+    if dest.exists():
+        if previous.exists():
+            shutil.rmtree(previous)
+        dest.rename(previous)
+    staging.rename(dest)
+    if previous.exists():
+        shutil.rmtree(previous)
+
+
+def _remote_pointer_present(store: ArtifactBackend, settings: ArtifactSettings) -> bool:
+    if store.get(current_object_key(MANIFEST_NAME)) is not None:
+        return True
+    if store.get(f"{LEGACY_LATEST}/{MANIFEST_NAME}") is not None:
+        return True
+    legacy = object_key(settings.league, settings.level, LEGACY_LATEST, MANIFEST_NAME)
+    return store.get(legacy) is not None
+
+
+def _local_artifacts_present(local_dir: Path) -> bool:
+    return any(iter_artifact_files(local_dir)) or (local_dir / FANTASY_CARDS_RELPATH).is_file()
+
+
+def _lookup_relpath(filename: str) -> str:
     rel = str(filename).replace("\\", "/").lstrip("/")
-    if not rel or rel.endswith("/") or ".." in Path(rel).parts:
-        return None
-    return rel
+    if not rel or rel.endswith("/"):
+        return ""
+    name = Path(rel).name
+    if name == Path(FANTASY_CARDS_RELPATH).name or rel.endswith(FANTASY_CARDS_RELPATH):
+        return FANTASY_CARDS_RELPATH
+    if rel.startswith(("metrics/", "models/", "fantasy/", f"{CURRENT_PREFIX}/")):
+        return rel[len(f"{CURRENT_PREFIX}/") :] if rel.startswith(f"{CURRENT_PREFIX}/") else rel
+    return classify_artifact_relpath(name)
 
 
-def _first_remote_object(store: ArtifactBackend, keys: tuple[str, ...]) -> bytes | None:
+def _local_candidates(local_dir: Path, relpath: str) -> list[Path]:
+    rel = _lookup_relpath(relpath)
+    name = Path(rel).name
+    return [
+        local_dir / rel,
+        local_dir / name,
+        local_dir / "metrics" / name,
+        local_dir / "models" / name,
+        local_dir / "fantasy" / name,
+        local_dir / CURRENT_PREFIX / rel,
+    ]
+
+
+def _first_existing(paths: Iterable[Path]) -> Path | None:
+    for path in paths:
+        if path.is_file():
+            return path
+    return None
+
+
+def _get_first(store: ArtifactBackend, keys: Sequence[str]) -> tuple[bytes | None, str]:
     for key in keys:
         data = store.get(key)
         if data is not None:
-            return data
-    return None
+            return data, key
+    return None, ""
+
+
+def _find_player_metrics_csv(local_dir: Path) -> Path | None:
+    return _first_existing(
+        [
+            local_dir / "metrics" / "player_season_metrics.csv",
+            local_dir / "player_season_metrics.csv",
+        ]
+    )
+
+
+def _relpath(filename: str) -> str:
+    rel = str(filename).replace("\\", "/").lstrip("/")
+    if not rel or rel.endswith("/") or ".." in Path(rel).parts:
+        raise ValueError(f"Invalid artifact filename: {filename!r}")
+    return rel
+
+
+def _run_id_token(value: str) -> str:
+    text = str(value).strip()
+    if not text or text in RESERVED_RUN_IDS or "/" in text or "\\" in text or text in {".", ".."}:
+        raise ValueError(f"Invalid run_id: {value!r}")
+    if _RUN_ID_TIMESTAMP.match(text) or _RUN_ID_GENERIC.match(text):
+        return text
+    raise ValueError(
+        f"Invalid run_id {value!r}; expected YYYYMMDDTHHMMSSZ or a GitHub Actions run id"
+    )
+
+
+def _iso_date_token(value: str) -> str:
+    text = str(value).strip()
+    datetime.strptime(text, "%Y-%m-%d")
+    return text
 
 
 def _partition_token(value: str, name: str, *, allow_latest: bool = False) -> str:
@@ -424,12 +833,12 @@ def _partition_token(value: str, name: str, *, allow_latest: bool = False) -> st
         text = text.lower()
     if not text or "/" in text or "\\" in text or text in {".", ".."}:
         raise ValueError(f"Invalid {name}: {value!r}")
-    if name == "run_date" and text != LATEST_LABEL:
+    if name == "run_date" and text != LEGACY_LATEST:
         try:
             datetime.strptime(text, "%Y-%m-%d")
         except ValueError as exc:
             raise ValueError(f"Invalid run_date {value!r}; expected YYYY-MM-DD") from exc
-    if name == "run_date" and text == LATEST_LABEL and not allow_latest:
+    if name == "run_date" and text == LEGACY_LATEST and not allow_latest:
         raise ValueError("run_date cannot be 'latest' unless explicitly allowed")
     return text
 

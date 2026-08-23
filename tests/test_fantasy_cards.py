@@ -1,9 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import json
 from pathlib import Path
 
 from src.baseball_analytics.config import ArtifactSettings
+from src.baseball_analytics.fantasy import (
+    FANTASY_CARDS_RELPATH,
+    VOID_DATED_CARDS_PREFIX,
+    map_card_war_source,
+    render_cards_jsonl,
+    write_fantasy_cards_stub,
+)
 
 from fantasy.cards import (
     CARD_LAKE_KEY,
@@ -47,6 +54,50 @@ def test_feed_keys_lock_current_fantasy_cards_jsonl() -> None:
     assert CARD_LAKE_KEY == "current/fantasy/cards.jsonl"
     assert card_feed_keys()[0] == "current/fantasy/cards.jsonl"
     assert all(not key.startswith("fantasy_cards_") for key in card_feed_keys())
+
+
+def test_emitter_path_is_jsonl_not_dated_filename() -> None:
+    assert FANTASY_CARDS_RELPATH == "fantasy/cards.jsonl"
+    assert "as_of" not in FANTASY_CARDS_RELPATH
+    assert VOID_DATED_CARDS_PREFIX not in FANTASY_CARDS_RELPATH
+
+
+def test_empty_stub_is_valid_and_uses_locked_path(tmp_path: Path) -> None:
+    dest = write_fantasy_cards_stub(tmp_path, as_of_date="2026-08-23")
+    assert dest == tmp_path / "fantasy" / "cards.jsonl"
+    assert dest.read_text(encoding="utf-8") == ""
+    assert not any(tmp_path.joinpath("fantasy").glob("fantasy_cards_*.json"))
+
+
+def test_records_carry_as_of_date_schema_and_edge_war_source() -> None:
+    text = render_cards_jsonl(
+        [
+            {"player_id": "judgeaa01", "war_source": "real", "war": 10.8},
+            {"player_id": "unknown01", "war_source": "approx", "war": 1.2},
+            {"player_id": "fg01", "war_source": "fangraphs", "war": 5.0},
+        ],
+        as_of_date="2026-08-23",
+        schema_version="1.0",
+    )
+    rows = [json.loads(line) for line in text.splitlines()]
+    assert rows[0]["as_of_date"] == "2026-08-23"
+    assert rows[0]["schema_version"] == "1.0"
+    assert rows[0]["edge"]["war_source"] == "bbref"
+    assert rows[0]["edge"]["is_approx"] is False
+    assert rows[1]["edge"]["war_source"] == "approx"
+    assert rows[1]["edge"]["is_approx"] is True
+    assert rows[2]["edge"]["war_source"] == "approx"
+    sources = {row["edge"]["war_source"] for row in rows}
+    assert sources <= {"bbref", "approx"}
+    assert "fangraphs" not in sources
+
+
+def test_map_war_source_real_to_bbref() -> None:
+    assert map_card_war_source("real") == "bbref"
+    assert map_card_war_source("bbref") == "bbref"
+    assert map_card_war_source("approx") == "approx"
+    assert map_card_war_source("mixed") == "approx"
+    assert map_card_war_source("fangraphs") == "approx"
 
 
 def test_recommendation_labels_map_sit_to_bench() -> None:
@@ -224,9 +275,9 @@ def test_resolve_prefers_current_fantasy_cards_jsonl(tmp_path: Path) -> None:
         }
     )
     settings = _settings(tmp_path, uri="s3://bucket/prefix")
-    feed = load_share_cards(settings, backend=backend)
-    assert feed.cards[0]["recommendation_type"] == "pickup"
-    assert feed.source.startswith("shared")
+    cards, source = load_share_cards(settings, backend=backend)
+    assert cards[0]["recommendation_type"] == "pickup"
+    assert source == "remote"
     assert "current/fantasy/cards.jsonl" in backend.gets
     assert not any("fantasy_cards_" in key for key in backend.gets)
 

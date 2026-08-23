@@ -19,12 +19,7 @@ import re
 from typing import Any, Mapping
 
 from src.baseball_analytics.config import ArtifactSettings, load_artifact_settings
-from src.baseball_analytics.storage import (
-    artifact_source_label,
-    default_run_date,
-    resolve_artifact,
-    resolve_named_artifacts,
-)
+from src.baseball_analytics.storage import resolve_artifact_hit
 
 from fantasy.copy import EARLY_MODEL_BADGE, PROMPT_LINE
 
@@ -181,11 +176,10 @@ def resolve_card_feed(
 ) -> tuple[Path | None, str, str | None]:
     """Return ``(path, source, key)`` for jsonl, then dated ``fantasy_cards_*.json``."""
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
-    for key in (*CARD_FEED_KEYS, *dated_card_keys(cfg, environ=environ, now=now)):
-        path = resolve_artifact(key, cfg, backend=backend, environ=environ)
-        if path is not None:
-            return path, artifact_source_label(cfg), key
-    return None, SOURCE_MISSING, None
+    hit = resolve_artifact_hit(CARD_LAKE_KEY, cfg, backend=backend, environ=environ)
+    if hit is not None:
+        return hit.path, hit.source
+    return None, SOURCE_STUB
 
 
 def load_share_cards(
