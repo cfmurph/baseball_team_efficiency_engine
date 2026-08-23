@@ -46,7 +46,6 @@ from dashboard.helpers import (
     teams_from_frame,
     years_from_frame,
 )
-from dashboard import ui
 from dashboard.views import compare as compare_view
 from dashboard.views import contracts as contracts_view
 from dashboard.views import deep_dive as deep_dive_view
@@ -55,6 +54,10 @@ from dashboard.views import models as models_view
 from dashboard.views import overview as overview_view
 from dashboard.views import roster as roster_view
 from dashboard.views import whatif as whatif_view
+
+# Bind the chrome module by path so a merge cannot leave `ui` undefined.
+import dashboard.ui as ui
+from dashboard.ui import SCATTER_MARKER
 
 ui.inject_theme()
 
@@ -67,7 +70,7 @@ _PLOTLY_LAYOUT = dict(
     margin=dict(t=20, b=36, l=44, r=12),
     colorway=["#ff2d3a", "#6ecbff", "#3ee08f", "#f5c518", "#b794f6", "#ff7a59"],
 )
-_SCATTER_MARKER = ui.SCATTER_MARKER
+_SCATTER_MARKER = SCATTER_MARKER
 
 
 def _apply_layout(fig) -> None:

@@ -6,7 +6,10 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
+import ast
+
 from dashboard.helpers import NAV_PAGES, nav_labels
+from dashboard import ui as ui_mod
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = ROOT / "dashboard" / "app.py"
@@ -50,3 +53,41 @@ def test_all_sidebar_pages_boot_without_exception(monkeypatch: pytest.MonkeyPatc
     for label in labels:
         _nav_button(at, label).click().run()
         _fail_if_exception(at, label)
+
+
+_REQUIRED_UI_EXPORTS = (
+    "inject_theme",
+    "page_header",
+    "empty_state",
+    "season_picker",
+    "salary_note",
+    "render_sidebar",
+    "render_app_frame",
+    "SCATTER_MARKER",
+)
+
+
+def test_ui_module_exports_chrome_app_uses() -> None:
+    """Incomplete views split: app.py imported `ui` that did not exist / export chrome."""
+    missing = [name for name in _REQUIRED_UI_EXPORTS if not hasattr(ui_mod, name)]
+    assert not missing, f"dashboard.ui missing {missing}"
+
+
+def test_app_binds_ui_before_any_use() -> None:
+    """Regression for NameError: ui is not defined after a partial merge."""
+    tree = ast.parse(APP_PATH.read_text(encoding="utf-8"), filename=str(APP_PATH))
+    ui_bound = False
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.asname == "ui" or alias.name == "dashboard.ui":
+                    ui_bound = True
+        elif isinstance(node, ast.ImportFrom):
+            if node.module == "dashboard" and any(a.name == "ui" for a in node.names):
+                ui_bound = True
+            if node.module == "dashboard.ui":
+                ui_bound = True
+        for child in ast.walk(node):
+            if isinstance(child, ast.Name) and child.id == "ui" and isinstance(child.ctx, ast.Load):
+                assert ui_bound, "dashboard/app.py uses `ui` before importing dashboard.ui"
+    assert ui_bound, "dashboard/app.py must import dashboard.ui as ui"

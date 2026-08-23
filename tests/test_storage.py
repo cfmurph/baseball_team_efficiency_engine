@@ -259,25 +259,26 @@ def test_resolve_named_artifacts_maps_keys(tmp_path: Path) -> None:
     assert resolved["players"] is None
 
 
-def test_nested_relative_key_uploads_and_resolves_without_redesign(tmp_path: Path) -> None:
-    """A later product file under a subdirectory uses the same URI prefix."""
-    local = tmp_path / "artifacts"
-    nested = local / "extra"
-    nested.mkdir(parents=True)
-    (nested / "nested.csv").write_text("ok\n")
-    (local / "team_onfield_contract_metrics.csv").write_text("metrics\n")
-
+def test_resolve_nested_current_fantasy_cards_jsonl(tmp_path: Path) -> None:
     backend = MemoryBackend()
-    settings = _settings(tmp_path, uri="s3://bucket/prefix")
-    result = upload_artifacts(local, settings, run_date="2026-08-23", backend=backend)
-    assert "extra/nested.csv" in result.files
-    assert "mlb/mlb/latest/extra/nested.csv" in backend.objects
-
-    (nested / "nested.csv").unlink()
-    path = resolve_artifact("extra/nested.csv", settings, backend=backend)
+    backend.put("current/fantasy/cards.jsonl", b'{"recommendation_type":"start"}\n')
+    path = resolve_artifact(
+        "current/fantasy/cards.jsonl",
+        _settings(tmp_path, uri="s3://bucket/prefix"),
+        backend=backend,
+    )
     assert path is not None
-    assert path.read_text() == "ok\n"
-    assert path.as_posix().endswith("extra/nested.csv")
+    assert path.read_text() == '{"recommendation_type":"start"}\n'
+    assert backend.gets[0] == "current/fantasy/cards.jsonl"
+    assert not any("fantasy_cards_" in key for key in backend.gets)
+
+
+def test_resolve_nested_local_current_fantasy_cards_jsonl(tmp_path: Path) -> None:
+    lake = tmp_path / "artifacts" / "current" / "fantasy"
+    lake.mkdir(parents=True)
+    (lake / "cards.jsonl").write_text("local-cards\n", encoding="utf-8")
+    path = resolve_artifact("current/fantasy/cards.jsonl", _settings(tmp_path, uri=None))
+    assert path == lake / "cards.jsonl"
 
 
 def test_file_uri_upload_then_resolve_without_local_copy(tmp_path: Path) -> None:

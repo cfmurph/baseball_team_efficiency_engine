@@ -104,6 +104,13 @@ PLOTLY_CONFIG = {
     "responsive": True,
 }
 
+
+def inject_theme() -> None:
+    """Apply APP_CSS. Also exported from ``dashboard.ui``."""
+    import streamlit as st
+
+    st.markdown(f"<style>{APP_CSS}</style>", unsafe_allow_html=True)
+
 APP_CSS = f"""
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 

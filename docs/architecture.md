@@ -47,6 +47,7 @@ This is where metric logic becomes standardized and reusable:
 
 ### 5. Presentation layer
 - Streamlit dashboard for season, team, and trend exploration
+- Separate BenchOrStart Streamlit shell (`dashboard/fantasy_app.py`) for waitlist + share cards
 - Static exports for portfolio/demo use
 - Later: API endpoints and scheduled refresh
 

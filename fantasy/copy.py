@@ -1,0 +1,13 @@
+"""Exact BenchOrStart marketing copy for the Phase 0 shell."""
+
+PRODUCT_NAME = "BenchOrStart"
+PROMPT_LINE = "Bench or start?"
+HEADLINE = "Know who to start and who to grab before lock."
+SUBHEAD = "Weekly start/sit and waiver picks you can drop in your league chat."
+CTA = "Get early access"
+MICROCOPY = "No spam. Draft-season updates only."
+SUCCESS = "You're on the list. We'll ping you before soft launch."
+FOOTER = "Built on real player value — not vibes."
+EARLY_MODEL_BADGE = "early model"
+EMAIL_ERROR = "Enter a valid email."
+STUB_CAPTION = "Sample cards until the weekly feed is live."

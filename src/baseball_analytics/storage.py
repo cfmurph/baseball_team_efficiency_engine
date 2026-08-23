@@ -339,23 +339,29 @@ def resolve_artifact(
     loads from disk when the store is unreachable.
     """
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
-    try:
-        name = relative_artifact_key(filename)
-    except ValueError:
+    rel = _relative_artifact_key(filename)
+    if rel is None:
         return None
-    local_path = cfg.local_dir / name
-    cache_path = cfg.cache_dir / cfg.league / cfg.level / LATEST_LABEL / name
+    name = Path(rel).name
+    nested = "/" in rel
+    local_path = cfg.local_dir / rel
+    if nested:
+        cache_path = cfg.cache_dir / rel
+        remote_keys = (rel, object_key(cfg.league, cfg.level, LATEST_LABEL, rel))
+    else:
+        cache_path = cfg.cache_dir / cfg.league / cfg.level / LATEST_LABEL / name
+        remote_keys = (object_key(cfg.league, cfg.level, LATEST_LABEL, name),)
 
     if cfg.uri:
         if _cache_is_fresh(cache_path, cfg.cache_ttl_s):
             return cache_path
         try:
             store = backend if backend is not None else open_backend(cfg.uri, environ=environ)
-            data = store.get(object_key(cfg.league, cfg.level, LATEST_LABEL, name))
+            data = _first_remote_object(store, remote_keys)
         except Exception as exc:
             log.warning(
                 "Remote artifact %s unavailable (%s); falling back to local",
-                name,
+                rel,
                 exc,
             )
         else:
@@ -412,6 +418,21 @@ def publish_nightly_artifacts(
         backend=backend,
         environ=environ,
     )
+
+
+def _relative_artifact_key(filename: str) -> str | None:
+    rel = str(filename).replace("\\", "/").lstrip("/")
+    if not rel or rel.endswith("/") or ".." in Path(rel).parts:
+        return None
+    return rel
+
+
+def _first_remote_object(store: ArtifactBackend, keys: tuple[str, ...]) -> bytes | None:
+    for key in keys:
+        data = store.get(key)
+        if data is not None:
+            return data
+    return None
 
 
 def _partition_token(value: str, name: str, *, allow_latest: bool = False) -> str:

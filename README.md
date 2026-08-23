@@ -24,7 +24,8 @@ Raw CSV / Lahman API
     → pipeline/transform/build_metrics.py     (CSV artifacts per analysis)
     → models/train_win_model.py               (LinearRegression + XGBoost + frontier)
     → models/cluster_teams.py                 (KMeans team archetypes)
-    → dashboard/app.py                        (Streamlit 8-section UI)
+    → dashboard/app.py                        (Streamlit 8-section FO / GM UI)
+    → dashboard/fantasy_app.py                (BenchOrStart waitlist + share cards)
 ```
 
 ## Repo layout
@@ -48,8 +49,10 @@ models/
   train_win_model.py            LinearRegression + XGBoost win models + efficiency frontier
   cluster_teams.py              KMeans team archetype clustering
 dbt/                            dbt scaffold (staging + mart SQL models)
-dashboard/app.py                Streamlit multi-section dashboard
-docs/                           Architecture, schema, metrics framework, shared artifacts, ADRs, roadmap
+dashboard/app.py                Streamlit multi-section FO / GM dashboard
+dashboard/fantasy_app.py        BenchOrStart waitlist + share-card shell
+fantasy/                        Card loader, stub cards.jsonl, waitlist helper
+docs/                           Architecture, schema, metrics framework, shared artifacts, roadmap
 tests/                          Unit tests covering metrics, WAR, validation, artifact storage
 artifacts/                      Output CSVs and plots (gitignored, generated at runtime)
 ```
