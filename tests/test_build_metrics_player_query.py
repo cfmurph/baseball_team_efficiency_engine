@@ -1,198 +1,263 @@
 from __future__ import annotations
 
 import duckdb
+import pandas as pd
 import pytest
 
 from pipeline.transform.build_metrics import _PLAYER_QUERY
 
 
-@pytest.fixture()
-def player_metrics_con() -> duckdb.DuckDBPyConnection:
+def _register_player_query_tables(con: duckdb.DuckDBPyConnection) -> None:
+    player_rows = pd.DataFrame(
+        [
+            {
+                "player_id": "traded01",
+                "season_key": 2020,
+                "team_id": "AAA",
+                "player_type": "batter",
+                "pa": 100,
+                "hr": 10,
+                "bb": 20,
+                "woba": 0.350,
+                "batting_war": 1.5,
+                "ip": None,
+                "fip": None,
+                "era": None,
+                "pitching_war": 0.0,
+                "player_war": 1.5,
+                "war_source": "approx",
+                "salary": 1_000_000,
+                "surplus_value": 11_000_000,
+                "contract_label": "surplus_value",
+            },
+            {
+                "player_id": "traded01",
+                "season_key": 2020,
+                "team_id": "BBB",
+                "player_type": "batter",
+                "pa": 50,
+                "hr": 4,
+                "bb": 5,
+                "woba": 0.300,
+                "batting_war": 0.5,
+                "ip": None,
+                "fip": None,
+                "era": None,
+                "pitching_war": 0.0,
+                "player_war": 0.5,
+                "war_source": "approx",
+                "salary": 500_000,
+                "surplus_value": 3_500_000,
+                "contract_label": "fair_value",
+            },
+            {
+                "player_id": "twoway01",
+                "season_key": 2020,
+                "team_id": "AAA",
+                "player_type": "pitcher",
+                "pa": 0,
+                "hr": 0,
+                "bb": 0,
+                "woba": None,
+                "batting_war": 0.0,
+                "ip": 10.0,
+                "fip": 3.00,
+                "era": 2.70,
+                "pitching_war": 0.7,
+                "player_war": 0.7,
+                "war_source": "approx",
+                "salary": 900_000,
+                "surplus_value": 4_700_000,
+                "contract_label": "fair_value",
+            },
+            {
+                "player_id": "twoway01",
+                "season_key": 2020,
+                "team_id": "BBB",
+                "player_type": "both",
+                "pa": 30,
+                "hr": 1,
+                "bb": 2,
+                "woba": 0.320,
+                "batting_war": 0.2,
+                "ip": 5.0,
+                "fip": 4.00,
+                "era": 3.60,
+                "pitching_war": 0.1,
+                "player_war": 0.3,
+                "war_source": "approx",
+                "salary": 100_000,
+                "surplus_value": 2_300_000,
+                "contract_label": "surplus_value",
+            },
+        ]
+    )
+    player_rows["ip"] = player_rows["ip"].astype("float64")
+    player_rows["fip"] = player_rows["fip"].astype("float64")
+    player_rows["era"] = player_rows["era"].astype("float64")
+    player_rows["woba"] = player_rows["woba"].astype("float64")
+
+    dim_player = pd.DataFrame(
+        [
+            {"player_id": "traded01", "name_full": "Trade Target", "name_first": "Trade", "name_last": "Target"},
+            {"player_id": "twoway01", "name_full": "Two Way", "name_first": "Two", "name_last": "Way"},
+        ]
+    )
+
+    # Historical team names should not fan out a player season; only the
+    # matching team_key row should join to a stint.
+    dim_team = pd.DataFrame(
+        [
+            {"team_key": "AAA_2019", "team_id": "AAA", "team_name": "Old Alpha"},
+            {"team_key": "AAA_2020", "team_id": "AAA", "team_name": "Alpha Aces"},
+            {"team_key": "BBB_2019", "team_id": "BBB", "team_name": "Old Beta"},
+            {"team_key": "BBB_2020", "team_id": "BBB", "team_name": "Beta Bears"},
+        ]
+    )
+
+    con.register("player_rows", player_rows)
+    con.register("dim_player_rows", dim_player)
+    con.register("dim_team_rows", dim_team)
+    con.execute("CREATE TABLE fact_player_season AS SELECT * FROM player_rows")
+    con.execute("CREATE TABLE dim_player AS SELECT * FROM dim_player_rows")
+    con.execute("CREATE TABLE dim_team AS SELECT * FROM dim_team_rows")
+
+
+def test_player_query_returns_one_row_per_player_season_without_team_fanout() -> None:
     con = duckdb.connect(":memory:")
-    con.execute(
-        """
-        CREATE TABLE dim_player (
-            player_id VARCHAR,
-            name_full VARCHAR,
-            name_first VARCHAR,
-            name_last VARCHAR
-        )
-        """
-    )
-    con.execute(
-        """
-        CREATE TABLE dim_team (
-            team_key VARCHAR,
-            team_id VARCHAR,
-            team_name VARCHAR
-        )
-        """
-    )
-    con.execute(
-        """
-        CREATE TABLE fact_player_season (
-            player_id VARCHAR,
-            season_key INTEGER,
-            team_id VARCHAR,
-            player_type VARCHAR,
-            pa INTEGER,
-            hr INTEGER,
-            bb INTEGER,
-            woba DOUBLE,
-            batting_war DOUBLE,
-            ip DOUBLE,
-            fip DOUBLE,
-            era DOUBLE,
-            pitching_war DOUBLE,
-            player_war DOUBLE,
-            salary DOUBLE,
-            surplus_value DOUBLE,
-            contract_label VARCHAR
-        )
-        """
-    )
-    con.executemany(
-        "INSERT INTO dim_player VALUES (?, ?, ?, ?)",
-        [
-            ("traded001", "Taylor Traded", "Taylor", "Traded"),
-            ("same001", "Chris Same", "Chris", "Same"),
-            ("same002", "Chris Same", "Chris", "Same"),
-        ],
-    )
-    con.executemany(
-        "INSERT INTO dim_team VALUES (?, ?, ?)",
-        [
-            ("BOS_2023", "BOS", "Boston 2023"),
-            ("BOS_2024", "BOS", "Boston 2024"),
-            ("LAD_2024", "LAD", "Los Angeles"),
-            ("NYY_2024", "NYY", "New York"),
-        ],
-    )
-    con.executemany(
-        "INSERT INTO fact_player_season VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [
-            (
-                "traded001",
-                2024,
-                "BOS",
-                "batter",
-                100,
-                5,
-                10,
-                0.300,
-                1.0,
-                0.0,
-                None,
-                None,
-                0.0,
-                1.0,
-                1_000_000,
-                7_000_000,
-                "surplus_value",
-            ),
-            (
-                "traded001",
-                2024,
-                "LAD",
-                "batter",
-                300,
-                15,
-                30,
-                0.400,
-                3.0,
-                0.0,
-                None,
-                None,
-                0.0,
-                3.0,
-                2_000_000,
-                22_000_000,
-                "fair_value",
-            ),
-            (
-                "same001",
-                2024,
-                "NYY",
-                "pitcher",
-                0,
-                0,
-                0,
-                None,
-                0.0,
-                80.0,
-                3.50,
-                4.00,
-                2.0,
-                2.0,
-                5_000_000,
-                11_000_000,
-                "fair_value",
-            ),
-            (
-                "same002",
-                2024,
-                "NYY",
-                "pitcher",
-                0,
-                0,
-                0,
-                None,
-                0.0,
-                60.0,
-                4.50,
-                5.00,
-                1.0,
-                1.0,
-                4_000_000,
-                4_000_000,
-                "overpaid",
-            ),
-        ],
-    )
     try:
-        yield con
+        _register_player_query_tables(con)
+
+        result = con.execute(_PLAYER_QUERY).fetchdf()
     finally:
         con.close()
 
-
-def test_player_query_collapses_traded_player_to_one_weighted_season_row(
-    player_metrics_con: duckdb.DuckDBPyConnection,
-) -> None:
-    df = player_metrics_con.execute(_PLAYER_QUERY).fetchdf()
-
-    traded = df[df["player_id"] == "traded001"]
-
-    assert len(traded) == 1
-    row = traded.iloc[0]
-    assert row["team_id"] == "LAD"
-    assert row["team_name"] == "Los Angeles"
-    assert row["pa"] == 400
-    assert row["hr"] == 20
-    assert row["bb"] == 40
-    assert row["woba"] == pytest.approx(0.375)
-    assert row["batting_war"] == pytest.approx(4.0)
-    assert row["player_war"] == pytest.approx(4.0)
-    assert row["salary"] == pytest.approx(3_000_000)
-    assert row["surplus_value"] == pytest.approx(29_000_000)
-    assert row["contract_label"] == "fair_value"
+    assert set(result["player_id"]) == {"traded01", "twoway01"}
+    assert result.duplicated(["player_id", "year_id"]).sum() == 0
 
 
-def test_player_query_preserves_distinct_same_name_players(
-    player_metrics_con: duckdb.DuckDBPyConnection,
-) -> None:
-    df = player_metrics_con.execute(_PLAYER_QUERY).fetchdf()
+def test_player_query_aggregates_traded_player_stints_and_keeps_primary_team() -> None:
+    con = duckdb.connect(":memory:")
+    try:
+        _register_player_query_tables(con)
 
-    same_name = df[df["name_full"] == "Chris Same"].sort_values("player_id")
+        result = con.execute(_PLAYER_QUERY).fetchdf()
+    finally:
+        con.close()
+
+    traded = result.set_index("player_id").loc["traded01"]
+    assert traded["team_id"] == "AAA"
+    assert traded["team_name"] == "Alpha Aces"
+    assert traded["player_type"] == "batter"
+    assert traded["pa"] == 150
+    assert traded["hr"] == 14
+    assert traded["bb"] == 25
+    assert traded["player_war"] == 2.0
+    assert traded["salary"] == 1_500_000
+    assert traded["surplus_value"] == 14_500_000
+    assert traded["contract_label"] == "surplus_value"
+
+
+def test_player_query_preserves_both_player_type_and_pitching_rates() -> None:
+    con = duckdb.connect(":memory:")
+    try:
+        _register_player_query_tables(con)
+
+        result = con.execute(_PLAYER_QUERY).fetchdf()
+    finally:
+        con.close()
+
+    two_way = result.set_index("player_id").loc["twoway01"]
+    assert two_way["team_id"] == "AAA"
+    assert two_way["player_type"] == "both"
+    assert two_way["pa"] == 30
+    assert two_way["ip"] == 15.0
+    assert two_way["fip"] == pytest.approx(10 / 3)
+    assert two_way["era"] == pytest.approx(3.0)
+    assert two_way["pitching_war"] == pytest.approx(0.8)
+    assert two_way["player_war"] == 1.0
+
+
+def test_player_query_preserves_distinct_same_name_players() -> None:
+    """Two people who share a display name must stay on separate export rows."""
+    con = duckdb.connect(":memory:")
+    con.register(
+        "fact_player_season",
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "same001",
+                    "season_key": 2024,
+                    "team_id": "NYY",
+                    "player_type": "pitcher",
+                    "pa": 0,
+                    "hr": 0,
+                    "bb": 0,
+                    "woba": None,
+                    "batting_war": 0.0,
+                    "ip": 80.0,
+                    "fip": 3.50,
+                    "era": 4.00,
+                    "pitching_war": 2.0,
+                    "player_war": 2.0,
+                    "war_source": "approx",
+                    "salary": 5_000_000,
+                    "surplus_value": 11_000_000,
+                    "contract_label": "fair_value",
+                },
+                {
+                    "player_id": "same002",
+                    "season_key": 2024,
+                    "team_id": "NYY",
+                    "player_type": "pitcher",
+                    "pa": 0,
+                    "hr": 0,
+                    "bb": 0,
+                    "woba": None,
+                    "batting_war": 0.0,
+                    "ip": 60.0,
+                    "fip": 4.50,
+                    "era": 5.00,
+                    "pitching_war": 1.0,
+                    "player_war": 1.0,
+                    "war_source": "approx",
+                    "salary": 4_000_000,
+                    "surplus_value": 4_000_000,
+                    "contract_label": "overpaid",
+                },
+            ]
+        ),
+    )
+    con.register(
+        "dim_player",
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "same001",
+                    "name_full": "Chris Same",
+                    "name_first": "Chris",
+                    "name_last": "Same",
+                },
+                {
+                    "player_id": "same002",
+                    "name_full": "Chris Same",
+                    "name_first": "Chris",
+                    "name_last": "Same",
+                },
+            ]
+        ),
+    )
+    con.register(
+        "dim_team",
+        pd.DataFrame(
+            [
+                {"team_key": "NYY_2024", "team_id": "NYY", "team_name": "New York"},
+            ]
+        ),
+    )
+
+    result = con.execute(_PLAYER_QUERY).fetchdf()
+    same_name = result[result["name_full"] == "Chris Same"].sort_values("player_id")
 
     assert same_name["player_id"].tolist() == ["same001", "same002"]
     assert same_name["player_war"].tolist() == [pytest.approx(2.0), pytest.approx(1.0)]
-
-
-def test_player_query_joins_team_name_by_season_specific_team_key(
-    player_metrics_con: duckdb.DuckDBPyConnection,
-) -> None:
-    df = player_metrics_con.execute(_PLAYER_QUERY).fetchdf()
-
-    boston_row = df[df["player_id"] == "traded001"].iloc[0]
-
-    assert boston_row["team_name"] != "Boston 2023"

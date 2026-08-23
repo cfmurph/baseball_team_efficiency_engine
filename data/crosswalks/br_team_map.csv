@@ -1,0 +1,38 @@
+br_team_id,lahman_team_id,year_start,year_end,notes
+ANA,ANA,1997,2004,Anaheim Angels
+ARI,ARI,1998,9999,Arizona Diamondbacks
+ATH,ATH,2025,9999,Athletics (no city)
+ATL,ATL,1871,9999,Atlanta Braves
+BAL,BAL,1871,9999,Baltimore Orioles
+BOS,BOS,1871,9999,Boston Red Sox
+CAL,CAL,1871,1996,California Angels
+CHC,CHN,1876,9999,Chicago Cubs
+CHW,CHA,1901,9999,Chicago White Sox
+CIN,CIN,1871,9999,Cincinnati Reds
+CLE,CLE,1871,9999,Cleveland
+COL,COL,1993,9999,Colorado Rockies
+DET,DET,1871,9999,Detroit Tigers
+FLA,FLO,1993,2011,Florida Marlins
+HOU,HOU,1962,9999,Houston Astros
+KCR,KCA,1969,9999,Kansas City Royals
+LAA,LAA,2005,9999,Los Angeles Angels
+LAD,LAN,1958,9999,Los Angeles Dodgers
+MIA,MIA,2012,9999,Miami Marlins
+MIL,ML4,1871,1997,Brewers (AL; Lahman ML4)
+MIL,MIL,1998,9999,Brewers (NL)
+MIN,MIN,1961,9999,Minnesota Twins
+MON,MON,1969,2004,Montreal Expos
+NYM,NYN,1962,9999,New York Mets
+NYY,NYA,1903,9999,New York Yankees
+OAK,OAK,1968,2024,Oakland Athletics
+PHI,PHI,1871,9999,Philadelphia Phillies
+PIT,PIT,1871,9999,Pittsburgh Pirates
+SDP,SDN,1969,9999,San Diego Padres
+SEA,SEA,1977,9999,Seattle Mariners
+SFG,SFN,1958,9999,San Francisco Giants
+STL,SLN,1871,9999,St. Louis Cardinals
+TBD,TBA,1998,2007,Tampa Bay Devil Rays
+TBR,TBA,2008,9999,Tampa Bay Rays
+TEX,TEX,1972,9999,Texas Rangers
+TOR,TOR,1977,9999,Toronto Blue Jays
+WSN,WAS,2005,9999,Washington Nationals
