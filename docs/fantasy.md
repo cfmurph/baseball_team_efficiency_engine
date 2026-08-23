@@ -22,15 +22,11 @@ streamlit run dashboard/fantasy_app.py --server.port 8502 --server.headless true
 
 ## Card feed
 
-The shell reads published files through the same `resolve_artifact()` / `ARTIFACTS_URI` helpers as the FO dashboard. Card sources, in order:
+The shell reads published files through the same `resolve_artifact()` / `ARTIFACTS_URI` helpers as the FO dashboard.
 
-```text
-current/fantasy/cards.jsonl
-fantasy/cards.jsonl
-fantasy_cards_{as_of_date}.json
-```
+**Locked path (schema 1.0):** `current/fantasy/cards.jsonl` — that is `fantasy/cards.jsonl` under the `current/` prefix.
 
-`current/fantasy/cards.jsonl` is the marketing pointer (same relative file under `runs/{run_id}/`). `fantasy_cards_*.json` is accepted if that is what the #111 emitter lands. If neither exists the waitlist still works and labeled stub cards render.
+Fallback only if that file is missing: `fantasy/cards.jsonl`, then `fantasy_cards_{as_of_date}.json`. If none exist the waitlist still works and labeled stub cards render.
 
 Player CSVs (`player_season_metrics.csv` and the contract exports) are resolved the same way. This shell does not change FO data-access and is not a page in the GM 8-section app.
 

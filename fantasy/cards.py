@@ -1,13 +1,12 @@
-"""Load and normalize BenchOrStart share cards.
+"""Load and normalize BenchOrStart share cards (schema 1.0).
 
-Live sources, in order, via ``resolve_artifact`` / ``ARTIFACTS_URI``::
+Architect path lock via ``resolve_artifact`` / ``ARTIFACTS_URI``::
 
     current/fantasy/cards.jsonl
-    fantasy/cards.jsonl
-    fantasy_cards_{as_of_date}.json   # #111 dated emit, if that is what lands
 
-Missing files are a miss, not an error. The shell then uses bundled stubs.
-Player CSVs use the same #105 helpers as the FO dashboard.
+That is ``fantasy/cards.jsonl`` under the published ``current/`` prefix.
+``fantasy_cards_*.json`` is a fallback only if the locked file is missing.
+``edge.war_source`` is ``bbref`` or ``approx`` only.
 """
 from __future__ import annotations
 
@@ -29,6 +28,7 @@ from src.baseball_analytics.storage import (
 
 from fantasy.copy import EARLY_MODEL_BADGE, PROMPT_LINE
 
+# Architect SoT: fantasy/cards.jsonl under ARTIFACTS_URI current/
 CARD_LAKE_KEY = "current/fantasy/cards.jsonl"
 OPTIONAL_CARD_KEY = "fantasy/cards.jsonl"
 CARD_FEED_KEYS = (CARD_LAKE_KEY, OPTIONAL_CARD_KEY)
@@ -157,7 +157,7 @@ def load_stub_cards(path: Path | None = None) -> list[dict[str, Any]]:
 
 
 def card_feed_keys() -> tuple[str, ...]:
-    """Preferred marketing jsonl keys. Dated ``fantasy_cards_*.json`` is extra."""
+    """Locked jsonl first. Dated ``fantasy_cards_*.json`` is fallback-only."""
     return CARD_FEED_KEYS
 
 

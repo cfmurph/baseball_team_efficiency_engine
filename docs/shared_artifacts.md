@@ -111,7 +111,7 @@ GitHub Actions (`.github/workflows/nightly-refresh.yml`) forwards the env vars a
 
 The sidebar **Source** line shows `local`, `shared filesystem`, or `shared s3://bucket/…`.
 
-BenchOrStart (`dashboard/fantasy_app.py`) prefers `current/fantasy/cards.jsonl`, then optional `fantasy/cards.jsonl`, then `fantasy_cards_*.json` if that is what the nightly emitter lands. Missing card files show an empty state plus stubs. Player CSVs use the same #105 loaders as the FO dashboard. See [fantasy.md](fantasy.md).
+BenchOrStart (`dashboard/fantasy_app.py`) reads locked `current/fantasy/cards.jsonl` (schema 1.0). `fantasy_cards_*.json` is fallback only. Missing card files show an empty state plus stubs. Player CSVs use the same #105 loaders as the FO dashboard. See [fantasy.md](fantasy.md).
 
 ## QA: remote vs local parity + fallback
 

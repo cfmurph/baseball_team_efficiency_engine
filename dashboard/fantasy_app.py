@@ -4,11 +4,10 @@ Separate entrypoint from the front-office GM dashboard::
 
     streamlit run dashboard/fantasy_app.py
 
-Reads published cards via ``resolve_artifact`` / ``ARTIFACTS_URI``:
-prefers ``current/fantasy/cards.jsonl``, then ``fantasy/cards.jsonl``,
-then ``fantasy_cards_*.json`` if that is what #111 emits. Missing feeds
-show an empty state plus labeled stubs. Player CSVs use the same #105
-loaders. This entrypoint is not a page in the FO GM app.
+Reads locked ``current/fantasy/cards.jsonl`` (schema 1.0) via
+``resolve_artifact`` / ``ARTIFACTS_URI``. ``fantasy_cards_*.json`` is
+fallback only. Missing feeds show an empty state plus labeled stubs.
+This entrypoint is not a page in the FO GM app.
 """
 from __future__ import annotations
 

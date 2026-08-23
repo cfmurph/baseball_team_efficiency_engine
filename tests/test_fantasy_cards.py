@@ -43,13 +43,10 @@ def _settings(tmp_path: Path, **overrides) -> ArtifactSettings:
     return ArtifactSettings(**defaults)
 
 
-def test_feed_keys_prefer_marketing_jsonl() -> None:
+def test_feed_keys_lock_current_fantasy_cards_jsonl() -> None:
     assert CARD_LAKE_KEY == "current/fantasy/cards.jsonl"
-    assert OPTIONAL_CARD_KEY == "fantasy/cards.jsonl"
-    assert card_feed_keys() == (
-        "current/fantasy/cards.jsonl",
-        "fantasy/cards.jsonl",
-    )
+    assert card_feed_keys()[0] == "current/fantasy/cards.jsonl"
+    assert all(not key.startswith("fantasy_cards_") for key in card_feed_keys())
 
 
 def test_recommendation_labels_map_sit_to_bench() -> None:
