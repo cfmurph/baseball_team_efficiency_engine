@@ -26,7 +26,7 @@
 ## High-priority next metrics
 
 ### Player value
-- WAR
+- WAR (Baseball-Reference rWAR preferred; Lahman wOBA/FIP approx fallback; `war_source` flag)
 - Cost per WAR
 - WAR concentration
 - % team WAR from pre-arbitration players
