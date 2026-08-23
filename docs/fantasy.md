@@ -22,10 +22,11 @@ streamlit run dashboard/fantasy_app.py --server.port 8502 --server.headless true
 
 ## Card feed
 
-The shell reads **only** this lake key through `resolve_artifact()` / `ARTIFACTS_URI`:
+The shell reads published files through the same `resolve_artifact()` / `ARTIFACTS_URI` helpers as the FO dashboard. Card keys, in order:
 
 ```text
 current/fantasy/cards.jsonl
+fantasy/cards.jsonl
 ```
 
 Same relative file under a dated run:
@@ -34,11 +35,13 @@ Same relative file under a dated run:
 runs/{run_id}/fantasy/cards.jsonl
 ```
 
-`fantasy_cards_{as_of_date}.json` is retired — do not emit or load it.
+`fantasy/cards.jsonl` is optional. If neither key is present the waitlist still works and the card slot shows an empty state (plus labeled sample cards). `fantasy_cards_{as_of_date}.json` is retired — do not emit or load it.
 
-Until #111 publishes `current/fantasy/cards.jsonl`, the shell renders bundled stubs in `fantasy/stub_cards.jsonl` (pickup / stream / start / sit). `edge.war_source` is `bbref` or `approx` only. `approx` rows set `is_approx: true` and show an **early model** badge.
+Player CSVs (`player_season_metrics.csv` and the contract exports) are resolved the same way. This shell does not change FO data-access.
 
-Local fallback path: `artifacts/current/fantasy/cards.jsonl`.
+`edge.war_source` is `bbref` or `approx` only. `approx` rows set `is_approx: true` and show an **early model** badge.
+
+Local fallbacks: `artifacts/current/fantasy/cards.jsonl` or `artifacts/fantasy/cards.jsonl`.
 
 ## Waitlist hook (marketing)
 

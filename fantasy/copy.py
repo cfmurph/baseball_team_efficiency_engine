@@ -11,3 +11,8 @@ FOOTER = "Built on real player value — not vibes."
 EARLY_MODEL_BADGE = "early model"
 EMAIL_ERROR = "Enter a valid email."
 STUB_CAPTION = "Sample cards until the weekly feed is live."
+EMPTY_TITLE = "This week's card isn't up yet."
+EMPTY_BODY = (
+    "Weekly pickup, bench, and stream picks land here once the feed is published. "
+    "Join the list above."
+)

@@ -1,13 +1,17 @@
 """Load and normalize BenchOrStart share cards from ``cards.jsonl``.
 
-Architect SoT paths (same relative file, two prefixes)::
+Live keys, in order, via ``resolve_artifact`` / ``ARTIFACTS_URI``::
 
     current/fantasy/cards.jsonl
-    runs/{run_id}/fantasy/cards.jsonl
+    fantasy/cards.jsonl
 
-This shell reads ``current/`` via ``resolve_artifact``. It does not look for
-``fantasy_cards_{as_of_date}.json``. Until #111 publishes the feed, bundled
-stub JSONL is rendered instead.
+``current/`` is the published pointer (same relative file under
+``runs/{run_id}/fantasy/cards.jsonl``). ``fantasy/cards.jsonl`` is optional on
+the shared latest/local lake. Missing files are a miss, not an error.
+
+Player CSVs use the same #105 helpers as the FO dashboard
+(``player_season_metrics.csv`` and contract exports). Dated
+``fantasy_cards_{as_of_date}.json`` is not loaded.
 """
 from __future__ import annotations
 
@@ -18,14 +22,26 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from src.baseball_analytics.config import ArtifactSettings, load_artifact_settings
-from src.baseball_analytics.storage import artifact_source_label, resolve_artifact
+from src.baseball_analytics.storage import (
+    artifact_source_label,
+    resolve_artifact,
+    resolve_named_artifacts,
+)
 
 from fantasy.copy import EARLY_MODEL_BADGE, PROMPT_LINE
 
 CARD_LAKE_KEY = "current/fantasy/cards.jsonl"
+OPTIONAL_CARD_KEY = "fantasy/cards.jsonl"
+CARD_FEED_KEYS = (CARD_LAKE_KEY, OPTIONAL_CARD_KEY)
 STUB_CARDS_PATH = Path(__file__).resolve().parent / "stub_cards.jsonl"
 ALLOWED_WAR_SOURCES = frozenset({"bbref", "approx"})
 RETIRED_CARD_NAMES = ("fantasy_cards_",)
+PLAYER_ARTIFACTS = {
+    "players": "player_season_metrics.csv",
+    "top_value": "player_top_surplus_value.csv",
+    "worst": "player_worst_contracts.csv",
+    "dead": "player_dead_money.csv",
+}
 
 RECOMMENDATION_LABELS = {
     "start": "START",
@@ -49,6 +65,15 @@ LABEL_TONES = {
 }
 
 SOURCE_STUB = "stub"
+SOURCE_MISSING = "missing"
+
+
+@dataclass(frozen=True)
+class CardLoad:
+    cards: list[dict[str, Any]]
+    source: str
+    key: str | None = None
+    path: Path | None = None
 
 
 def recommendation_label(recommendation_type: str | None) -> str:
@@ -82,7 +107,18 @@ def load_stub_cards(path: Path | None = None) -> list[dict[str, Any]]:
 
 def card_feed_keys() -> tuple[str, ...]:
     """Live keys this shell will ask ``resolve_artifact`` for. Never dated JSON."""
-    return (CARD_LAKE_KEY,)
+    return CARD_FEED_KEYS
+
+
+def resolve_player_artifacts(
+    settings: ArtifactSettings | None = None,
+    *,
+    backend: object | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, Path | None]:
+    """Same published player CSVs the FO dashboard loads via #105 helpers."""
+    cfg = settings if settings is not None else load_artifact_settings(environ=environ)
+    return resolve_named_artifacts(PLAYER_ARTIFACTS, cfg, backend=backend, environ=environ)
 
 
 def resolve_card_feed(
@@ -90,13 +126,14 @@ def resolve_card_feed(
     *,
     backend: object | None = None,
     environ: Mapping[str, str] | None = None,
-) -> tuple[Path | None, str]:
-    """Return ``(path, source)`` for ``current/fantasy/cards.jsonl`` only."""
+) -> tuple[Path | None, str, str | None]:
+    """Return ``(path, source, key)`` for the first present cards.jsonl."""
     cfg = settings if settings is not None else load_artifact_settings(environ=environ)
-    path = resolve_artifact(CARD_LAKE_KEY, cfg, backend=backend, environ=environ)
-    if path is not None:
-        return path, artifact_source_label(cfg)
-    return None, SOURCE_STUB
+    for key in CARD_FEED_KEYS:
+        path = resolve_artifact(key, cfg, backend=backend, environ=environ)
+        if path is not None:
+            return path, artifact_source_label(cfg), key
+    return None, SOURCE_MISSING, None
 
 
 def load_share_cards(
@@ -105,14 +142,14 @@ def load_share_cards(
     backend: object | None = None,
     environ: Mapping[str, str] | None = None,
     stub_path: Path | None = None,
-) -> tuple[list[dict[str, Any]], str]:
-    """Load live cards.jsonl when present; otherwise return the bundled stub set."""
-    path, source = resolve_card_feed(settings, backend=backend, environ=environ)
+) -> CardLoad:
+    """Load live cards.jsonl when present; otherwise an empty miss (no error)."""
+    path, source, key = resolve_card_feed(settings, backend=backend, environ=environ)
     if path is not None:
         cards = parse_cards_jsonl(path.read_text(encoding="utf-8"))
         if cards:
-            return cards, source
-    return load_stub_cards(stub_path), SOURCE_STUB
+            return CardLoad(cards=cards, source=source, key=key, path=path)
+    return CardLoad(cards=[], source=SOURCE_MISSING)
 
 
 def _share_map(card: Mapping[str, Any]) -> Mapping[str, Any]:
