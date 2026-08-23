@@ -1,6 +1,7 @@
 """Locked contract text lives in ADRs and the operator QA guide."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from src.baseball_analytics.fantasy import FANTASY_CARDS_RELPATH
@@ -37,6 +38,28 @@ def test_sot_map_names_br_stats_api_and_lahman() -> None:
     assert "data/raw/mlb_stats/" in ingest
     assert "pull_war" in ingest
     assert "Lahman" in ingest
+
+
+def test_phase0_schema_v01_is_locked() -> None:
+    root = ROOT / "docs/architecture"
+    md = (root / "phase0-schema-v0.1.md").read_text(encoding="utf-8")
+    raw = json.loads((root / "phase0-schema-v0.1.json").read_text(encoding="utf-8"))
+    assert "Status: **LOCKED by Cole 2026-08-23**" in md
+    assert "raw/sportsdataio/{endpoint}/{as_of_date}/" in md
+    assert "external_id_alias" in md
+    assert "player_game_stat" in md
+    assert "SPORTSDATAIO_API_KEY" in md
+    assert "fantasy_*_stat" in md
+    assert raw["status"] == "LOCKED"
+    assert raw["locked_by"] == "Cole"
+    assert raw["locked_on"] == "2026-08-23"
+    assert raw["schema_version"] == "0.1"
+    assert raw["primary_live_ingest"] == "sportsdataio"
+    assert raw["lake"]["raw_prefix"] == "raw/sportsdataio/{endpoint}/{as_of_date}/"
+    assert raw["alias_systems"] == ["sportsdataio", "mlb", "bbref", "fangraphs", "lahman"]
+    assert raw["spine"]["player_game_stat"]["pk"] == ["player_id", "game_id"]
+    assert "source" in raw["provenance"]
+    assert "is_approx" in raw["provenance"]
 
 
 def test_qa_guide_documents_file_uri_how_to_verify() -> None:

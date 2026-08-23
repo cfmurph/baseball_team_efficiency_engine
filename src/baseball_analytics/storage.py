@@ -67,6 +67,7 @@ DEFAULT_PIPELINE_STEPS = (
     "pull_sources",
     "pull_war",
     "pull_mlb_stats",
+    "pull_sportsdataio",
     "build_warehouse",
     "build_metrics",
     "train_win_model",

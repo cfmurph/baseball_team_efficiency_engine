@@ -1,0 +1,30 @@
+[
+  {
+    "PlayerID": 10001967,
+    "Status": "Active",
+    "TeamID": 31,
+    "Team": "NYY",
+    "Jersey": 99,
+    "PositionCategory": "OF",
+    "Position": "RF",
+    "MLBAMID": 592450,
+    "FirstName": "Aaron",
+    "LastName": "Judge",
+    "BatHand": "R",
+    "ThrowHand": "R"
+  },
+  {
+    "PlayerID": 10007272,
+    "Status": "Active",
+    "TeamID": 20,
+    "Team": "LAD",
+    "Jersey": 17,
+    "PositionCategory": "P",
+    "Position": "DH",
+    "MLBAMID": 660271,
+    "FirstName": "Shohei",
+    "LastName": "Ohtani",
+    "BatHand": "L",
+    "ThrowHand": "R"
+  }
+]

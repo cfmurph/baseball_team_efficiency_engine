@@ -17,6 +17,9 @@ Turn a simple historical baseball CSV merge into an analytics platform that can 
 - Pull MLB Stats API majors feeds (`pull_mlb_stats`) into
   `{ARTIFACTS_URI}/raw/mlb_stats/{endpoint}/{as_of_date}/` or local
   `data/raw/mlb_stats/` — soft-fail; warehouse stays Lahman-only if empty
+- Pull SportsDataIO Phase 0 feeds (`pull_sportsdataio`) into
+  `{ARTIFACTS_URI}/raw/sportsdataio/{endpoint}/{as_of_date}/` — soft-fail
+  without `SPORTSDATAIO_API_KEY`; warehouse skips the spine if empty
 - Maintain one file per source
 - Preserve raw column names for traceability
 
@@ -32,6 +35,11 @@ Tables:
 Also (when Stats API raw is present):
 - `dim_mlb_team_map` / `dim_mlb_player_map`
 - `fact_mlb_team_season` / `fact_mlb_player_season` / `fact_mlb_game`
+
+Also (when SportsDataIO raw is present; schema v0.1):
+- `player` / `team` / `game` (UUID identity)
+- `external_id_alias`
+- `player_game_stat` / `player_season_stat`
 
 Future additions:
 - `fact_transaction`

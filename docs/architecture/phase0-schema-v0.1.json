@@ -1,0 +1,71 @@
+{
+  "schema_version": "0.1",
+  "status": "LOCKED",
+  "locked_by": "Cole",
+  "locked_on": "2026-08-23",
+  "issue": 128,
+  "title": "Phase 0 SportsDataIO ingest schema",
+  "primary_live_ingest": "sportsdataio",
+  "internal_pk": "uuid",
+  "live_join_keys": ["sdio_player_id", "sdio_team_id", "sdio_game_id"],
+  "alias_systems": ["sportsdataio", "mlb", "bbref", "fangraphs", "lahman"],
+  "entity_types": ["player", "team", "game"],
+  "lake": {
+    "raw_prefix": "raw/sportsdataio/{endpoint}/{as_of_date}/",
+    "local_prefix": "data/raw/sportsdataio/{endpoint}/{as_of_date}/",
+    "sibling_of": ["runs/{run_id}/", "current/"],
+    "artifacts_uri": "vendor-agnostic (file:// OK)"
+  },
+  "spine": {
+    "player_game_stat": {
+      "pk": ["player_id", "game_id"],
+      "grain": "one row per internal player × internal game"
+    },
+    "player_season_stat": {
+      "pk": ["player_id", "season", "team_id"],
+      "grain": "thin season rollup stub",
+      "status": "optional_stub"
+    }
+  },
+  "identity": {
+    "player": {"pk": "player_id", "bootstrap": "sportsdataio PlayerID"},
+    "team": {"pk": "team_id", "bootstrap": "sportsdataio TeamID"},
+    "game": {"pk": "game_id", "bootstrap": "sportsdataio GameID"}
+  },
+  "external_id_alias": {
+    "pk": "alias_id",
+    "unique": ["system", "entity_type", "external_id"],
+    "fields": [
+      "alias_id",
+      "entity_type",
+      "internal_id",
+      "system",
+      "external_id",
+      "is_primary"
+    ]
+  },
+  "provenance": [
+    "source",
+    "source_endpoint",
+    "computed_at",
+    "as_of",
+    "run_id",
+    "is_approx"
+  ],
+  "account_type": {
+    "status": "schema_only",
+    "values": ["fantasy", "scout", "operator_api"],
+    "rbac": "deferred"
+  },
+  "non_goals": [
+    "fantasy_*_stat forked tables",
+    "scout_*_stat forked tables",
+    "removing Lahman / BR rWAR / MLB Stats API paths",
+    "changing current/fantasy/cards.jsonl share.stat_line"
+  ],
+  "soft_fail": {
+    "missing_key_env": "SPORTSDATAIO_API_KEY",
+    "exit_code": 0,
+    "warehouse": "skip spine load when raw empty"
+  }
+}

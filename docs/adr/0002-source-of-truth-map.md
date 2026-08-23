@@ -10,6 +10,7 @@
 |---|---|---|
 | WAR | Baseball-Reference rWAR (`pull_war`) | Warehouse `war_source=real` overlays rWAR. Fantasy cards publish the same value as `war_source=bbref`. |
 | Majors team / player / game / season stats | MLB Stats API | Landed by #108 into `{ARTIFACTS_URI}/raw/mlb_stats/{endpoint}/{as_of_date}/`. |
+| Live player-game spine | SportsDataIO | Phase 0 schema v0.1 (#128). Raw: `{ARTIFACTS_URI}/raw/sportsdataio/{endpoint}/{as_of_date}/`. |
 | Player / team IDs and salary | Lahman | `People.bbrefID` joins BR. Salary coverage ends ~2016. |
 
 ## No dual-write WAR

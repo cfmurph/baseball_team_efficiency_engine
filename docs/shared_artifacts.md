@@ -52,7 +52,11 @@ layout. See [mlb_stats.md](mlb_stats.md) and
 
 ```text
 {ARTIFACTS_URI}/raw/mlb_stats/{endpoint}/{as_of_date}/…json
+{ARTIFACTS_URI}/raw/sportsdataio/{endpoint}/{as_of_date}/…json
 ```
+
+SportsDataIO Phase 0 (#128) uses the same sibling-raw pattern. See
+[sportsdataio.md](sportsdataio.md).
 
 `current/` is the published SoT. `latest/` is a deprecated one-release
 read-only fallback and will be dropped next release. Stats API raw does

@@ -1,0 +1,16 @@
+[
+  {
+    "GameID": 74546,
+    "Season": 2024,
+    "SeasonType": 1,
+    "Status": "Final",
+    "Day": "2024-08-23T00:00:00",
+    "DateTime": "2024-08-23T19:05:00",
+    "AwayTeam": "BOS",
+    "HomeTeam": "NYY",
+    "AwayTeamID": 16,
+    "HomeTeamID": 31,
+    "AwayTeamRuns": 3,
+    "HomeTeamRuns": 7
+  }
+]

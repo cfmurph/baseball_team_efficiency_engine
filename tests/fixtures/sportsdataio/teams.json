@@ -1,0 +1,22 @@
+[
+  {
+    "TeamID": 31,
+    "Key": "NYY",
+    "Active": true,
+    "City": "New York",
+    "Name": "Yankees",
+    "League": "AL",
+    "Division": "East",
+    "GlobalTeamID": 10000031
+  },
+  {
+    "TeamID": 20,
+    "Key": "LAD",
+    "Active": true,
+    "City": "Los Angeles",
+    "Name": "Dodgers",
+    "League": "NL",
+    "Division": "West",
+    "GlobalTeamID": 10000020
+  }
+]
