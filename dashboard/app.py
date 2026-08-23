@@ -28,6 +28,14 @@ from src.baseball_analytics.dashboard_helpers import (
     compute_slider_max,
 )
 
+from src.baseball_analytics.dashboard_utils import (
+    apply_plotly_layout,
+    calculate_slider_max,
+    player_id_columns_for_duplicate_names,
+    render_plotly_chart,
+    scale_payroll_for_display,
+)
+
 # ── Page config ────────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="MLB Efficiency Engine",
@@ -414,16 +422,7 @@ _PLAYER_COL_CFG = {
 
 def _scale_payroll(df: pd.DataFrame) -> pd.DataFrame:
     """Convert payroll/salary columns from raw $ to $M for display."""
-    df = df.copy()
-    for col in ["payroll", "max_salary", "median_salary", "payroll_per_win", "cost_per_war", "surplus_value"]:
-        if col in df.columns:
-            df[col] = df[col] / 1_000_000
-    for col in ["salary"]:
-        if col in df.columns:
-            df[col] = df[col] / 1_000_000
-    if "dead_money_share" in df.columns:
-        df["dead_money_share"] = df["dead_money_share"] * 100
-    return df
+    return scale_payroll_for_display(df)
 
 
 def _show_table(df: pd.DataFrame, col_cfg: dict | None = None, height: int = 600, **kwargs) -> None:
@@ -450,7 +449,7 @@ _SCATTER_MARKER = dict(size=7, opacity=0.75, line=dict(width=0.5, color="#0d1117
 
 def _apply_layout(fig) -> None:
     """Apply the Baseball Savant dark layout to any Plotly figure."""
-    fig.update_layout(**_PLOTLY_LAYOUT)
+    apply_plotly_layout(fig, _PLOTLY_LAYOUT)
 
 
 def _chart(fig, height: int = 400) -> None:
@@ -647,7 +646,7 @@ def page_player_explorer() -> None:
         "name_full" in filt.columns
         and filt.duplicated("name_full", keep=False).any()
     )
-    id_col = ["player_id"] if has_name_collision and "player_id" in filt.columns else []
+    id_col = player_id_columns_for_duplicate_names(filt)
     if has_name_collision:
         st.caption("⚠️ Multiple players share a name in this view — the **Player ID** column distinguishes them.")
 
@@ -792,7 +791,7 @@ def page_team_profile() -> None:
         if "team_name" in roster.columns:
             roster = roster[roster["team_name"] == team]
         if not roster.empty:
-            roster_id = ["player_id"] if roster.duplicated("name_full", keep=False).any() and "player_id" in roster.columns else []
+            roster_id = player_id_columns_for_duplicate_names(roster)
             roster_cols = [c for c in (roster_id + [
                 "name_full", "player_type", "pa", "hr", "bb", "woba", "batting_war",
                 "ip", "era", "fip", "pitching_war",
