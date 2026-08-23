@@ -1,0 +1,21 @@
+{
+  "stats": [
+    {
+      "splits": [
+        {
+          "season": "2024",
+          "team": {"id": 147, "name": "New York Yankees"},
+          "stat": {
+            "wins": 94,
+            "losses": 68,
+            "inningsPitched": "1446.0",
+            "era": "3.74",
+            "whip": "1.24",
+            "strikeOuts": 1465,
+            "baseOnBalls": 512
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "stats": [
+    {
+      "splits": [
+        {
+          "season": "2024",
+          "player": {"id": 592450, "fullName": "Aaron Judge"},
+          "team": {"id": 147, "name": "New York Yankees"},
+          "stat": {
+            "gamesPlayed": 158,
+            "plateAppearances": 704,
+            "atBats": 559,
+            "hits": 180,
+            "homeRuns": 58,
+            "baseOnBalls": 133,
+            "strikeOuts": 171,
+            "avg": ".322",
+            "obp": ".458",
+            "slg": ".701",
+            "ops": "1.159"
+          }
+        },
+        {
+          "season": "2024",
+          "player": {"id": 660271, "fullName": "Shohei Ohtani"},
+          "team": {"id": 119, "name": "Los Angeles Dodgers"},
+          "stat": {
+            "gamesPlayed": 159,
+            "plateAppearances": 731,
+            "atBats": 636,
+            "hits": 197,
+            "homeRuns": 54,
+            "baseOnBalls": 81,
+            "strikeOuts": 162,
+            "avg": ".310",
+            "obp": ".390",
+            "slg": ".646",
+            "ops": "1.036"
+          }
+        }
+      ]
+    }
+  ]
+}

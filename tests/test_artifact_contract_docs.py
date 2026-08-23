@@ -33,6 +33,10 @@ def test_sot_map_names_br_stats_api_and_lahman() -> None:
     assert "No dual-write WAR" in sot
     ingest = (ROOT / "docs/adr/0003-mlb-stats-api-ingest.md").read_text(encoding="utf-8")
     assert "#108" in ingest
+    assert "{ARTIFACTS_URI}/raw/mlb_stats/{endpoint}/{as_of_date}/" in ingest
+    assert "data/raw/mlb_stats/" in ingest
+    assert "pull_war" in ingest
+    assert "Lahman" in ingest
 
 
 def test_qa_guide_documents_file_uri_how_to_verify() -> None:

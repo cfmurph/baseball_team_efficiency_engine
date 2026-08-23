@@ -28,6 +28,7 @@
 - [ ] Add API layer
 - [x] Schedule refresh jobs
 - [x] Shared artifact storage (`runs/` + `current/`) + dashboard remote load with local fallback
+- [x] MLB Stats API majors ingest → versioned raw → warehouse (#108)
 - [x] BenchOrStart waitlist + share-card shell (Phase 0)
 - [x] Nightly ranked `fantasy/cards.jsonl` emitter (#111)
 

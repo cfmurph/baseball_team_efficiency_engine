@@ -14,6 +14,9 @@ Turn a simple historical baseball CSV merge into an analytics platform that can 
 ### 1. Ingestion
 - Pull raw Lahman CSVs into `data/raw` (`pull_sources`)
 - Pull Baseball-Reference rWAR text files (`pull_war`) — optional; warehouse falls back to approx
+- Pull MLB Stats API majors feeds (`pull_mlb_stats`) into
+  `{ARTIFACTS_URI}/raw/mlb_stats/{endpoint}/{as_of_date}/` or local
+  `data/raw/mlb_stats/` — soft-fail; warehouse stays Lahman-only if empty
 - Maintain one file per source
 - Preserve raw column names for traceability
 
@@ -26,9 +29,11 @@ Tables:
 - `fact_salary`
 - `fact_team_season`
 
+Also (when Stats API raw is present):
+- `dim_mlb_team_map` / `dim_mlb_player_map`
+- `fact_mlb_team_season` / `fact_mlb_player_season` / `fact_mlb_game`
+
 Future additions:
-- `fact_player_season`
-- `fact_game`
 - `fact_transaction`
 - `fact_injury`
 

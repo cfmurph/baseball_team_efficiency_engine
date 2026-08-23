@@ -1,0 +1,26 @@
+{
+  "teams": [
+    {
+      "id": 147,
+      "name": "New York Yankees",
+      "abbreviation": "NYY",
+      "teamName": "Yankees",
+      "locationName": "New York",
+      "active": true,
+      "league": {"id": 103, "name": "American League"},
+      "division": {"id": 201, "name": "American League East"},
+      "sport": {"id": 1, "name": "Major League Baseball"}
+    },
+    {
+      "id": 133,
+      "name": "Athletics",
+      "abbreviation": "ATH",
+      "teamName": "Athletics",
+      "locationName": "Sacramento",
+      "active": true,
+      "league": {"id": 103, "name": "American League"},
+      "division": {"id": 200, "name": "American League West"},
+      "sport": {"id": 1, "name": "Major League Baseball"}
+    }
+  ]
+}

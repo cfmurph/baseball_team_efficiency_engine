@@ -1,0 +1,34 @@
+mlb_team_id,mlb_abbr,lahman_team_id,lahman_franch_id,year_start,year_end,notes
+108,LAA,LAA,ANA,2005,9999,Los Angeles Angels
+109,AZ,ARI,ARI,1998,9999,Arizona Diamondbacks
+110,BAL,BAL,BAL,1901,9999,Baltimore Orioles
+111,BOS,BOS,BOS,1901,9999,Boston Red Sox
+112,CHC,CHN,CHC,1876,9999,Chicago Cubs
+113,CIN,CIN,CIN,1882,9999,Cincinnati Reds
+114,CLE,CLE,CLE,1901,9999,Cleveland
+115,COL,COL,COL,1993,9999,Colorado Rockies
+116,DET,DET,DET,1901,9999,Detroit Tigers
+117,HOU,HOU,HOU,1962,9999,Houston Astros
+118,KC,KCA,KCR,1969,9999,Kansas City Royals
+119,LAD,LAN,LAD,1958,9999,Los Angeles Dodgers
+120,WSH,WAS,WSN,2005,9999,Washington Nationals
+121,NYM,NYN,NYM,1962,9999,New York Mets
+133,OAK,OAK,OAK,1968,2024,Oakland Athletics
+133,ATH,ATH,OAK,2025,9999,Athletics (no city)
+134,PIT,PIT,PIT,1882,9999,Pittsburgh Pirates
+135,SD,SDN,SDP,1969,9999,San Diego Padres
+136,SEA,SEA,SEA,1977,9999,Seattle Mariners
+137,SF,SFN,SFG,1958,9999,San Francisco Giants
+138,STL,SLN,STL,1882,9999,St. Louis Cardinals
+139,TB,TBA,TBD,1998,9999,Tampa Bay Rays
+140,TEX,TEX,TEX,1972,9999,Texas Rangers
+141,TOR,TOR,TOR,1977,9999,Toronto Blue Jays
+142,MIN,MIN,MIN,1961,9999,Minnesota Twins
+143,PHI,PHI,PHI,1883,9999,Philadelphia Phillies
+144,ATL,ATL,ATL,1966,9999,Atlanta Braves
+145,CWS,CHA,CHW,1901,9999,Chicago White Sox
+146,MIA,FLO,FLA,1993,2011,Florida Marlins
+146,MIA,MIA,FLA,2012,9999,Miami Marlins
+147,NYY,NYA,NYY,1903,9999,New York Yankees
+158,MIL,ML4,MIL,1969,1997,Brewers (AL; Lahman ML4)
+158,MIL,MIL,MIL,1998,9999,Milwaukee Brewers

@@ -36,6 +36,17 @@ war:
   league_fip_constant: 3.20
   league_ra9: 4.50
 
+# MLB Stats API (public, no key). Soft-fail extract; Lahman-only warehouse if empty.
+# Raw landing: {ARTIFACTS_URI}/raw/mlb_stats/{endpoint}/{as_of_date}/ or data/raw/mlb_stats/
+mlb_stats:
+  base_url: https://statsapi.mlb.com
+  sport_id: 1
+  team_crosswalk: data/crosswalks/mlb_team_map.csv
+  min_request_interval: 0.35
+  max_retries: 3
+  seasons: []          # empty = year of as_of_date
+  schedule_mode: season
+
 # Sportradar MLB API v8
 # API key: set SPORTRADAR_API_KEY env var (never commit keys here).
 # Add to Cursor Cloud Agent Secrets at cursor.com/dashboard so it is

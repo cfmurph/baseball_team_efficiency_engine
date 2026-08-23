@@ -1,0 +1,21 @@
+{
+  "records": [
+    {
+      "teamRecords": [
+        {
+          "team": {"id": 147, "name": "Yankees"},
+          "season": "2024",
+          "wins": 94,
+          "losses": 68,
+          "gamesPlayed": 162,
+          "runsScored": 815,
+          "runsAllowed": 668,
+          "runDifferential": 147,
+          "winningPercentage": ".580",
+          "divisionRank": "1",
+          "leagueRank": "1"
+        }
+      ]
+    }
+  ]
+}

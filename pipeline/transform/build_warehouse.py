@@ -7,8 +7,14 @@ import duckdb
 import pandas as pd
 import typer
 
-from src.baseball_analytics.config import load_settings
+from src.baseball_analytics.config import load_artifact_settings, load_settings
 from src.baseball_analytics.io import read_csv, ensure_dir
+from src.baseball_analytics.mlb_stats import (
+    DEFAULT_TEAM_MAP,
+    MlbFrames,
+    load_mlb_frames,
+    open_optional_backend,
+)
 from src.baseball_analytics.schema import WAREHOUSE_DDL
 from src.baseball_analytics.metrics import (
     pythagorean_wins,
@@ -419,6 +425,58 @@ def build_all(settings: dict) -> tuple[pd.DataFrame, ...]:
     return dim_team, dim_season, dim_player, fact_salary, fact_player_season, fact_team_season
 
 
+def load_mlb_stats_frames(settings: dict, people: pd.DataFrame | None = None) -> MlbFrames:
+    """Load Stats API raw (local or ARTIFACTS_URI). Empty frames = Lahman-only path."""
+    raw_dir = Path(settings["raw_dir"])
+    configured = settings.get("mlb_stats") or {}
+    team_map = configured.get("team_crosswalk") or DEFAULT_TEAM_MAP
+    artifact_settings = load_artifact_settings(settings=settings)
+    backend = open_optional_backend(artifact_settings.uri)
+    return load_mlb_frames(
+        raw_dir,
+        people=people,
+        team_map_path=team_map,
+        backend=backend,
+    )
+
+
+def insert_mlb_stats_tables(con: duckdb.DuckDBPyConnection, frames: MlbFrames) -> dict[str, int]:
+    """Insert Stats API frames. Does not touch Lahman facts or BR WAR columns."""
+    if frames.empty:
+        log.info("No MLB Stats API raw landed; warehouse stays Lahman-only")
+        return {}
+    tables = {
+        "dim_mlb_team_map": frames.team_map,
+        "dim_mlb_player_map": frames.player_map,
+        "fact_mlb_team_season": frames.team_season,
+        "fact_mlb_player_season": frames.player_season,
+        "fact_mlb_game": frames.games,
+    }
+    loaded: dict[str, int] = {}
+    for table_name, df in tables.items():
+        if df is None or df.empty:
+            log.info("Skipping empty Stats API table %s", table_name)
+            continue
+        if "war" in {c.lower() for c in df.columns} or any("war" in c.lower() for c in df.columns):
+            raise ValueError(
+                f"{table_name} contains a WAR column; Stats API must not write WAR "
+                "(BR rWAR is the source of truth)"
+            )
+        db_cols = [r[1] for r in con.execute(f"PRAGMA table_info('{table_name}')").fetchall()]
+        common = [c for c in df.columns if c in db_cols]
+        if not common:
+            log.warning("No overlapping columns for %s; skipping", table_name)
+            continue
+        view_name = f"_load_{table_name}"
+        con.register(view_name, df[common])
+        col_list = ", ".join(common)
+        con.execute(f"INSERT INTO {table_name} ({col_list}) SELECT {col_list} FROM {view_name}")
+        con.unregister(view_name)
+        loaded[table_name] = len(df)
+        log.info("Loaded %d rows into %s (Stats API)", len(df), table_name)
+    return loaded
+
+
 @app.command()
 def main(config_path: str = "config/settings.yaml") -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -460,6 +518,11 @@ def main(config_path: str = "config/settings.yaml") -> None:
         con.execute(f"INSERT INTO {table_name} ({col_list}) SELECT {col_list} FROM {view_name}")
         con.unregister(view_name)
         log.info("Loaded %d rows into %s", len(df), table_name)
+
+    people_path = Path(settings["raw_dir"]) / "people.csv"
+    people_df = read_csv(people_path) if people_path.is_file() else None
+    mlb_frames = load_mlb_stats_frames(settings, people=people_df)
+    insert_mlb_stats_tables(con, mlb_frames)
 
     con.close()
 

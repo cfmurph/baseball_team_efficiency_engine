@@ -12,6 +12,8 @@ def test_load_settings() -> None:
     assert settings["war_sources"]["batting"].endswith("war_daily_bat.txt")
     assert settings["artifacts_partition"]["league"] == "mlb"
     assert settings["artifacts_partition"]["level"] == "mlb"
+    assert settings["mlb_stats"]["base_url"] == "https://statsapi.mlb.com"
+    assert settings["mlb_stats"]["team_crosswalk"] == "data/crosswalks/mlb_team_map.csv"
 
 
 def test_resolve_artifacts_uri_precedence() -> None:
