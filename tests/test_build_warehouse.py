@@ -1,9 +1,62 @@
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from pipeline.transform import build_warehouse
+from pipeline.transform.build_warehouse import (
+    build_dim_player,
+    build_fact_player_season,
+    build_fact_team_season,
+)
+
+
+def _batting_rows() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "playerID": ["batter", "two_way"],
+            "yearID": [2020, 2020],
+            "teamID": ["AAA", "AAA"],
+            "AB": [560, 420],
+            "H": [180, 120],
+            "2B": [35, 25],
+            "3B": [4, 2],
+            "HR": [32, 12],
+            "BB": [70, 45],
+            "IBB": [5, 1],
+            "HBP": [6, 3],
+            "SF": [5, 4],
+            "SH": [0, 1],
+        }
+    )
+
+
+def _pitching_rows() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "playerID": ["pitcher", "two_way"],
+            "yearID": [2020, 2020],
+            "teamID": ["AAA", "AAA"],
+            "IPouts": [0, 540],
+            "HR": [0, 14],
+            "BB": [0, 45],
+            "HBP": [0, 4],
+            "SO": [0, 165],
+            "ERA": [np.nan, 3.35],
+        }
+    )
+
+
+def _salary_rows() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "yearID": [2020, 2020, 2020],
+            "teamID": ["AAA", "AAA", "AAA"],
+            "playerID": ["batter", "pitcher", "two_way"],
+            "salary": [500_000, 7_000_000, 1_000_000],
+        }
+    )
 
 
 def _teams_frame() -> pd.DataFrame:

@@ -15,6 +15,7 @@ from src.baseball_analytics.validation import (
     validate_fact_player_season,
     validate_fact_team_season,
     validate_dim_team,
+    validate_all,
 )
 
 
