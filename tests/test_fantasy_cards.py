@@ -12,6 +12,7 @@ from src.baseball_analytics.fantasy import (
     write_fantasy_cards_stub,
 )
 
+from fantasy.card_image import render_share_card_png
 from fantasy.cards import (
     CARD_LAKE_KEY,
     OPTIONAL_CARD_KEY,
@@ -20,6 +21,7 @@ from fantasy.cards import (
     card_feed_keys,
     card_headline,
     card_rank_line,
+    card_share_filename,
     card_stat_line,
     card_subtitle,
     dated_card_keys,
@@ -29,6 +31,7 @@ from fantasy.cards import (
     parse_card_payload,
     parse_cards_jsonl,
     present_card,
+    present_cards,
     recommendation_label,
     resolve_player_artifacts,
     share_card_html,
@@ -122,10 +125,13 @@ def test_share_fallbacks_and_approx_hides_confidence() -> None:
         "rank": {"among_rec_type": 1},
         "share": {},
     }
-    assert card_headline(card) == "PICK UP"
+    assert card_headline(card) == "Spencer Steer"
+    assert card_headline(card) != recommendation_label("pickup")
     assert card_subtitle(card) == "Spencer Steer · 1B · CIN"
-    assert card_stat_line(card) == "+1.6 vs repl · 81% conf"
+    assert card_stat_line(card) == "+1.6 edge · 81% conf"
+    assert "vs repl" not in card_stat_line(card)
     assert card_rank_line(card) == "#1 pickup tonight"
+    assert card["edge"]["vs_replacement"] == 1.6
 
     approx = {
         **card,
@@ -140,7 +146,8 @@ def test_share_fallbacks_and_approx_hides_confidence() -> None:
     }
     assert is_approx(approx) is True
     assert war_source(approx) == "approx"
-    assert card_stat_line(approx) == "-0.4 vs repl"
+    assert card_stat_line(approx) == "-0.4 edge"
+    assert "vs repl" not in share_card_html(present_card(approx))
     view = present_card(approx)
     assert view.label == "BENCH"
     assert view.early_model is True
@@ -189,6 +196,13 @@ def test_stub_cards_cover_all_decisions_and_bbref_or_approx() -> None:
     assert "BENCH" in html
     assert EARLY_MODEL_BADGE in html
     assert "as of 2026-08-23" in html
+    assert "Jorge Soler" in html
+    assert html.count("BENCH") == 1
+    assert "vs repl" not in html
+    pickup = next(card for card in cards if card["recommendation_type"] == "pickup")
+    pickup_html = share_card_html(present_card(pickup))
+    assert "Spencer Steer" in pickup_html
+    assert pickup_html.count("PICK UP") == 1
 
 
 def test_parse_cards_jsonl_skips_bad_lines() -> None:

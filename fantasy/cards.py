@@ -236,11 +236,19 @@ def is_approx(card: Mapping[str, Any]) -> bool:
     return flag is True or flag == "true" or flag == 1
 
 
+def player_name(card: Mapping[str, Any]) -> str:
+    name = _player_map(card).get("name")
+    if name in (None, ""):
+        return ""
+    return str(name).strip()
+
+
 def card_headline(card: Mapping[str, Any]) -> str:
+    """share.headline when set; otherwise the player name — never the badge label."""
     headline = _share_map(card).get("headline")
     if headline is not None and str(headline).strip():
         return str(headline).strip()
-    return recommendation_label(card.get("recommendation_type"))
+    return player_name(card)
 
 
 def card_subtitle(card: Mapping[str, Any]) -> str:
@@ -256,7 +264,8 @@ def card_subtitle(card: Mapping[str, Any]) -> str:
     return " · ".join(parts)
 
 
-def _format_vs_replacement(value: Any) -> str | None:
+def _format_edge(value: Any) -> str | None:
+    """Plain-language face copy for ``edge.vs_replacement``. Schema is unchanged."""
     if value in (None, ""):
         return None
     try:
@@ -265,7 +274,7 @@ def _format_vs_replacement(value: Any) -> str | None:
         return None
     formatted = f"{amount:g}"
     sign = "+" if amount >= 0 and not formatted.startswith("+") else ""
-    return f"{sign}{formatted} vs repl"
+    return f"{sign}{formatted} {EDGE_UNIT}"
 
 
 def _confidence_value(card: Mapping[str, Any]) -> Any:
@@ -291,9 +300,9 @@ def card_stat_line(card: Mapping[str, Any]) -> str:
     if stat_line is not None and str(stat_line).strip():
         return str(stat_line).strip()
     bits: list[str] = []
-    vs_line = _format_vs_replacement(_edge_map(card).get("vs_replacement"))
-    if vs_line:
-        bits.append(vs_line)
+    edge_line = _format_edge(_edge_map(card).get("vs_replacement"))
+    if edge_line:
+        bits.append(edge_line)
     # Approx / early-model rows hide the confidence overclaim.
     if not is_approx(card):
         conf_line = _format_confidence(_confidence_value(card))
@@ -340,6 +349,7 @@ class ShareCardView:
     as_of_date: str
     rank_line: str
     early_model: bool
+    card_id: str = ""
     prompt: str = PROMPT_LINE
 
 
@@ -355,11 +365,55 @@ def present_card(card: Mapping[str, Any]) -> ShareCardView:
         as_of_date=card_as_of(card),
         rank_line=card_rank_line(card),
         early_model=is_approx(card),
+        card_id=str(card.get("card_id") or "").strip(),
     )
 
 
 def present_cards(cards: list[Mapping[str, Any]]) -> list[ShareCardView]:
     return [present_card(card) for card in cards]
+
+
+def cards_for_label(
+    views: list[ShareCardView],
+    label: str | None,
+) -> list[ShareCardView]:
+    """Filter presented cards by badge label. ``None`` / All returns the full list."""
+    if not label:
+        return list(views)
+    wanted = str(label).strip().upper()
+    if wanted in {"ALL", "*"}:
+        return list(views)
+    return [view for view in views if view.label == wanted]
+
+
+def share_blurb(view: ShareCardView) -> str:
+    """League-chat paste: decision + player + stat line + reason + as-of."""
+    identity = view.subtitle or view.headline
+    if identity:
+        lines = [f"{view.label} — {identity}"]
+    else:
+        lines = [view.label]
+    if (
+        view.headline
+        and identity
+        and view.headline != identity
+        and view.headline not in identity
+    ):
+        lines.append(view.headline)
+    if view.stat_line:
+        lines.append(view.stat_line)
+    if view.reason:
+        lines.append(view.reason)
+    if view.as_of_date:
+        lines.append(f"as of {view.as_of_date}")
+    return "\n".join(lines)
+
+
+def card_share_filename(view: ShareCardView, *, ext: str = "png") -> str:
+    raw = view.headline or view.subtitle or view.label
+    slug = re.sub(r"[^a-z0-9]+", "-", raw.lower()).strip("-") or "card"
+    rec = (view.recommendation_type or view.label).lower().replace(" ", "-")
+    return f"benchorstart-{slug}-{rec}.{ext}"
 
 
 def share_card_html(view: ShareCardView, *, featured: bool = False) -> str:
@@ -391,14 +445,23 @@ def share_card_html(view: ShareCardView, *, featured: bool = False) -> str:
         else ""
     )
     featured_class = " bos-card-featured" if featured else ""
+    headline = (
+        f'<h2 class="bos-headline">{html.escape(view.headline)}</h2>'
+        if view.headline
+        else ""
+    )
+    subtitle = (
+        f'<div class="bos-sub">{html.escape(view.subtitle)}</div>'
+        if view.subtitle
+        else ""
+    )
     return (
         f'<article class="bos-card{featured_class}" style="--bos-tone:{tone}">'
         f'<div class="bos-wordmark">BenchOrStart</div>'
         f'<div class="bos-prompt">{html.escape(view.prompt)}</div>'
         f'<div class="bos-label">{html.escape(view.label)}</div>'
         f"{badge}{rank}"
-        f'<h2 class="bos-headline">{html.escape(view.headline)}</h2>'
-        f'<div class="bos-sub">{html.escape(view.subtitle)}</div>'
+        f"{headline}{subtitle}"
         f"{stat}{reason}{as_of}"
         f"</article>"
     )
