@@ -120,6 +120,25 @@ python3 -m models.cluster_teams
 streamlit run dashboard/app.py
 ```
 
+## Nightly refresh
+
+The five pipeline steps above are also wrapped by a fail-fast orchestrator:
+
+```bash
+python3 -m pipeline.run_nightly
+# optional: --config-path config/settings.yaml
+```
+
+That command runs extract → warehouse → metrics → win model → clustering in order, logs timing for each step, and **stops on the first non-zero exit** (later steps are named in the error and are not run). Use the same command locally whenever you want a full refresh.
+
+GitHub Actions runs it overnight via `.github/workflows/nightly-refresh.yml`:
+
+- **Schedule:** `0 8 * * *` UTC = **2:00 AM America/Edmonton during MDT** (UTC-6). During MST (UTC-7) that is 1:00 AM local. Actions cron is UTC-only and cannot follow DST.
+- **Manual trigger:** Actions → **Nightly data refresh** → **Run workflow** (`workflow_dispatch`).
+- **Outputs:** CSVs, plots, and the DuckDB warehouse stay gitignored. The workflow uploads them as the `nightly-artifacts` run artifact (14-day retention) instead of committing generated files.
+
+Optional Sportradar pulls are not part of this job; they still require `SPORTRADAR_API_KEY` and `python3 -m pipeline.extract.pull_sportradar`.
+
 ## Dashboard sections
 
 1. **Overview** — Season efficiency scatter (payroll vs wins), KPIs, ranking table
