@@ -4,14 +4,23 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 
+import pandas as pd
+import pytest
+
 from src.baseball_analytics.config import ArtifactSettings
 from src.baseball_analytics.fantasy import (
     FANTASY_CARDS_RELPATH,
+    FANTASY_SCHEMA_VERSION,
+    RECOMMENDATION_TYPES,
     VOID_DATED_CARDS_PREFIX,
+    card_schema_errors,
+    emit_ranked_fantasy_cards,
     map_card_war_source,
+    rank_fantasy_cards,
     render_cards_jsonl,
     write_fantasy_cards_stub,
 )
+from src.baseball_analytics.storage import upload_artifacts
 
 from fantasy.card_image import render_share_card_png
 from fantasy.cards import (
@@ -283,6 +292,136 @@ class _MemoryBackend:
     def get(self, relative_key: str) -> bytes | None:
         self.gets.append(relative_key)
         return self.objects.get(relative_key)
+
+
+def _player_metrics_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        [
+            {
+                "player_id": "judgeaa01",
+                "player_name": "Aaron Judge",
+                "team_id": "NYA",
+                "position": "OF",
+                "player_type": "batter",
+                "season": 2015,
+                "player_war": 9.4,
+                "war": 9.4,
+                "vs_replacement": 9.4,
+                "surplus_value": 40_000_000,
+                "pitching_war": 0.0,
+                "war_source": "real",
+            },
+            {
+                "player_id": "troutmi01",
+                "player_name": "Mike Trout",
+                "team_id": "LAA",
+                "position": "OF",
+                "player_type": "batter",
+                "season": 2015,
+                "player_war": 9.0,
+                "war": 9.0,
+                "vs_replacement": 9.0,
+                "surplus_value": 55_000_000,
+                "pitching_war": 0.0,
+                "war_source": "bbref",
+            },
+            {
+                "player_id": "degroja01",
+                "player_name": "Jacob deGrom",
+                "team_id": "NYN",
+                "position": "P",
+                "player_type": "pitcher",
+                "season": 2015,
+                "player_war": 6.4,
+                "war": 6.4,
+                "vs_replacement": 6.4,
+                "surplus_value": 48_000_000,
+                "pitching_war": 6.4,
+                "war_source": "real",
+            },
+            {
+                "player_id": "kershcl01",
+                "player_name": "Clayton Kershaw",
+                "team_id": "LAN",
+                "position": "P",
+                "player_type": "pitcher",
+                "season": 2015,
+                "player_war": 5.8,
+                "war": 5.8,
+                "vs_replacement": 5.8,
+                "surplus_value": 12_000_000,
+                "pitching_war": 5.8,
+                "war_source": "approx",
+            },
+            {
+                "player_id": "steersp01",
+                "player_name": "Spencer Steer",
+                "team_id": "CIN",
+                "position": "1B",
+                "player_type": "batter",
+                "season": 2015,
+                "player_war": 2.4,
+                "war": 2.4,
+                "vs_replacement": 2.4,
+                "surplus_value": 22_000_000,
+                "pitching_war": 0.0,
+                "war_source": "bbref",
+            },
+            {
+                "player_id": "solerjo01",
+                "player_name": "Jorge Soler",
+                "team_id": "KCA",
+                "position": "OF",
+                "player_type": "batter",
+                "season": 2015,
+                "player_war": -0.6,
+                "war": -0.6,
+                "vs_replacement": -0.6,
+                "surplus_value": -8_000_000,
+                "pitching_war": 0.0,
+                "war_source": "approx",
+            },
+            {
+                "player_id": "oldbat01",
+                "player_name": "Prior Season",
+                "team_id": "BOS",
+                "position": "OF",
+                "player_type": "batter",
+                "season": 2014,
+                "player_war": 12.0,
+                "war": 12.0,
+                "vs_replacement": 12.0,
+                "surplus_value": 99_000_000,
+                "pitching_war": 0.0,
+                "war_source": "real",
+            },
+        ]
+    )
+
+
+def _assert_schema_cards(cards: list[dict]) -> None:
+    assert cards
+    types = {card["recommendation_type"] for card in cards}
+    assert types == set(RECOMMENDATION_TYPES)
+    for card in cards:
+        assert card_schema_errors(card) == []
+        assert card["schema_version"] == FANTASY_SCHEMA_VERSION
+        source = card["edge"]["war_source"]
+        assert source in {"bbref", "approx"}
+        assert source != "fangraphs"
+        assert card["edge"]["is_approx"] is (source == "approx")
+        assert "\n" not in card["reason"]
+        assert "vs replacement" in card["reason"]
+        stat_line = str((card.get("share") or {}).get("stat_line") or "")
+        assert stat_line
+        assert "vs repl" not in stat_line
+        assert "vs replacement" not in stat_line
+        if source == "approx":
+            assert stat_line.endswith(" edge")
+            assert "% conf" not in stat_line
+        else:
+            assert " edge · " in stat_line
+            assert stat_line.endswith("% conf")
 
 
 def test_resolve_prefers_current_fantasy_cards_jsonl(tmp_path: Path) -> None:

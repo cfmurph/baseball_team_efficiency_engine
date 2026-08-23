@@ -28,7 +28,8 @@
 - [ ] Add API layer
 - [x] Schedule refresh jobs
 - [x] Shared artifact storage (`runs/` + `current/`) + dashboard remote load with local fallback
-- [ ] BenchOrStart waitlist + share-card shell (Phase 0)
+- [x] BenchOrStart waitlist + share-card shell (Phase 0)
+- [x] Nightly ranked `fantasy/cards.jsonl` emitter (#111)
 
 ## Phase 5: Simulation
 - [ ] Payroll redistribution simulator

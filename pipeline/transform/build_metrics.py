@@ -8,7 +8,7 @@ import pandas as pd
 import typer
 
 from src.baseball_analytics.config import load_settings
-from src.baseball_analytics.fantasy import write_fantasy_cards_stub
+from src.baseball_analytics.fantasy import emit_ranked_fantasy_cards
 from src.baseball_analytics.io import ensure_dir
 from src.baseball_analytics.storage import default_as_of_date
 
@@ -391,8 +391,10 @@ def main(config_path: str = "config/settings.yaml") -> None:
     player_df = enrich_player_season_phase0(player_df, as_of_date=as_of)
     player_df.to_csv(artifacts_dir / "player_season_metrics.csv", index=False)
     log.info("Wrote player_season_metrics.csv (%d rows)", len(player_df))
-    write_fantasy_cards_stub(artifacts_dir, as_of_date=as_of)
-    log.info("Wrote fantasy/cards.jsonl stub")
+    cards_path = emit_ranked_fantasy_cards(
+        artifacts_dir, as_of_date=as_of, player_df=player_df
+    )
+    log.info("Wrote %s from player_season_metrics", cards_path.relative_to(artifacts_dir))
 
     top_value = _top_value_players(player_df)
     top_value.to_csv(artifacts_dir / "player_top_surplus_value.csv", index=False)
