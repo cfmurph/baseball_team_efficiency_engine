@@ -46,6 +46,8 @@ from src.baseball_analytics.fantasy import (
 
 log = logging.getLogger(__name__)
 
+CurrentPromoteDecision = Literal["promote", "skip_soft", "fail_closed"]
+
 SCHEMA_VERSION = FANTASY_SCHEMA_VERSION
 RUNS_PREFIX = "runs"
 CURRENT_PREFIX = "current"
@@ -540,16 +542,29 @@ def upload_artifacts(
         ) from exc
 
     current_updated = False
+    promote_reason: str | None = None
     if update_current:
-        try:
-            _promote_current(store, resolved_run, relative_names, payload)
-            current_updated = True
-        except ArtifactStoreError:
-            raise
-        except Exception as exc:
+        decision, promote_reason = evaluate_current_promote(source)
+        if decision == "fail_closed":
             raise ArtifactUploadError(
-                f"Run {resolved_run} is stored but current/ promote failed: {exc}"
-            ) from exc
+                f"Run {resolved_run} is stored but current/ promote refused: {promote_reason}"
+            )
+        if decision == "skip_soft":
+            log.warning(
+                "Skipping current/ promote for run %s (%s); leaving prior current/ in place",
+                resolved_run,
+                promote_reason,
+            )
+        else:
+            try:
+                _promote_current(store, resolved_run, relative_names, payload)
+                current_updated = True
+            except ArtifactStoreError:
+                raise
+            except Exception as exc:
+                raise ArtifactUploadError(
+                    f"Run {resolved_run} is stored but current/ promote failed: {exc}"
+                ) from exc
 
     log.info(
         "Uploaded %d artifact files to %s/%s%s",
@@ -565,6 +580,7 @@ def upload_artifacts(
         relative_prefix=run_root,
         files=relative_names,
         current_updated=current_updated,
+        reason=None if current_updated else promote_reason,
     )
 
 
@@ -707,6 +723,106 @@ def _ensure_fantasy_cards(local_dir: Path, as_of_date: str) -> Path:
     if dest.is_file() and dest.stat().st_size > 0:
         return dest
     return emit_ranked_fantasy_cards(local_dir, as_of_date=as_of_date)
+
+
+def decide_current_promote(
+    *,
+    sdio_in_season: bool | None = None,
+    active_season: int | None = None,
+    metrics_max_season: int | None = None,
+    current_season_missing: bool | None = None,
+) -> CurrentPromoteDecision:
+    """Decide whether ``current/`` may be swapped onto this run.
+
+    Fail-closed when SportsDataIO landed in-season data but published
+    metrics have ``max(season) < Y``. Missing-key / empty SDIO skips
+    promote without failing so a prior ``current/`` stays put.
+    """
+    if sdio_in_season and active_season is not None:
+        if metrics_max_season is None or int(metrics_max_season) < int(active_season):
+            return "fail_closed"
+    if current_season_missing and not sdio_in_season:
+        return "skip_soft"
+    return "promote"
+
+
+def evaluate_current_promote(local_dir: str | Path) -> tuple[CurrentPromoteDecision, str]:
+    """Read metrics coverage from ``local_dir`` and return (decision, reason)."""
+    coverage = _read_metrics_coverage(Path(local_dir))
+    if coverage is None:
+        return "promote", ""
+    active = _optional_int(coverage.get("active_season"))
+    max_season = _coverage_max_season(coverage, Path(local_dir))
+    decision = decide_current_promote(
+        sdio_in_season=coverage.get("sdio_in_season"),
+        active_season=active,
+        metrics_max_season=max_season,
+        current_season_missing=coverage.get("current_season_missing"),
+    )
+    if decision == "fail_closed":
+        return (
+            decision,
+            f"SDIO in-season data present but metrics max(season)={max_season} "
+            f"< active year {active}",
+        )
+    if decision == "skip_soft":
+        reason = coverage.get("current_season_missing_reason") or "current_season_missing"
+        return decision, str(reason)
+    return decision, ""
+
+
+def _read_metrics_coverage(local_dir: Path) -> dict[str, object] | None:
+    for path in (
+        local_dir / "metrics_manifest.json",
+        local_dir / "metrics" / "metrics_manifest.json",
+    ):
+        if not path.is_file():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return payload if isinstance(payload, dict) else None
+    return None
+
+
+def _coverage_max_season(coverage: Mapping[str, object], local_dir: Path) -> int | None:
+    present = coverage.get("seasons_present")
+    if isinstance(present, (list, tuple)) and present:
+        years = [_optional_int(year) for year in present]
+        found = [year for year in years if year is not None]
+        if found:
+            return max(found)
+    return _metrics_csv_max_season(local_dir)
+
+
+def _metrics_csv_max_season(local_dir: Path) -> int | None:
+    path = _find_player_metrics_csv(local_dir)
+    if path is None:
+        return None
+    try:
+        import csv
+
+        with path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            years: list[int] = []
+            for row in reader:
+                raw = row.get("season") or row.get("year_id") or row.get("season_key")
+                year = _optional_int(raw)
+                if year is not None:
+                    years.append(year)
+    except OSError:
+        return None
+    return max(years) if years else None
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _promote_current(
