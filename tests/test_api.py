@@ -183,12 +183,24 @@ def test_empty_artifacts_do_not_invent_cards_or_2026(tmp_path: Path) -> None:
     seasons = client.get("/v1/seasons").json()
     assert seasons["seasons_present"] == []
     assert 2026 in seasons["season_window"]
+    players = client.get("/v1/players", params={"season": 2026}).json()
+    assert players["players"] == []
+    assert players["current_season_missing"] is True
+    missing = client.get("/v1/players/judgeaa01")
+    assert missing.status_code == 404
 
 
 def test_secret_never_appears_in_responses_or_openapi(tmp_path: Path) -> None:
     env = {**PINNED_ENV, "SPORTSDATAIO_API_KEY": SECRET}
     client = _client(tmp_path, LAKE_CURRENT, environ=env)
-    for path in ("/v1/health", "/v1/cards", "/v1/seasons", "/openapi.json"):
+    for path in (
+        "/v1/health",
+        "/v1/cards",
+        "/v1/seasons",
+        "/v1/players",
+        "/v1/players/judgeaa01",
+        "/openapi.json",
+    ):
         text = client.get(path).text
         assert SECRET not in text
         assert "super-secret" not in text
@@ -219,7 +231,7 @@ def test_openapi_spec_is_checked_in_and_matches_app() -> None:
     spec_path = ROOT / "services" / "api" / "openapi.yaml"
     assert spec_path.is_file()
     committed = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
-    for path in ("/v1/health", "/v1/cards", "/v1/seasons"):
+    for path in ("/v1/health", "/v1/cards", "/v1/seasons", "/v1/players", "/v1/players/{id}"):
         assert path in committed["paths"]
         assert "get" in committed["paths"][path]
     health_props = committed["components"]["schemas"]["HealthResponse"]["properties"]
@@ -253,3 +265,98 @@ def test_local_fallback_without_uri(tmp_path: Path) -> None:
     health = client.get("/v1/health").json()
     assert health["source"] == "local"
     assert health["current_season_missing"] is False
+
+
+def _assert_honesty(body: dict, *, current_missing: bool) -> None:
+    for field in (
+        "as_of",
+        "active_season",
+        "current_season_missing",
+        "season_window",
+        "source",
+        "seasons_present",
+        "current_season_missing_reason",
+    ):
+        assert field in body
+    assert body["season_window"] == [2024, 2025, 2026]
+    assert body["active_season"] == 2026
+    assert body["current_season_missing"] is current_missing
+
+
+def test_players_directory_from_fixture_current(tmp_path: Path) -> None:
+    client = _client(tmp_path, LAKE_CURRENT)
+    body = client.get("/v1/players").json()
+    _assert_honesty(body, current_missing=False)
+    assert body["season"] is None
+    ids = {player["player_id"] for player in body["players"]}
+    assert ids == {"judgeaa01", "solerjo01", "steersp01", "suarera02"}
+    judge = next(player for player in body["players"] if player["player_id"] == "judgeaa01")
+    assert judge["name"] == "Aaron Judge"
+    assert [row["season"] for row in judge["seasons"]] == [2026, 2025]
+    season_2026 = judge["seasons"][0]
+    assert season_2026["pa"] == 500
+    assert season_2026["hr"] == 40
+    assert season_2026["avg"] == pytest.approx(0.35)
+    assert season_2026["war"] == pytest.approx(6.1)
+    dumped = json.dumps(body)
+    assert "vs_replacement" not in dumped
+    assert "vs repl" not in dumped
+    assert "salary" not in dumped
+    assert "40000000" not in dumped
+    assert "dfs" not in dumped.lower()
+    assert "betting" not in dumped.lower()
+
+
+def test_players_season_filter_and_detail(tmp_path: Path) -> None:
+    client = _client(tmp_path, LAKE_CURRENT)
+    listed = client.get("/v1/players", params={"season": 2026}).json()
+    assert listed["season"] == 2026
+    assert {player["player_id"] for player in listed["players"]} == {"judgeaa01", "solerjo01"}
+    assert all(row["season"] == 2026 for player in listed["players"] for row in player["seasons"])
+
+    detail = client.get("/v1/players/judgeaa01").json()
+    _assert_honesty(detail, current_missing=False)
+    assert detail["player"]["player_id"] == "judgeaa01"
+    assert [row["season"] for row in detail["player"]["seasons"]] == [2026, 2025]
+    assert detail["player"]["seasons"][0]["stat_source"] == "sportsdataio"
+
+    missing = client.get("/v1/players/not-a-player")
+    assert missing.status_code == 404
+    assert "player not found" in missing.json()["detail"]
+
+
+def test_players_missing_2026_is_honest_empty(tmp_path: Path) -> None:
+    client = _client(tmp_path, LAKE_MISSING)
+    empty = client.get("/v1/players", params={"season": 2026}).json()
+    _assert_honesty(empty, current_missing=True)
+    assert empty["players"] == []
+    assert 2026 not in empty["seasons_present"]
+    assert empty["current_season_missing_reason"]
+
+    prior = client.get("/v1/players").json()
+    _assert_honesty(prior, current_missing=True)
+    assert {player["player_id"] for player in prior["players"]} == {"judgeaa01"}
+    assert prior["players"][0]["seasons"][0]["season"] == 2024
+    assert all(row["season"] != 2026 for player in prior["players"] for row in player["seasons"])
+
+    empty_player = client.get("/v1/players/judgeaa01", params={"season": 2026}).json()
+    _assert_honesty(empty_player, current_missing=True)
+    assert empty_player["player"]["player_id"] == "judgeaa01"
+    assert empty_player["player"]["seasons"] == []
+
+    outside = client.get("/v1/players/troutmi01").json()
+    assert outside["player"]["player_id"] == "troutmi01"
+    assert outside["player"]["seasons"] == []
+
+
+def test_players_cors_uses_api_cors_origins(tmp_path: Path) -> None:
+    origin = "https://bench-or-start.vercel.app"
+    client = _client(
+        tmp_path,
+        LAKE_CURRENT,
+        environ={**PINNED_ENV, "API_CORS_ORIGINS": origin},
+    )
+    response = client.get("/v1/players", headers={"Origin": origin})
+    assert response.headers.get("access-control-allow-origin") == origin
+    denied = client.get("/v1/players/judgeaa01", headers={"Origin": "https://evil.example"})
+    assert denied.headers.get("access-control-allow-origin") != "https://evil.example"

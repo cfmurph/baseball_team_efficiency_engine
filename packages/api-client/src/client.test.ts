@@ -35,6 +35,11 @@ test("unset API URL uses fixtures and can set current_season_missing", async () 
   const sitOnly = await client.getCards({ rec: "sit" });
   assert.equal(sitOnly.cards.length, 1);
   assert.equal(sitOnly.cards[0]?.player?.name, "Jorge Soler");
+  const players = await client.getPlayers({ season: 2026 });
+  assert.deepEqual(players.players, []);
+  assert.equal(players.current_season_missing, true);
+  const player = await client.getPlayer("judgeaa01");
+  assert.equal(player.player, null);
 });
 
 test("live client hits /v1 without inventing rows", async () => {
@@ -68,6 +73,32 @@ test("live client hits /v1 without inventing rows", async () => {
           }),
         );
       }
+      if (url.includes("/v1/players/judgeaa01")) {
+        return new Response(
+          JSON.stringify({
+            as_of: "2025-09-01",
+            active_season: 2026,
+            current_season_missing: true,
+            season_window: [2024, 2025, 2026],
+            seasons_present: [2024, 2025],
+            source: "local",
+            player: { player_id: "judgeaa01", name: "Aaron Judge", seasons: [] },
+          }),
+        );
+      }
+      if (url.includes("/v1/players")) {
+        return new Response(
+          JSON.stringify({
+            as_of: "2025-09-01",
+            active_season: 2026,
+            current_season_missing: true,
+            season_window: [2024, 2025, 2026],
+            seasons_present: [2024, 2025],
+            source: "local",
+            players: [],
+          }),
+        );
+      }
       return new Response("missing", { status: 404 });
     },
   });
@@ -79,7 +110,15 @@ test("live client hits /v1 without inventing rows", async () => {
   assert.deepEqual(cards.cards, []);
   const seasons = await client.getSeasons();
   assert.deepEqual(seasons.seasons, [2024, 2025]);
+  const players = await client.getPlayers({ season: 2026 });
+  assert.deepEqual(players.players, []);
+  assert.equal(players.current_season_missing, true);
+  const player = await client.getPlayer("judgeaa01", { season: 2026 });
+  assert.equal(player.player?.player_id, "judgeaa01");
+  assert.deepEqual(player.player?.seasons, []);
   assert.ok(calls.some((url) => url.includes("/v1/cards?season=2026&rec=start")));
+  assert.ok(calls.some((url) => url.includes("/v1/players?season=2026")));
+  assert.ok(calls.some((url) => url.includes("/v1/players/judgeaa01?season=2026")));
 });
 
 test("stubHealth override stays explicit", () => {

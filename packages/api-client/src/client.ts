@@ -24,6 +24,60 @@ export type CardQuery = {
   rec?: RecommendationType | string;
 };
 
+export type PlayerQuery = {
+  season?: number;
+};
+
+export type PlayerSeason = {
+  season: number;
+  team?: string | null;
+  team_name?: string | null;
+  position?: string | null;
+  player_type?: string | null;
+  stat_source?: string | null;
+  war_source?: string | null;
+  war?: number | null;
+  games?: number | null;
+  pa?: number | null;
+  ab?: number | null;
+  hits?: number | null;
+  hr?: number | null;
+  bb?: number | null;
+  so?: number | null;
+  rbi?: number | null;
+  sb?: number | null;
+  ip?: number | null;
+  avg?: number | null;
+  woba?: number | null;
+  era?: number | null;
+  whip?: number | null;
+  fip?: number | null;
+};
+
+export type PlayerRecord = {
+  player_id: string;
+  name?: string | null;
+  position?: string | null;
+  team?: string | null;
+  seasons: PlayerSeason[];
+};
+
+export type PlayersResponse = {
+  as_of: string;
+  active_season: number;
+  current_season_missing: boolean;
+  season_window: number[];
+  seasons_present: number[];
+  source?: "remote" | "local" | "missing";
+  current_season_missing_reason?: string | null;
+  season?: number | null;
+  players: PlayerRecord[];
+};
+
+export type PlayerResponse = Omit<PlayersResponse, "players"> & {
+  player: PlayerRecord | null;
+};
+
 const STUB_AS_OF = "2026-08-23";
 
 export function defaultSeasonYears(active = DEFAULT_ACTIVE_SEASON): number[] {
@@ -156,12 +210,65 @@ async function getJson(
   return response.json();
 }
 
+function parsePlayers(payload: unknown): PlayerRecord[] {
+  const raw = asRecord(payload);
+  return Array.isArray(raw.players) ? (raw.players as PlayerRecord[]) : [];
+}
+
+function parsePlayer(payload: unknown): PlayerRecord | null {
+  const raw = asRecord(payload);
+  if (raw.player === null || raw.player === undefined) {
+    return null;
+  }
+  return raw.player as PlayerRecord;
+}
+
+function honestyFromUnknown(
+  payload: unknown,
+  options: Pick<ApiClientOptions, "stubCurrentSeasonMissing"> = {},
+): Omit<PlayersResponse, "players" | "season"> {
+  const raw = asRecord(payload);
+  const health = parseHealth(payload);
+  const windowYears = yearsFromUnknown(raw.season_window);
+  return {
+    as_of: health.as_of,
+    active_season: health.active_season,
+    current_season_missing: health.current_season_missing,
+    season_window: windowYears.length ? windowYears : defaultSeasonYears(health.active_season),
+    seasons_present: yearsFromUnknown(raw.seasons_present),
+    source: raw.source === "remote" || raw.source === "local" || raw.source === "missing" ? raw.source : undefined,
+    current_season_missing_reason:
+      raw.current_season_missing_reason == null
+        ? options.stubCurrentSeasonMissing
+          ? "stub"
+          : null
+        : String(raw.current_season_missing_reason),
+  };
+}
+
+function stubPlayerHonesty(
+  options: Pick<ApiClientOptions, "stubCurrentSeasonMissing"> = {},
+): Omit<PlayersResponse, "players" | "season"> {
+  const health = stubHealth({}, options);
+  return {
+    as_of: health.as_of,
+    active_season: health.active_season,
+    current_season_missing: health.current_season_missing,
+    season_window: defaultSeasonYears(health.active_season),
+    seasons_present: options.stubCurrentSeasonMissing ? [] : defaultSeasonYears(health.active_season),
+    source: "missing",
+    current_season_missing_reason: options.stubCurrentSeasonMissing ? "stub" : null,
+  };
+}
+
 export type BosApiClient = {
   readonly baseUrl: string | null;
   readonly source: "api" | "stub";
   getHealth(): Promise<Health>;
   getCards(query?: CardQuery): Promise<CardsResponse>;
   getSeasons(): Promise<SeasonsResponse>;
+  getPlayers(query?: PlayerQuery): Promise<PlayersResponse>;
+  getPlayer(id: string, query?: PlayerQuery): Promise<PlayerResponse>;
 };
 
 export function createApiClient(options: ApiClientOptions = {}): BosApiClient {
@@ -184,6 +291,20 @@ export function createApiClient(options: ApiClientOptions = {}): BosApiClient {
       },
       async getSeasons() {
         return stubSeasons();
+      },
+      async getPlayers(query: PlayerQuery = {}) {
+        return {
+          ...stubPlayerHonesty({ stubCurrentSeasonMissing: stubMissing }),
+          season: query.season ?? null,
+          players: [],
+        };
+      },
+      async getPlayer(_id: string, query: PlayerQuery = {}) {
+        return {
+          ...stubPlayerHonesty({ stubCurrentSeasonMissing: stubMissing }),
+          season: query.season ?? null,
+          player: null,
+        };
       },
     };
   }
@@ -208,6 +329,34 @@ export function createApiClient(options: ApiClientOptions = {}): BosApiClient {
     },
     async getSeasons() {
       return parseSeasons(await getJson(fetcher, `${baseUrl}/v1/seasons`));
+    },
+    async getPlayers(query: PlayerQuery = {}) {
+      const params = new URLSearchParams();
+      if (query.season !== undefined) {
+        params.set("season", String(query.season));
+      }
+      const qs = params.toString();
+      const url = `${baseUrl}/v1/players${qs ? `?${qs}` : ""}`;
+      const payload = await getJson(fetcher, url);
+      return {
+        ...honestyFromUnknown(payload),
+        season: query.season ?? null,
+        players: parsePlayers(payload),
+      };
+    },
+    async getPlayer(id: string, query: PlayerQuery = {}) {
+      const params = new URLSearchParams();
+      if (query.season !== undefined) {
+        params.set("season", String(query.season));
+      }
+      const qs = params.toString();
+      const url = `${baseUrl}/v1/players/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`;
+      const payload = await getJson(fetcher, url);
+      return {
+        ...honestyFromUnknown(payload),
+        season: query.season ?? null,
+        player: parsePlayer(payload),
+      };
     },
   };
 }
