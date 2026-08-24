@@ -477,23 +477,44 @@ def resolve_active_year(
     return (today or date.today()).year
 
 
+def seasons_from_manifest(manifest: Mapping[str, Any] | None) -> list[int]:
+    """Published ``seasons_present`` from ``metrics_manifest.json``."""
+    raw = (manifest or {}).get("seasons_present") or []
+    years: list[int] = []
+    if not isinstance(raw, (list, tuple)):
+        return []
+    for item in raw:
+        try:
+            years.append(int(item))
+        except (TypeError, ValueError):
+            continue
+    return sorted(set(years))
+
+
 def is_prior_only_publish(
     *,
     current_season_missing: bool | None = None,
     max_season: int | None = None,
     selected_season: int | None = None,
     active_year: int | None = None,
+    seasons_present: list[int] | None = None,
     live_feed: bool = True,
 ) -> bool:
     """True when published / selected data is not the active MLB season.
 
     Bundled BenchOrStart stubs pass ``live_feed=False`` so sample cards never
-    look like a live prior-only feed.
+    look like a live prior-only feed. Prefer ``seasons_present`` from the
+    metrics manifest when the file is available.
     """
     if not live_feed:
         return False
     if current_season_missing:
         return True
+    if seasons_present:
+        try:
+            max_season = max(int(year) for year in seasons_present)
+        except (TypeError, ValueError):
+            pass
     if active_year is None:
         return False
     if selected_season is not None:
@@ -501,6 +522,39 @@ def is_prior_only_publish(
     if max_season is not None:
         return int(max_season) < int(active_year)
     return False
+
+
+def clamp_season_for_page(
+    current: int | None,
+    year_opts: list[int],
+    *,
+    default_latest: bool = True,
+) -> tuple[int | None, bool]:
+    """Pick a display year for this page without forcing a shared-state write.
+
+    Returns ``(display_year, write_shared)``. ``write_shared`` is True only
+    when ``current`` is already one of this page's years.
+    """
+    if not year_opts:
+        return None, False
+    if current in year_opts:
+        return int(current), True
+    display = year_opts[-1] if default_latest else year_opts[0]
+    return int(display), False
+
+
+def data_slider_max(years: list[int], fallback: int) -> int:
+    """Upper slider bound from published years only — do not pad to calendar year."""
+    if not years:
+        return int(fallback)
+    return int(years[-1])
+
+
+def year_span_from_frame(df: pd.DataFrame | None, column: str = "year_id") -> tuple[int, int] | None:
+    years = years_from_frame(df, column)
+    if not years:
+        return None
+    return int(years[0]), int(years[-1])
 
 
 def filter_contract_watch_rows(

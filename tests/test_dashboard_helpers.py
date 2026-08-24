@@ -14,6 +14,8 @@ from dashboard.helpers import (
     apply_efficiency_labels,
     artifact_status,
     blank_unknown_salary,
+    clamp_season_for_page,
+    data_slider_max,
     empty_state_copy,
     filter_contract_watch_rows,
     filter_season,
@@ -33,9 +35,11 @@ from dashboard.helpers import (
     resolve_active_year,
     salary_coverage_note,
     scale_money_columns,
+    seasons_from_manifest,
     slider_bounds,
     teams_from_frame,
     top_n_by,
+    year_span_from_frame,
     year_span_label,
     years_from_frame,
 )
@@ -315,7 +319,37 @@ def test_prior_only_banner_condition() -> None:
         max_season=None,
         active_year=2026,
     )
+    assert is_prior_only_publish(
+        current_season_missing=False,
+        max_season=2026,
+        seasons_present=[2023, 2024],
+        active_year=2026,
+    )
+    assert not is_prior_only_publish(
+        current_season_missing=False,
+        seasons_present=[2024, 2025, 2026],
+        active_year=2026,
+    )
     assert PRIOR_SEASON_TABLE_NOTE == "This table is not the current season yet."
+    assert seasons_from_manifest({"seasons_present": [2026, 2024, "x"]}) == [2024, 2026]
+    assert seasons_from_manifest(None) == []
+
+
+def test_data_slider_max_uses_published_years_only() -> None:
+    assert data_slider_max([], 2026) == 2026
+    assert data_slider_max([1990, 2016], 2026) == 2016
+    assert year_span_from_frame(pd.DataFrame({"year_id": [2010, 2016]})) == (2010, 2016)
+    assert year_span_from_frame(pd.DataFrame()) is None
+
+
+def test_clamp_season_for_page_does_not_write_player_only_year() -> None:
+    display, write_shared = clamp_season_for_page(2026, [1990, 2015, 2016])
+    assert display == 2016
+    assert write_shared is False
+    display, write_shared = clamp_season_for_page(2015, [1990, 2015, 2016])
+    assert display == 2015
+    assert write_shared is True
+    assert clamp_season_for_page(2026, []) == (None, False)
 
 
 def test_resolve_active_year_prefers_manifest_then_as_of() -> None:

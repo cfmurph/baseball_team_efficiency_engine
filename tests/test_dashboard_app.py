@@ -222,19 +222,19 @@ def test_slider_max_expression_handles_empty_and_non_empty_years():
     expr = _slider_max_expr()
     compiled = compile(ast.Expression(expr), str(APP_PATH), "eval")
 
-    from src.baseball_analytics.dashboard_helpers import compute_slider_max
+    from dashboard.helpers import data_slider_max
 
     empty_result = eval(
         compiled,
-        {"all_years": [], "_current_year": 2026, "compute_slider_max": compute_slider_max},
+        {"all_years": [], "_current_year": 2026, "data_slider_max": data_slider_max},
     )
     non_empty_result = eval(
         compiled,
-        {"all_years": [2018, 2024], "_current_year": 2020, "compute_slider_max": compute_slider_max},
+        {"all_years": [2016], "_current_year": 2026, "data_slider_max": data_slider_max},
     )
 
     assert empty_result == 2026
-    assert non_empty_result == 2024
+    assert non_empty_result == 2016
 
 
 def test_chart_applies_layout_and_renders_once():
@@ -329,6 +329,7 @@ def test_player_explorer_shows_player_id_when_name_collides():
         max_season_from_frame,
         metric_label,
         resolve_active_year,
+        seasons_from_manifest,
         salary_coverage_note,
         scale_money_columns,
         teams_from_frame,
@@ -363,6 +364,7 @@ def test_player_explorer_shows_player_id_when_name_collides():
             "is_prior_only_publish": is_prior_only_publish,
             "max_season_from_frame": max_season_from_frame,
             "resolve_active_year": resolve_active_year,
+            "seasons_from_manifest": seasons_from_manifest,
             "_prior_season_note": lambda *args, **kwargs: None,
             "_scale_payroll": lambda df: df,
             "_PLAYER_COL_CFG": {},
@@ -539,6 +541,7 @@ def test_contract_watch_keeps_2026_nan_salary_and_shows_prior_banner():
         is_prior_only_publish,
         max_season_from_frame,
         resolve_active_year,
+        seasons_from_manifest,
         salary_coverage_note,
         teams_from_frame,
         years_from_frame,
@@ -608,6 +611,7 @@ def test_contract_watch_keeps_2026_nan_salary_and_shows_prior_banner():
         "is_prior_only_publish": is_prior_only_publish,
         "max_season_from_frame": max_season_from_frame,
         "resolve_active_year": resolve_active_year,
+        "seasons_from_manifest": seasons_from_manifest,
         "scale_money_columns": scale_money_columns,
         "teams_from_frame": teams_from_frame,
         "years_from_frame": years_from_frame,

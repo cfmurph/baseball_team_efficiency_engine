@@ -54,8 +54,8 @@ def test_data_module_has_named_loaders() -> None:
         assert f"def {name}(" in source
     assert "resolve_artifact" in source
     assert ARTIFACT_NAMES["metrics"] == "team_onfield_contract_metrics.csv"
+    assert ARTIFACT_NAMES["metrics_manifest"] == METRICS_MANIFEST_NAME
     assert METRICS_MANIFEST_NAME == "metrics_manifest.json"
-    assert "metrics_manifest.json" not in ARTIFACT_NAMES.values()
 
 
 def test_resolve_file_uses_local_fallback(tmp_path: Path) -> None:
@@ -74,8 +74,9 @@ def test_resolve_file_uses_local_fallback(tmp_path: Path) -> None:
     assert path == local / "team_onfield_contract_metrics.csv"
     assert resolve_file("players", settings) is None
     (local / METRICS_MANIFEST_NAME).write_text(
-        '{"current_season_missing": true, "active_season": 2026}\n'
+        '{"current_season_missing": true, "active_season": 2026, "seasons_present": [2024]}\n'
     )
+    assert resolve_file("metrics_manifest", settings) == local / METRICS_MANIFEST_NAME
     manifest_path = resolve_metrics_manifest(settings)
     assert manifest_path == local / METRICS_MANIFEST_NAME
 

@@ -28,7 +28,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-from src.baseball_analytics.dashboard_helpers import compute_slider_max
 from src.baseball_analytics.dashboard_utils import (
     player_id_columns_for_duplicate_names,
     scale_payroll_for_display,
@@ -42,6 +41,7 @@ from dashboard.data import (
 )
 from dashboard.helpers import (
     artifact_status,
+    data_slider_max,
     nav_labels,
     teams_from_frame,
     years_from_frame,
@@ -96,7 +96,7 @@ def _load(key: str) -> pd.DataFrame | None:
 metrics = load_team_metrics()
 _current_year = datetime.date.today().year
 all_years = years_from_frame(metrics)
-_slider_max = compute_slider_max(all_years, _current_year)
+_slider_max = data_slider_max(all_years, _current_year)
 _slider_lo = all_years[0] if all_years else _current_year
 all_teams = teams_from_frame(metrics)
 _status = artifact_status(resolve_all())

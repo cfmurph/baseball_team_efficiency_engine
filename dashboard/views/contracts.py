@@ -13,6 +13,7 @@ from dashboard.helpers import (
     is_prior_only_publish,
     max_season_from_frame,
     resolve_active_year,
+    seasons_from_manifest,
     scale_money_columns,
     teams_from_frame,
     years_from_frame,
@@ -85,6 +86,7 @@ def page_contract_analysis() -> None:
             current_season_missing=(manifest or {}).get("current_season_missing"),
             selected_season=selected_season,
             max_season=max_season_from_frame(players),
+            seasons_present=seasons_from_manifest(manifest),
             active_year=resolve_active_year(manifest=manifest),
         )
     )

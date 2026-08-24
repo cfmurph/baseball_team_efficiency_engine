@@ -153,6 +153,7 @@ def test_fantasy_app_wires_prior_season_banner_helpers() -> None:
     assert "is_prior_only_publish" in source
     assert "load_metrics_manifest" in source
     assert "max_season_from_cards" in source
+    assert "seasons_from_manifest" in source
     assert "live_feed=True" in source
     assert "SOURCE_MISSING" in source
 

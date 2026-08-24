@@ -46,6 +46,7 @@ ARTIFACT_NAMES: dict[str, str] = {
     "sr_players": "sr_player_season_metrics.csv",
     "sr_injuries": "sr_injuries.csv",
     "sr_tx": "sr_transactions.csv",
+    "metrics_manifest": METRICS_MANIFEST_NAME,
 }
 
 
@@ -82,8 +83,8 @@ def _read_json(path_str: str) -> dict:
 
 
 def resolve_metrics_manifest(settings: ArtifactSettings | None = None) -> Path | None:
-    """Same ``resolve_artifact`` / ``current/`` path as the metric CSVs."""
-    return resolve_artifact(METRICS_MANIFEST_NAME, settings or artifact_settings())
+    """Same ``resolve_file`` / ``current/`` path as the metric CSVs."""
+    return resolve_file("metrics_manifest", settings)
 
 
 def load_metrics_manifest() -> dict | None:
@@ -99,7 +100,10 @@ def load_metrics_manifest() -> dict | None:
 
 
 def load_named_artifact(key: str) -> pd.DataFrame | None:
-    """Load a logical artifact by key (``metrics``, ``players``, …)."""
+    """Load a logical CSV artifact by key (``metrics``, ``players``, …)."""
+    name = ARTIFACT_NAMES.get(key)
+    if name is None or Path(name).suffix.lower() == ".json":
+        return None
     path = resolve_file(key)
     if path is None:
         return None
