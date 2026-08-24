@@ -12,7 +12,13 @@ import typer
 from src.baseball_analytics.config import load_settings
 from src.baseball_analytics.fantasy import emit_ranked_fantasy_cards
 from src.baseball_analytics.io import ensure_dir
-from src.baseball_analytics.sportsdataio import default_season_window, seasons_from_settings
+from src.baseball_analytics.sportsdataio import (
+    ENDPOINT_EXTRACT_REPORT,
+    default_season_window,
+    extract_had_in_season,
+    read_raw_payload,
+    seasons_from_settings,
+)
 from src.baseball_analytics.storage import default_as_of_date
 
 log = logging.getLogger(__name__)
@@ -465,6 +471,7 @@ class SeasonCoverage:
     active_season_source: str | None
     current_season_missing: bool
     current_season_missing_reason: str | None
+    sdio_in_season: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -580,6 +587,7 @@ def bridge_sdio_player_season_metrics(
     *,
     as_of_date: str,
     window: list[int] | None = None,
+    extract_report: dict | None = None,
 ) -> tuple[pd.DataFrame, SeasonCoverage]:
     """UNION SDIO seasons onto Lahman metrics for years Lahman does not have.
 
@@ -620,6 +628,10 @@ def bridge_sdio_player_season_metrics(
         active_source = None
         missing_reason = "sdio_unavailable"
 
+    sdio_in_season = extract_had_in_season(extract_report, active_season=active)
+    if not sdio_in_season:
+        sdio_in_season = active in _year_set(season_df) or active in _year_set(game_df)
+
     coverage = SeasonCoverage(
         as_of_date=as_of_date,
         active_season=active,
@@ -631,6 +643,7 @@ def bridge_sdio_player_season_metrics(
         active_season_source=active_source,
         current_season_missing=not active_present,
         current_season_missing_reason=missing_reason if not active_present else None,
+        sdio_in_season=sdio_in_season,
     )
     return combined, coverage
 
@@ -717,12 +730,19 @@ def main(config_path: str = "config/settings.yaml") -> None:
     # ---- Player exports ----
     as_of = default_as_of_date()
     window = seasons_from_settings(settings, as_of)
+    extract_report = read_raw_payload(
+        endpoint=ENDPOINT_EXTRACT_REPORT,
+        as_of_date=as_of,
+        filename="extract_report.json",
+        raw_dir=settings["raw_dir"],
+    )
     player_df, coverage = bridge_sdio_player_season_metrics(
         player_df,
         sdio_season_df,
         sdio_game_df,
         as_of_date=as_of,
         window=window,
+        extract_report=extract_report if isinstance(extract_report, dict) else None,
     )
     if coverage.current_season_missing:
         log.warning(
