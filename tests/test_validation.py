@@ -18,6 +18,8 @@ from src.baseball_analytics.validation import (
     validate_all,
 )
 
+pytestmark = pytest.mark.unit
+
 
 # ---- Unit checks ----
 

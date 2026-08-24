@@ -21,7 +21,7 @@ The system Python is 3.12; `python3.12-venv` must be installed at the system lev
 | Task | Command |
 |---|---|
 | Install deps | `pip install -r requirements.txt` |
-| Run tests | `python3 -m pytest tests/ -v` |
+| Run tests | `python3 -m pytest tests/ -v` (or `-m unit` / `-m integration` / `-m e2e`; see `docs/testing.md`) |
 | Run full pipeline | See "Pipeline" section below |
 | Start FO dashboard | `streamlit run dashboard/app.py --server.port 8501 --server.headless true` |
 | Start BenchOrStart (Next.js) | `npm install && npm run dev` (http://localhost:3000) |

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import ast
 import os
 import subprocess
@@ -21,6 +23,8 @@ from fantasy.copy import (
     SUBHEAD,
     SUCCESS,
 )
+
+pytestmark = pytest.mark.unit
 
 APP_PATH = Path(__file__).resolve().parents[1] / "dashboard" / "fantasy_app.py"
 ROOT = APP_PATH.resolve().parents[1]

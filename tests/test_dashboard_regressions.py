@@ -1,12 +1,16 @@
 """Regression tests for recently fixed dashboard guard paths."""
 from __future__ import annotations
 
+import pytest
+
 import ast
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import plotly.graph_objects as go
+
+pytestmark = pytest.mark.unit
 
 
 DASHBOARD_APP_PATH = Path("dashboard/app.py")

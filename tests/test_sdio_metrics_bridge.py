@@ -28,6 +28,8 @@ from src.baseball_analytics.sportsdataio import (
 from src.baseball_analytics.storage import decide_current_promote
 from pipeline.transform.build_warehouse import insert_sdio_spine_tables
 
+pytestmark = pytest.mark.integration
+
 FIXTURES = Path(__file__).parent / "fixtures" / "sportsdataio"
 AS_OF = "2026-08-23"
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from fantasy.cards import load_stub_cards
 from fantasy.copy import (
     COPIED,
@@ -27,6 +29,8 @@ from fantasy.copy import (
     TAB_ALL,
     TAB_LABELS,
 )
+
+pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parents[1]
 COPY_TS = ROOT / "packages" / "card-schema" / "src" / "copy.ts"

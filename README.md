@@ -195,7 +195,7 @@ GitHub Actions runs it overnight via `.github/workflows/nightly-refresh.yml`:
 
 - **Schedule:** `0 8 * * *` UTC = **2:00 AM America/Edmonton during MDT** (UTC-6). During MST (UTC-7) that is 1:00 AM local. Actions cron is UTC-only and cannot follow DST.
 - **Manual trigger:** Actions → **Nightly data refresh** → **Run workflow** (`workflow_dispatch`).
-- **SportsDataIO auth proof:** Actions → **SportsDataIO auth probe** → **Run workflow**. This job is separate from nightly: missing key or non-2xx **hard-fails**. Nightly ingest still soft-fails without the secret. Never logs the key. CI smoke does not inject the secret.
+- **SportsDataIO auth proof:** Actions → **SportsDataIO auth probe** → **Run workflow**. This job is separate from nightly: missing key or non-2xx **hard-fails**. Nightly ingest still soft-fails without the secret. Never logs the key. PR CI (`ci.yml`) does not inject the secret.
 - **Outputs:** CSVs, plots, and the DuckDB warehouse stay gitignored. The workflow uploads them as the `nightly-artifacts` run artifact (14-day retention) instead of committing generated files.
 - **Shared storage (optional):** when `ARTIFACTS_URI` is set, the orchestrator uploads `artifacts/` to immutable `runs/{run_id}/` and promotes `current/` only after a full success. The dashboard reads `current/` and falls back to local `artifacts/` if the URI is unset or unreachable. Source badge: `remote` | `local` | `missing`. See [docs/adr/0001-shared-artifact-contract.md](docs/adr/0001-shared-artifact-contract.md) and [docs/shared_artifacts.md](docs/shared_artifacts.md).
 
@@ -238,23 +238,22 @@ Each section stays usable when its CSV is missing: the UI shows a short empty st
 
 ## Running tests
 
+Three layers (markers in `pytest.ini`). See [docs/testing.md](docs/testing.md) for the mapping and CI contract.
+
 ```bash
+python3 -m pytest -m unit -v
+python3 -m pytest -m integration -v
+python3 -m pytest -m e2e -v
+# or everything
 python3 -m pytest tests/ -v
 ```
 
-Unit tests covering: metrics helpers, approximate WAR, Baseball-Reference rWAR overlay + ID mapping, BaseRuns, contract classification, window detection, data validation checks.
+PRs to `master` run `.github/workflows/ci.yml` as **Unit tests**, **Integration tests**, **E2E tests**, plus **BenchOrStart Next.js**. That replaces the old `ci-smoke.yml` job. Smoke coverage is preserved:
 
-CI smokes on PRs to `master` (`.github/workflows/ci-smoke.yml`):
-
-```bash
-python3 -m pytest tests/test_dashboard_apptest.py tests/test_run_nightly.py tests/test_golden_war.py tests/test_sportsdataio.py tests/test_api.py tests/test_web_copy_lock.py -v
-```
-
-- **AppTest** — every sidebar page boots without exception (empty `artifacts/` is fine).
-- **Nightly contract** — `pull_war` stays in `PIPELINE_STEPS` immediately after `pull_sources`. `pull_mlb_stats` follows `pull_war` (soft-fail). `pull_sportsdataio` follows Stats API (soft-fail without `SPORTSDATAIO_API_KEY`).
-- **Golden WAR** — Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023 stay `war_source=real` against committed fixtures. Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
-- **Read API** — `/v1/health`, `/v1/cards`, `/v1/seasons` against fixture `current/` (schema 1.0, no invented 2026, no live network / API key).
-- **Web copy lock** — BenchOrStart product strings stay verbatim (`tests/test_web_copy_lock.py` plus the Next.js CI job).
+- **E2E** — AppTest every sidebar page (empty `artifacts/` is fine) + golden WAR (Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023, `war_source=real`). Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
+- **Integration** — nightly `PIPELINE_STEPS` keeps `pull_war` immediately after `pull_sources`, `pull_mlb_stats` after `pull_war` (soft-fail), and `pull_sportsdataio` after Stats API (soft-fail without `SPORTSDATAIO_API_KEY`). Warehouse / storage / fantasy emitter / Stats API / SportsDataIO ingest / thin read API (`/v1/health`, `/v1/cards`, `/v1/seasons`) use fixtures or `file://` only.
+- **Unit** — includes BenchOrStart copy lock (`tests/test_web_copy_lock.py`).
+- **BenchOrStart Next.js** — `npm install && npm test && npm run build`.
 
 ## Data sources
 

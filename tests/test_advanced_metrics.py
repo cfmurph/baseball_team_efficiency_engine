@@ -22,6 +22,8 @@ from src.baseball_analytics.metrics import (
     war_concentration,
 )
 
+pytestmark = pytest.mark.unit
+
 
 # ---- Original metric tests ----
 

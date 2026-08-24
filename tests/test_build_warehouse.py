@@ -11,6 +11,8 @@ from pipeline.transform.build_warehouse import (
     build_fact_team_season,
 )
 
+pytestmark = pytest.mark.integration
+
 
 def _batting_rows() -> pd.DataFrame:
     return pd.DataFrame(
