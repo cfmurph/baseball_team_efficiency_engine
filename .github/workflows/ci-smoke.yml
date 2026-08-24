@@ -38,4 +38,5 @@ jobs:
           tests/test_run_nightly.py
           tests/test_golden_war.py
           tests/test_sportsdataio.py
+          tests/test_api.py
           -v

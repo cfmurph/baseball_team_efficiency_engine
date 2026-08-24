@@ -1,0 +1,225 @@
+openapi: 3.1.0
+info:
+  title: BTEE read API
+  version: 1.0.0
+  description: |
+    Thin **read-only** HTTP API over published `current/` artifacts (#106).
+    Next.js (#140) consumes this surface and never touches the lake or
+    `SPORTSDATAIO_API_KEY`.
+
+    Soft-fail is visible: when `current_season_missing` is true the default
+    window still includes the active year (2024–2026 when Y=2026) but the
+    API does **not** invent 2026 cards or metric rows.
+  license:
+    name: Repository
+servers:
+  - url: http://127.0.0.1:8000
+    description: Local
+paths:
+  /v1/health:
+    get:
+      tags: [v1]
+      summary: Published current/ coverage
+      operationId: getHealth
+      responses:
+        "200":
+          description: Process is up. Fields describe published artifacts honestly.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                currentPresent:
+                  value:
+                    as_of: "2026-08-23"
+                    active_season: 2026
+                    current_season_missing: false
+                    season_window: [2024, 2025, 2026]
+                    source: local
+                    seasons_present: [2024, 2025, 2026]
+                    current_season_missing_reason: null
+                currentMissing:
+                  value:
+                    as_of: "2026-08-23"
+                    active_season: 2026
+                    current_season_missing: true
+                    season_window: [2024, 2025, 2026]
+                    source: local
+                    seasons_present: [2024]
+                    current_season_missing_reason: sdio_unavailable
+  /v1/seasons:
+    get:
+      tags: [v1]
+      summary: Default season window [Y-2, Y]
+      operationId: getSeasons
+      description: |
+        `season_window` is the product default `[Y-2, Y]` from published
+        `as_of` (#131). `seasons_present` lists years that actually appear
+        on published metrics or cards. 2026 is omitted from
+        `seasons_present` when current-season data was not published.
+      responses:
+        "200":
+          description: Default window plus honest presence.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeasonsResponse"
+              example:
+                as_of: "2026-08-23"
+                active_season: 2026
+                season_window: [2024, 2025, 2026]
+                seasons_present: [2024]
+                current_season_missing: true
+  /v1/cards:
+    get:
+      tags: [v1]
+      summary: Published fantasy cards (schema 1.0)
+      operationId: getCards
+      description: |
+        Serves `current/fantasy/cards.jsonl`. `share.stat_line` is verbatim
+        (`+X.X edge · NN% conf` for bbref; `+X.X edge` for approx). Never
+        `vs repl`. Never invents cards. `GET /v1/cards?season=2026` is an
+        empty list when the active season was not published.
+      parameters:
+        - name: season
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1871
+            maximum: 2100
+          description: MLB championship season year. Omit to return all published cards.
+        - name: rec
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [start, sit, pickup, stream]
+          description: Recommendation type filter.
+      responses:
+        "200":
+          description: Schema 1.0 card records. Empty `cards` is a miss, not a stub.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CardsResponse"
+              example:
+                schema_version: "1.0"
+                as_of: "2026-08-23"
+                season: 2026
+                rec: start
+                current_season_missing: false
+                cards:
+                  - schema_version: "1.0"
+                    as_of_date: "2026-08-23"
+                    season: 2026
+                    card_id: "2026-08-23:start:judgeaa01:1"
+                    recommendation_type: start
+                    player:
+                      player_id: judgeaa01
+                      name: Aaron Judge
+                      position: OF
+                      team: NYY
+                    edge:
+                      vs_replacement: 3.4
+                      war: 6.1
+                      war_source: bbref
+                      is_approx: false
+                      confidence: 0.91
+                    reason: Lock him in.
+                    rank:
+                      among_rec_type: 1
+                    share:
+                      headline: Lock this one in
+                      subtitle: Aaron Judge · OF · NYY
+                      stat_line: "+3.4 edge · 91% conf"
+        "422":
+          description: Invalid `season` or `rec` query.
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - as_of
+        - active_season
+        - current_season_missing
+        - season_window
+        - source
+      properties:
+        as_of:
+          type: string
+          description: Published as_of_date (YYYY-MM-DD)
+        active_season:
+          type: integer
+        current_season_missing:
+          type: boolean
+        season_window:
+          type: array
+          items:
+            type: integer
+        source:
+          type: string
+          enum: [remote, local, missing]
+        seasons_present:
+          type: array
+          items:
+            type: integer
+        current_season_missing_reason:
+          type: string
+          nullable: true
+    SeasonsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - as_of
+        - active_season
+        - season_window
+        - seasons_present
+        - current_season_missing
+      properties:
+        as_of:
+          type: string
+        active_season:
+          type: integer
+        season_window:
+          type: array
+          items:
+            type: integer
+        seasons_present:
+          type: array
+          items:
+            type: integer
+        current_season_missing:
+          type: boolean
+    CardsResponse:
+      type: object
+      required:
+        - schema_version
+        - as_of
+        - current_season_missing
+        - cards
+      properties:
+        schema_version:
+          type: string
+          example: "1.0"
+        as_of:
+          type: string
+        season:
+          type: integer
+          nullable: true
+        rec:
+          type: string
+          nullable: true
+          enum: [start, sit, pickup, stream, null]
+        current_season_missing:
+          type: boolean
+        cards:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+            description: Verbatim schema 1.0 JSONL record
+tags:
+  - name: v1
+    description: Locked launch endpoints (#106)
