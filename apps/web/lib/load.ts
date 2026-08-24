@@ -162,9 +162,7 @@ export async function loadPlayerData(id: string): Promise<PlayerPageData> {
       client.getPlayer(id),
     ]);
     const source = client.source === "stub" ? "stub" : "api";
-    const detail = response.player
-      ? parsePlayerDetail({ player: response.player, ...response }, source)
-      : null;
+    const detail = response.player ? parsePlayerDetail(response, source) : null;
     return {
       detail,
       seasons: seasonWindowYears(health),
