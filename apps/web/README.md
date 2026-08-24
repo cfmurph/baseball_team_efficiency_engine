@@ -28,7 +28,7 @@ See `.env.example`. Only `NEXT_PUBLIC_API_URL` is required to leave stub mode. D
 |---|---|
 | `NEXT_PUBLIC_API_URL` | `#144` / `#106` origin. Unset → fixture cards + stub health. |
 
-Against a local #144 API:
+Against master `/v1` (preferred when this process is up; fixture fallback otherwise):
 
 ```bash
 export ARTIFACTS_URI=file://$PWD/tests/fixtures/api/lake_current

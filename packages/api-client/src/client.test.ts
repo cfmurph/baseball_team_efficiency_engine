@@ -8,6 +8,7 @@ import {
   stubCardsFeed,
   stubHealth,
   stubSeasons,
+  probeLocalV1,
 } from "./client.ts";
 
 test("stub feed is the same four schema 1.0 cards", () => {
@@ -212,6 +213,18 @@ test("prior-year API cards ship as-is; share.stat_line stays verbatim", async ()
   assert.equal(cards.cards[0]?.season, 2025);
   assert.equal(cards.cards[0]?.share?.stat_line, "+2.1 edge · 80% conf");
   assert.equal(cards.cards.some((card) => Number(card.season) === 2026), false);
+});
+
+test("probeLocalV1 prefers a live /v1 health and falls back when down", async () => {
+  const up = await probeLocalV1(async (input) => {
+    assert.equal(String(input), "http://127.0.0.1:8000/v1/health");
+    return new Response(JSON.stringify({ as_of: "2026-08-23" }), { status: 200 });
+  });
+  assert.equal(up, "http://127.0.0.1:8000");
+  const down = await probeLocalV1(async () => {
+    throw new Error("ECONNREFUSED");
+  });
+  assert.equal(down, null);
 });
 
 test("stubHealth override stays explicit", () => {

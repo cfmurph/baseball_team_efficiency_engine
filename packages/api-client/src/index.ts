@@ -1,8 +1,10 @@
 export {
+  LOCAL_V1_ORIGIN,
   createApiClient,
   defaultSeasonYears,
   isRecommendationType,
   parseSeasonWindow,
+  probeLocalV1,
   stubCardsFeed,
   stubHealth,
   stubSeasonWindow,

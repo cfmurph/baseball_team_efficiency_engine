@@ -1,6 +1,6 @@
 import { env } from "node:process";
 
-import { createApiClient } from "@bos/api-client";
+import { createApiClient, probeLocalV1 } from "@bos/api-client";
 import {
   DEFAULT_ACTIVE_SEASON,
   presentCards,
@@ -30,9 +30,18 @@ export function publicApiUrl(): string | null {
   return raw || null;
 }
 
+/** Explicit env URL, else a live local `/v1`, else fixture stub. */
+export async function resolveApiUrl(): Promise<string | null> {
+  const explicit = publicApiUrl();
+  if (explicit) {
+    return explicit;
+  }
+  return probeLocalV1();
+}
+
 export async function loadHomeData(): Promise<HomeData> {
   const client = createApiClient({
-    baseUrl: publicApiUrl(),
+    baseUrl: await resolveApiUrl(),
     stubCurrentSeasonMissing:
       envFlag("NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING") ||
       envFlag("STUB_CURRENT_SEASON_MISSING"),

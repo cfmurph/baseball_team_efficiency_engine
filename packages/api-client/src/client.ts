@@ -82,6 +82,29 @@ export type PlayerResponse = Omit<PlayersResponse, "players"> & {
 
 const STUB_AS_OF = "2026-08-23";
 
+/** Local #144 process. Prefer this when `NEXT_PUBLIC_API_URL` is unset. */
+export const LOCAL_V1_ORIGIN = "http://127.0.0.1:8000";
+
+export async function probeLocalV1(
+  fetcher: typeof fetch = fetch,
+  origin = LOCAL_V1_ORIGIN,
+): Promise<string | null> {
+  const base = String(origin || "").trim().replace(/\/+$/, "");
+  if (!base) {
+    return null;
+  }
+  try {
+    const response = await fetcher(`${base}/v1/health`, {
+      headers: { accept: "application/json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(400),
+    });
+    return response.ok ? base : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Product default `[Y-2, Y]` (#131 / #144). */
 export function defaultSeasonYears(active = DEFAULT_ACTIVE_SEASON): number[] {
   return [active - 2, active - 1, active];
