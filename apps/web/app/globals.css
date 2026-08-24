@@ -298,6 +298,14 @@ a {
   border-color: #8b949e;
 }
 
+.bos-copied {
+  color: var(--ok);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  margin: 0.55rem 0 0;
+}
+
 .bos-caption {
   color: var(--dim);
   font-size: 0.78rem;

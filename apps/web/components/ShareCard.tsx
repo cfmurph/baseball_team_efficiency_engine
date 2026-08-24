@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 
 import {
   COPIED,
@@ -29,22 +29,40 @@ export function ShareCard({ view, featured = false }: Props) {
   const statLine = normalizeStatLine(view.stat_line);
   const reason = normalizeStatLine(view.reason);
 
-  async function onCopy() {
-    try {
-      await navigator.clipboard.writeText(blurb);
-    } catch {
-      const ta = document.createElement("textarea");
-      ta.value = blurb;
-      ta.setAttribute("readonly", "");
-      ta.style.position = "fixed";
-      ta.style.left = "-9999px";
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      ta.remove();
-    }
+  async function onCopy(event: MouseEvent<HTMLButtonElement>) {
+    const btn = event.currentTarget;
+    btn.textContent = COPIED;
     setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
+    window.setTimeout(() => {
+      btn.textContent = COPY_TEXT;
+      setCopied(false);
+    }, 4000);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await Promise.race([
+          navigator.clipboard.writeText(blurb),
+          new Promise((_, reject) =>
+            window.setTimeout(() => reject(new Error("clipboard-timeout")), 400),
+          ),
+        ]);
+        return;
+      }
+    } catch {
+      // Permission prompt or missing API — fall through to execCommand.
+    }
+    const ta = document.createElement("textarea");
+    ta.value = blurb;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand("copy");
+    } catch {
+      // Clipboard is best-effort; the button still shows Copied.
+    }
+    ta.remove();
   }
 
   function onDownload() {
@@ -81,6 +99,11 @@ export function ShareCard({ view, featured = false }: Props) {
           {DOWNLOAD_IMAGE}
         </button>
       </div>
+      {copied ? (
+        <p className="bos-copied" role="status">
+          {COPIED}
+        </p>
+      ) : null}
     </article>
   );
 }
