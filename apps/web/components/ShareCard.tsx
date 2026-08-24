@@ -10,6 +10,7 @@ import {
   PRODUCT_NAME,
   cardShareFilename,
   labelTone,
+  normalizeStatLine,
   shareBlurb,
   type ShareCardView,
 } from "@bos/card-schema";
@@ -25,6 +26,8 @@ export function ShareCard({ view, featured = false }: Props) {
   const [copied, setCopied] = useState(false);
   const tone = labelTone(view.label);
   const blurb = shareBlurb(view);
+  const statLine = normalizeStatLine(view.stat_line);
+  const reason = normalizeStatLine(view.reason);
 
   async function onCopy() {
     try {
@@ -65,8 +68,8 @@ export function ShareCard({ view, featured = false }: Props) {
       {view.rank_line ? <div className="bos-rank">{view.rank_line}</div> : null}
       {view.headline ? <h2 className="bos-card-title">{view.headline}</h2> : null}
       {view.subtitle ? <div className="bos-sub">{view.subtitle}</div> : null}
-      {view.stat_line ? <div className="bos-stat">{view.stat_line}</div> : null}
-      {view.reason ? <p className="bos-reason">{view.reason}</p> : null}
+      {statLine ? <div className="bos-stat">{statLine}</div> : null}
+      {reason ? <p className="bos-reason">{reason}</p> : null}
       {view.as_of_date ? (
         <div className="bos-asof">as of {view.as_of_date}</div>
       ) : null}

@@ -77,7 +77,7 @@ export function renderShareCardPng(view: ShareCardView): string {
     throw new Error("canvas");
   }
 
-  const reasonLines = wrap(view.reason, 52);
+  const reasonLines = wrap(normalizeStatLine(view.reason), 52);
   const statLine = normalizeStatLine(view.stat_line);
   let contentH = 220 + (view.rank_line ? 28 : 0);
   contentH += view.headline ? 48 : 0;

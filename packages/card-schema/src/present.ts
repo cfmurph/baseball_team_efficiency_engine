@@ -107,6 +107,7 @@ function formatConfidence(value: unknown): string | null {
   return `${Math.round(pct)}% conf`;
 }
 
+/** Rewrite leftover "vs repl" / "vs replacement" to "edge" on any face copy. */
 export function normalizeStatLine(text: string | null | undefined): string {
   if (text === undefined || text === null || text === "") {
     return "";
@@ -147,7 +148,7 @@ export function cardReason(card: FantasyCard): string {
   if (card.reason === undefined || card.reason === null) {
     return "";
   }
-  return String(card.reason).split(/\s+/).join(" ").trim();
+  return normalizeStatLine(String(card.reason));
 }
 
 export function cardAsOf(card: FantasyCard): string {
@@ -183,7 +184,7 @@ export function presentCard(card: FantasyCard): ShareCardView {
     headline: cardHeadline(card),
     subtitle: cardSubtitle(card),
     stat_line: normalizeStatLine(cardStatLine(card)),
-    reason: cardReason(card),
+    reason: normalizeStatLine(cardReason(card)),
     as_of_date: cardAsOf(card),
     rank_line: cardRankLine(card),
     early_model: isApprox(card),
@@ -225,8 +226,9 @@ export function shareBlurb(view: ShareCardView): string {
   if (stat) {
     lines.push(stat);
   }
-  if (view.reason) {
-    lines.push(view.reason);
+  const reason = normalizeStatLine(view.reason);
+  if (reason) {
+    lines.push(reason);
   }
   if (view.as_of_date) {
     lines.push(`as of ${view.as_of_date}`);

@@ -337,9 +337,11 @@ def _format_confidence(value: Any) -> str | None:
 
 
 def normalize_stat_line(text: str | None) -> str:
-    """Rewrite leftover ``vs repl`` copy to ``edge``. Schema fields stay unchanged.
+    """Rewrite leftover ``vs repl`` / ``vs replacement`` to ``edge``.
 
-    Prefer omitting the line if jargon still remains after rewrite.
+    Applies to any user-visible face copy (stat line and reason). Schema
+    fields stay unchanged. Prefer omitting the line if jargon still remains
+    after rewrite.
     """
     if text in (None, ""):
         return ""
@@ -374,7 +376,7 @@ def card_reason(card: Mapping[str, Any]) -> str:
     reason = card.get("reason")
     if reason is None:
         return ""
-    return " ".join(str(reason).split())
+    return normalize_stat_line(str(reason))
 
 
 def card_as_of(card: Mapping[str, Any]) -> str:
@@ -420,7 +422,7 @@ def present_card(card: Mapping[str, Any]) -> ShareCardView:
         headline=card_headline(card),
         subtitle=card_subtitle(card),
         stat_line=normalize_stat_line(card_stat_line(card)),
-        reason=card_reason(card),
+        reason=normalize_stat_line(card_reason(card)),
         as_of_date=card_as_of(card),
         rank_line=card_rank_line(card),
         early_model=is_approx(card),
@@ -462,8 +464,9 @@ def share_blurb(view: ShareCardView) -> str:
     stat = normalize_stat_line(view.stat_line)
     if stat:
         lines.append(stat)
-    if view.reason:
-        lines.append(view.reason)
+    reason = normalize_stat_line(view.reason)
+    if reason:
+        lines.append(reason)
     if view.as_of_date:
         lines.append(f"as of {view.as_of_date}")
     return "\n".join(lines)
@@ -495,9 +498,10 @@ def share_card_html(view: ShareCardView, *, featured: bool = False) -> str:
         if stat_line
         else ""
     )
+    reason_text = normalize_stat_line(view.reason)
     reason = (
-        f'<p class="bos-reason">{html.escape(view.reason)}</p>'
-        if view.reason
+        f'<p class="bos-reason">{html.escape(reason_text)}</p>'
+        if reason_text
         else ""
     )
     as_of = (
