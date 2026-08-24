@@ -179,6 +179,8 @@ def test_workflow_schedules_2am_mountain_and_manual_trigger() -> None:
     assert "workflow_dispatch:" in text
     assert "python3 -m pipeline.run_nightly" in text
     assert "actions/upload-artifact" in text
+    assert "artifacts/extract_report.json" in text
+    assert "data/raw/sportsdataio/extract_report/**" in text
     assert "ARTIFACTS_URI: ${{ secrets.ARTIFACTS_URI }}" in text
     assert "AWS_ENDPOINT_URL: ${{ secrets.AWS_ENDPOINT_URL }}" in text
     assert "AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}" in text

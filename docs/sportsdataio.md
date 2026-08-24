@@ -55,6 +55,15 @@ Default pull is incremental: Teams + Players bootstrap, then date feeds for
 `sportsdataio.seasons`). `--include-season-feeds` adds season-wide
 `Games/{season}`.
 
+Each `PlayerSeasonStats/{season}` call logs its own HTTP status
+(`200` / `401` / `empty` / `soft-fail`) and writes that status onto
+`extract_report.json` (`status`, `http_status`, `season`, `http_path`).
+Warehouse leftover `player_season_stat` rows are not treated as HTTP 200.
+A 2024 SDIO empty payload is fine when Lahman already has 2024. Nightly
+copies `extract_report.json` into `artifacts/` so the
+`nightly-artifacts` zip has per-endpoint / per-season statuses without
+the live log. Soft-fail stays soft-fail; promote gates are unchanged.
+
 `build_metrics` overlays those SDIO seasons onto `player_season_metrics`
 and `team_onfield_contract_metrics.csv` (plus derived team CSVs) for
 years Lahman does not have (typically the active season). There is no
@@ -62,7 +71,8 @@ years Lahman does not have (typically the active season). There is no
 `player_season_stat` / `player_game_stat` by `team_id` + season, not a
 new publish path or schema version. Overlay team WAR is `approx`;
 payroll is left null. Soft-fail without a key still writes
-`extract_report.json` with `current_season_missing: true` and
+`extract_report.json` with `current_season_missing: true`, per-season
+`PlayerSeasonStats/{year}` `status: soft-fail` rows, and
 `metrics_manifest.json` (`current_season_missing` +
 `team_current_season_missing`) so prior-only publish is not mistaken
 for current-year coverage. Nightly then skips promoting that run over

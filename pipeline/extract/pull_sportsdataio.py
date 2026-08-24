@@ -22,11 +22,16 @@ from src.baseball_analytics.io import ensure_dir
 from src.baseball_analytics.sportsdataio import (
     API_KEY_ENV,
     ENDPOINT_EXTRACT_REPORT,
+    NIGHTLY_EXTRACT_REPORT_NAME,
+    ExtractReport,
     client_from_settings,
+    mark_extract_season_coverage,
     open_optional_backend,
     pull_phase0_feeds,
+    record_skipped_window_statuses,
     resolve_api_key,
     seasons_from_settings,
+    stage_extract_report,
     write_raw_payload,
 )
 from src.baseball_analytics.storage import default_as_of_date as storage_as_of_date
@@ -51,6 +56,7 @@ def main(
     settings = load_settings(config_path)
     artifact_settings = load_artifact_settings(config_path)
     raw_dir = ensure_dir(settings["raw_dir"])
+    artifacts_dir = ensure_dir(settings.get("artifacts_dir") or artifact_settings.local_dir)
     resolved_date = as_of_date or storage_as_of_date()
     seasons = list(season) if season else seasons_from_settings(settings, resolved_date)
     backend = open_optional_backend(artifact_settings.uri)
@@ -72,31 +78,31 @@ def main(
             client=client,
             backend=backend,
             include_season_feeds=include_season_feeds,
+            artifacts_dir=artifacts_dir,
         )
     except Exception as exc:
         log.warning("SportsDataIO extract failed softly: %s", exc)
-        failed = {
-            "as_of_date": resolved_date,
-            "seasons": seasons,
-            "soft_fail": True,
-            "ok": False,
-            "error": str(exc),
-            "skipped_reason": "extract_exception",
-            "source": "sportsdataio",
-            "schema_version": "0.1",
-            "active_season": max(seasons) if seasons else int(resolved_date[:4]),
-            "current_season_missing": True,
-            "endpoints": [],
-        }
+        failed_report = ExtractReport(
+            as_of_date=resolved_date,
+            seasons=seasons,
+            soft_fail=True,
+            ok=False,
+            error=str(exc),
+            skipped_reason="extract_exception",
+        )
+        record_skipped_window_statuses(failed_report)
+        mark_extract_season_coverage(failed_report)
+        failed = failed_report.to_dict()
         try:
             write_raw_payload(
                 failed,
                 endpoint=ENDPOINT_EXTRACT_REPORT,
                 as_of_date=resolved_date,
-                filename="extract_report.json",
+                filename=NIGHTLY_EXTRACT_REPORT_NAME,
                 raw_dir=raw_dir,
                 backend=backend,
             )
+            stage_extract_report(failed, artifacts_dir)
         except Exception as write_exc:
             log.warning("Could not write extract report: %s", write_exc)
         typer.echo(

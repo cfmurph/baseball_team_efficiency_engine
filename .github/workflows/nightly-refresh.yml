@@ -55,6 +55,8 @@ jobs:
           name: nightly-artifacts
           path: |
             artifacts/
+            artifacts/extract_report.json
+            data/raw/sportsdataio/extract_report/**
             data/warehouse/*.duckdb
           if-no-files-found: warn
           retention-days: 14
