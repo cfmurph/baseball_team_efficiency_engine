@@ -1,6 +1,8 @@
 import {
   DEFAULT_ACTIVE_SEASON,
   RECOMMENDATION_TYPES,
+  SCHEMA_VERSION,
+  type ArtifactSource,
   type CardsResponse,
   type FantasyCard,
   type Health,
@@ -12,7 +14,7 @@ import {
 import stubCards from "./stub-cards.json" with { type: "json" };
 
 export type ApiClientOptions = {
-  /** Base URL for the #106 service, e.g. `https://api.example.com`. No trailing slash. */
+  /** Base URL for the #144 / #106 service. No trailing slash. */
   baseUrl?: string | null;
   fetch?: typeof fetch;
   /** QA override so stub health can raise the not-current-year banner. */
@@ -80,33 +82,45 @@ export type PlayerResponse = Omit<PlayersResponse, "players"> & {
 
 const STUB_AS_OF = "2026-08-23";
 
+/** Product default `[Y-2, Y]` (#131 / #144). */
 export function defaultSeasonYears(active = DEFAULT_ACTIVE_SEASON): number[] {
   return [active - 2, active - 1, active];
 }
 
 export function stubSeasonWindow(active = DEFAULT_ACTIVE_SEASON): SeasonWindow {
-  return { start: active - 2, end: active };
+  return defaultSeasonYears(active);
 }
 
 export function stubHealth(
   overrides: Partial<Health> = {},
   options: Pick<ApiClientOptions, "stubCurrentSeasonMissing"> = {},
 ): Health {
+  const missing = Boolean(options.stubCurrentSeasonMissing);
+  const window = stubSeasonWindow();
   return {
     as_of: STUB_AS_OF,
     active_season: DEFAULT_ACTIVE_SEASON,
-    current_season_missing: Boolean(options.stubCurrentSeasonMissing),
-    season_window: stubSeasonWindow(),
-    seasons_present: defaultSeasonYears(),
-    source: "stub",
+    current_season_missing: missing,
+    season_window: window,
+    source: "local",
+    seasons_present: missing ? window.filter((year) => year < DEFAULT_ACTIVE_SEASON) : window,
+    current_season_missing_reason: missing ? "stub_qa" : null,
     ...overrides,
   };
 }
 
-export function stubSeasons(active = DEFAULT_ACTIVE_SEASON): SeasonsResponse {
+export function stubSeasons(
+  active = DEFAULT_ACTIVE_SEASON,
+  options: Pick<ApiClientOptions, "stubCurrentSeasonMissing"> = {},
+): SeasonsResponse {
+  const missing = Boolean(options.stubCurrentSeasonMissing);
+  const window = defaultSeasonYears(active);
   return {
-    seasons: defaultSeasonYears(active),
+    as_of: STUB_AS_OF,
     active_season: active,
+    season_window: window,
+    seasons_present: missing ? window.filter((year) => year < active) : window,
+    current_season_missing: missing,
   };
 }
 
@@ -125,24 +139,53 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function yearsFromUnknown(value: unknown): number[] {
+  return Array.isArray(value) ? value.map(Number).filter(Number.isFinite) : [];
+}
+
+/** Keep OpenAPI array `[Y-2, Y]`. Expand `{start,end}` only if a mock still sends it. */
+export function parseSeasonWindow(
+  value: unknown,
+  active = DEFAULT_ACTIVE_SEASON,
+): SeasonWindow {
+  if (Array.isArray(value)) {
+    const years = yearsFromUnknown(value);
+    if (years.length) {
+      return years;
+    }
+  }
+  const raw = asRecord(value);
+  const start = Number(raw.start ?? raw.min);
+  const end = Number(raw.end ?? raw.max);
+  if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+    const years: number[] = [];
+    for (let year = start; year <= end; year += 1) {
+      years.push(year);
+    }
+    return years;
+  }
+  return defaultSeasonYears(active);
+}
+
+function parseSource(value: unknown): ArtifactSource {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "remote" || raw === "local" || raw === "missing") {
+    return raw;
+  }
+  return "missing";
+}
+
 function parseHealth(payload: unknown): Health {
   const raw = asRecord(payload);
-  const windowRaw = asRecord(raw.season_window);
-  const windowList = Array.isArray(raw.season_window)
-    ? (raw.season_window as unknown[])
-    : [];
-  const start =
-    Number(windowRaw.start ?? windowRaw.min ?? windowList[0]) || DEFAULT_ACTIVE_SEASON - 2;
-  const end =
-    Number(windowRaw.end ?? windowRaw.max ?? windowList[1]) || DEFAULT_ACTIVE_SEASON;
+  const active = Number(raw.active_season) || DEFAULT_ACTIVE_SEASON;
   const present = yearsFromUnknown(raw.seasons_present);
   return {
-    as_of: String(raw.as_of ?? raw.as_of_date ?? ""),
-    active_season: Number(raw.active_season) || DEFAULT_ACTIVE_SEASON,
+    as_of: String(raw.as_of ?? ""),
+    active_season: active,
     current_season_missing: Boolean(raw.current_season_missing),
-    season_window: { start, end },
-    seasons_present: present,
+    season_window: parseSeasonWindow(raw.season_window, active),
     source: parseSource(raw.source),
+    seasons_present: present,
     current_season_missing_reason:
       raw.current_season_missing_reason == null
         ? null
@@ -150,53 +193,47 @@ function parseHealth(payload: unknown): Health {
   };
 }
 
-function yearsFromUnknown(value: unknown): number[] {
-  return Array.isArray(value) ? value.map(Number).filter(Number.isFinite) : [];
-}
-
-function parseSource(value: unknown): Health["source"] {
-  const raw = String(value || "").trim().toLowerCase();
-  if (raw === "remote" || raw === "local" || raw === "missing" || raw === "stub") {
-    return raw;
-  }
-  return undefined;
-}
-
 function parseSeasons(payload: unknown): SeasonsResponse {
-  if (Array.isArray(payload)) {
-    const seasons = yearsFromUnknown(payload);
-    return {
-      seasons,
-      seasons_present: seasons,
-      active_season: seasons.length ? Math.max(...seasons) : DEFAULT_ACTIVE_SEASON,
-    };
-  }
   const raw = asRecord(payload);
-  // Honest years only. season_window is the product default [Y-2, Y] and
-  // may include 2026 even when that year was never published.
+  const active = Number(raw.active_season) || DEFAULT_ACTIVE_SEASON;
+  const window = parseSeasonWindow(raw.season_window, active);
+  // Honest years only. Do not fall back to season_window (may include unpublished 2026).
   const present = yearsFromUnknown(raw.seasons_present);
-  const named = yearsFromUnknown(raw.seasons);
-  const seasons = present.length ? present : named;
   return {
-    seasons,
-    seasons_present: present.length ? present : named,
-    active_season: Number(raw.active_season) || (seasons.length ? Math.max(...seasons) : DEFAULT_ACTIVE_SEASON),
+    as_of: String(raw.as_of ?? ""),
+    active_season: active,
+    season_window: window,
+    seasons_present: present,
     current_season_missing: Boolean(raw.current_season_missing),
   };
 }
 
-function parseCards(payload: unknown): FantasyCard[] {
-  if (Array.isArray(payload)) {
-    return payload as FantasyCard[];
+function parseRec(value: unknown): RecommendationType | null {
+  if (value === undefined || value === null || value === "") {
+    return null;
   }
+  const rec = String(value).trim().toLowerCase();
+  return (RECOMMENDATION_TYPES as readonly string[]).includes(rec)
+    ? (rec as RecommendationType)
+    : null;
+}
+
+function parseCardsResponse(payload: unknown, source: "api" | "stub"): CardsResponse {
   const raw = asRecord(payload);
-  if (Array.isArray(raw.cards)) {
-    return raw.cards as FantasyCard[];
-  }
-  if (Array.isArray(raw.items)) {
-    return raw.items as FantasyCard[];
-  }
-  return [];
+  const cards = Array.isArray(raw.cards) ? (raw.cards as FantasyCard[]) : [];
+  const seasonRaw = raw.season;
+  return {
+    schema_version: String(raw.schema_version || SCHEMA_VERSION),
+    as_of: String(raw.as_of ?? ""),
+    season:
+      seasonRaw === undefined || seasonRaw === null || seasonRaw === ""
+        ? null
+        : Number(seasonRaw),
+    rec: parseRec(raw.rec),
+    current_season_missing: Boolean(raw.current_season_missing),
+    cards,
+    source,
+  };
 }
 
 function filterStubCards(cards: FantasyCard[], query: CardQuery = {}): FantasyCard[] {
@@ -212,6 +249,21 @@ function filterStubCards(cards: FantasyCard[], query: CardQuery = {}): FantasyCa
     }
     return true;
   });
+}
+
+function stubCardsResponse(
+  query: CardQuery,
+  missing: boolean,
+): CardsResponse {
+  return {
+    schema_version: SCHEMA_VERSION,
+    as_of: STUB_AS_OF,
+    season: query.season ?? null,
+    rec: parseRec(query.rec),
+    current_season_missing: missing,
+    cards: filterStubCards(stubCardsFeed(), query),
+    source: "stub",
+  };
 }
 
 async function getJson(
@@ -302,13 +354,10 @@ export function createApiClient(options: ApiClientOptions = {}): BosApiClient {
         return stubHealth({}, { stubCurrentSeasonMissing: stubMissing });
       },
       async getCards(query: CardQuery = {}) {
-        return {
-          cards: filterStubCards(stubCardsFeed(), query),
-          source: "stub",
-        };
+        return stubCardsResponse(query, stubMissing);
       },
       async getSeasons() {
-        return stubSeasons();
+        return stubSeasons(DEFAULT_ACTIVE_SEASON, { stubCurrentSeasonMissing: stubMissing });
       },
       async getPlayers(query: PlayerQuery = {}) {
         return {
@@ -343,7 +392,7 @@ export function createApiClient(options: ApiClientOptions = {}): BosApiClient {
       }
       const qs = params.toString();
       const url = `${baseUrl}/v1/cards${qs ? `?${qs}` : ""}`;
-      return { cards: parseCards(await getJson(fetcher, url)), source: "api" };
+      return parseCardsResponse(await getJson(fetcher, url), "api");
     },
     async getSeasons() {
       return parseSeasons(await getJson(fetcher, `${baseUrl}/v1/seasons`));

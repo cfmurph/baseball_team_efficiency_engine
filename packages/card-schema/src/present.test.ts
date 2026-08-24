@@ -152,7 +152,8 @@ test("season banner when missing or stale max year", () => {
     as_of: "2025-09-01",
     active_season: 2026,
     current_season_missing: false,
-    season_window: { start: 2024, end: 2026 },
+    season_window: [2024, 2025, 2026],
+    source: "local",
   };
   assert.equal(shouldShowSeasonBanner(base, [2024, 2025, 2026]), false);
   assert.equal(
@@ -182,7 +183,8 @@ test("prior-year cards still present; banner ships without live 2026 rows", () =
     as_of: "2025-09-01",
     active_season: 2026,
     current_season_missing: true,
-    season_window: { start: 2024, end: 2026 },
+    season_window: [2024, 2025, 2026],
+    source: "local",
     seasons_present: [2024, 2025],
   };
   assert.equal(shouldShowSeasonBanner(health, [2024, 2025]), true);

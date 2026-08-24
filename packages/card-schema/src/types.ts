@@ -61,29 +61,41 @@ export type ShareCardView = {
   prompt: string;
 };
 
-export type SeasonWindow = {
-  start: number;
-  end: number;
-};
+/** #144 / #106 OpenAPI: product default `[Y-2, Y]`. */
+export type SeasonWindow = number[];
 
+export type ArtifactSource = "remote" | "local" | "missing";
+
+/** GET /v1/health — `services/api/openapi.yaml` HealthResponse. */
 export type Health = {
   as_of: string;
   active_season: number;
   current_season_missing: boolean;
   season_window: SeasonWindow;
+  source: ArtifactSource;
   seasons_present?: number[];
-  source?: "remote" | "local" | "missing" | "stub";
   current_season_missing_reason?: string | null;
 };
 
+/** GET /v1/seasons — `services/api/openapi.yaml` SeasonsResponse. */
 export type SeasonsResponse = {
-  seasons: number[];
+  as_of: string;
   active_season: number;
-  seasons_present?: number[];
-  current_season_missing?: boolean;
+  season_window: SeasonWindow;
+  seasons_present: number[];
+  current_season_missing: boolean;
 };
 
+/**
+ * GET /v1/cards — OpenAPI CardsResponse plus client-only `source`.
+ * Empty `cards` is a miss, not a stub. Never invent 2026 rows.
+ */
 export type CardsResponse = {
+  schema_version: string;
+  as_of: string;
+  season?: number | null;
+  rec?: RecommendationType | null;
+  current_season_missing: boolean;
   cards: FantasyCard[];
   source: "api" | "stub";
 };

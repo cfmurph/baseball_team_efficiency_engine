@@ -8,7 +8,8 @@ test("re-exports banner rule used by the page loader", () => {
     as_of: "2026-08-23",
     active_season: 2026,
     current_season_missing: false,
-    season_window: { start: 2024, end: 2026 },
+    season_window: [2024, 2025, 2026],
+    source: "local" as const,
   };
   assert.equal(shouldShowSeasonBanner(health, [2024, 2025, 2026]), false);
   assert.equal(

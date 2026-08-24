@@ -165,7 +165,22 @@ def test_architect_stub_contract_is_locked() -> None:
     assert "created_at" in waitlist
     assert "defaultSeasonYears" in client
     assert "current_season_missing" in client
+    assert "parseSeasonWindow" in client
+    assert "#144" in client
     assert "PRIOR_SEASON_BANNER" in home
+    assert "ArtifactSource" in types
+    assert 'SeasonWindow = number[]' in types
+    openapi = (ROOT / "services" / "api" / "openapi.yaml").read_text(encoding="utf-8")
+    for field in (
+        "as_of",
+        "active_season",
+        "current_season_missing",
+        "season_window",
+        "seasons_present",
+        "schema_version",
+    ):
+        assert field in openapi
+        assert field in types
 
 
 def test_docs_name_streamlit_as_fallback() -> None:
@@ -175,6 +190,7 @@ def test_docs_name_streamlit_as_fallback() -> None:
     assert "NEXT_PUBLIC_API_URL" in guide
     assert "vs repl" in guide
     assert "early model" in guide
+    assert "#144" in guide
 
 
 def test_product_lock_copy_and_prior_only_ship() -> None:

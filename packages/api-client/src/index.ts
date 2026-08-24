@@ -2,6 +2,7 @@ export {
   createApiClient,
   defaultSeasonYears,
   isRecommendationType,
+  parseSeasonWindow,
   stubCardsFeed,
   stubHealth,
   stubSeasonWindow,

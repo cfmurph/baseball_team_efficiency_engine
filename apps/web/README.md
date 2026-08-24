@@ -1,6 +1,6 @@
 # BenchOrStart (`apps/web`)
 
-Public Next.js client for BenchOrStart. Consumes the thin `#106` read API (`GET /v1/health`, `/v1/cards`, `/v1/seasons`). When `NEXT_PUBLIC_API_URL` is unset it renders the four fixture cards from `fantasy/stub_cards.jsonl` — no invented live 2026 rows.
+Public Next.js client for BenchOrStart. Consumes the thin **#144 / #106** read API (`GET /v1/health`, `/v1/cards`, `/v1/seasons` per `services/api/openapi.yaml`). When `NEXT_PUBLIC_API_URL` is unset it renders the four fixture cards from `fantasy/stub_cards.jsonl` — no invented live 2026 rows. Types already match the OpenAPI; swapping the env URL is the only change.
 
 The Streamlit shell at `dashboard/fantasy_app.py` stays as a local fallback. The front-office GM app (`dashboard/app.py`) is out of scope — including Contract Watch (#136). This app reuses the #137 prior-only banner from `fantasy/copy.py` when `/v1/health` says the current season is missing.
 
@@ -26,7 +26,16 @@ See `.env.example`. Only `NEXT_PUBLIC_API_URL` is required to leave stub mode. D
 
 | Variable | Role |
 |---|---|
-| `NEXT_PUBLIC_API_URL` | `#106` origin. Unset → fixture cards + stub health. |
+| `NEXT_PUBLIC_API_URL` | `#144` / `#106` origin. Unset → fixture cards + stub health. |
+
+Against a local #144 API:
+
+```bash
+export ARTIFACTS_URI=file://$PWD/tests/fixtures/api/lake_current
+python3 -m services.api
+export NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+npm run dev
+```
 | `NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING` | QA: raise the #137 banner on stubs. Runtime alias: `STUB_CURRENT_SEASON_MISSING`. |
 | `FANTASY_WAITLIST_WEBHOOK` | Server-only HTTPS POST `{email,source,created_at}`. |
 | `FANTASY_WAITLIST_PATH` | Optional JSONL append (local). No-op success on Vercel if the disk is read-only. |

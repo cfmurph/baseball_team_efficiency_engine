@@ -50,27 +50,44 @@ export async function loadHomeData(): Promise<HomeData> {
       envFlag("STUB_CURRENT_SEASON_MISSING");
     const present = health.seasons_present?.length
       ? health.seasons_present
-      : (seasons.seasons_present ?? seasons.seasons);
+      : seasons.seasons_present;
     return {
       views,
       health,
       seasons,
       source: feed.source,
-      showSeasonBanner: shouldShowSeasonBanner(health, present, {
-        liveFeed: feed.source === "api" || qaMissing,
-      }),
+      showSeasonBanner: shouldShowSeasonBanner(
+        {
+          ...health,
+          current_season_missing:
+            health.current_season_missing || feed.current_season_missing,
+        },
+        present,
+        {
+          liveFeed: feed.source === "api" || qaMissing,
+        },
+      ),
       showingStubs: feed.source === "stub",
     };
   } catch {
+    const window = [
+      DEFAULT_ACTIVE_SEASON - 2,
+      DEFAULT_ACTIVE_SEASON - 1,
+      DEFAULT_ACTIVE_SEASON,
+    ];
     const health: Health = {
       as_of: "",
       active_season: DEFAULT_ACTIVE_SEASON,
       current_season_missing: true,
-      season_window: { start: DEFAULT_ACTIVE_SEASON - 2, end: DEFAULT_ACTIVE_SEASON },
+      season_window: window,
+      source: "missing",
     };
     const seasons: SeasonsResponse = {
-      seasons: [],
+      as_of: "",
       active_season: DEFAULT_ACTIVE_SEASON,
+      season_window: window,
+      seasons_present: [],
+      current_season_missing: true,
     };
     return {
       views: [],

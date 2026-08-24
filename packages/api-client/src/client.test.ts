@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createApiClient, defaultSeasonYears, stubCardsFeed, stubHealth } from "./client.ts";
+import {
+  createApiClient,
+  defaultSeasonYears,
+  parseSeasonWindow,
+  stubCardsFeed,
+  stubHealth,
+  stubSeasons,
+} from "./client.ts";
 
 test("stub feed is the same four schema 1.0 cards", () => {
   const cards = stubCardsFeed();
@@ -18,6 +25,7 @@ test("stub feed is the same four schema 1.0 cards", () => {
 
 test("default season window is [Y-2, Y] for 2026", () => {
   assert.deepEqual(defaultSeasonYears(2026), [2024, 2025, 2026]);
+  assert.deepEqual(parseSeasonWindow([2024, 2025, 2026]), [2024, 2025, 2026]);
 });
 
 test("unset API URL uses fixtures and can set current_season_missing", async () => {
@@ -26,14 +34,21 @@ test("unset API URL uses fixtures and can set current_season_missing", async () 
   const health = await client.getHealth();
   assert.equal(health.current_season_missing, true);
   assert.equal(health.active_season, 2026);
-  assert.deepEqual(health.season_window, { start: 2024, end: 2026 });
+  assert.deepEqual(health.season_window, [2024, 2025, 2026]);
+  assert.equal(health.source, "local");
+  assert.deepEqual(health.seasons_present, [2024, 2025]);
   const seasons = await client.getSeasons();
-  assert.deepEqual(seasons.seasons, [2024, 2025, 2026]);
+  assert.equal(seasons.as_of, "2026-08-23");
+  assert.deepEqual(seasons.season_window, [2024, 2025, 2026]);
+  assert.deepEqual(seasons.seasons_present, [2024, 2025]);
+  assert.equal(seasons.current_season_missing, true);
   const cards = await client.getCards();
   assert.equal(cards.source, "stub");
+  assert.equal(cards.schema_version, "1.0");
   assert.equal(cards.cards.length, 4);
   const sitOnly = await client.getCards({ rec: "sit" });
   assert.equal(sitOnly.cards.length, 1);
+  assert.equal(sitOnly.rec, "sit");
   assert.equal(sitOnly.cards[0]?.player?.name, "Jorge Soler");
   const players = await client.getPlayers({ season: 2026 });
   assert.deepEqual(players.players, []);
@@ -63,7 +78,16 @@ test("live client hits /v1 without inventing rows", async () => {
         );
       }
       if (url.includes("/v1/cards")) {
-        return new Response(JSON.stringify({ cards: [] }));
+        return new Response(
+          JSON.stringify({
+            schema_version: "1.0",
+            as_of: "2025-09-01",
+            season: 2026,
+            rec: "start",
+            current_season_missing: true,
+            cards: [],
+          }),
+        );
       }
       if (url.endsWith("/v1/seasons")) {
         return new Response(
@@ -108,14 +132,24 @@ test("live client hits /v1 without inventing rows", async () => {
   assert.equal(client.source, "api");
   const health = await client.getHealth();
   assert.equal(health.current_season_missing, true);
+  assert.deepEqual(health.season_window, [2024, 2025, 2026]);
   assert.deepEqual(health.seasons_present, [2024, 2025]);
   assert.equal(health.seasons_present?.includes(2026), false);
   assert.equal(health.source, "local");
+  assert.equal(health.current_season_missing_reason, "sdio_unavailable");
   const cards = await client.getCards({ season: 2026, rec: "start" });
   assert.equal(cards.source, "api");
+  assert.equal(cards.schema_version, "1.0");
+  assert.equal(cards.as_of, "2025-09-01");
+  assert.equal(cards.season, 2026);
+  assert.equal(cards.rec, "start");
+  assert.equal(cards.current_season_missing, true);
   assert.deepEqual(cards.cards, []);
   const seasons = await client.getSeasons();
-  assert.deepEqual(seasons.seasons, [2024, 2025]);
+  assert.equal(seasons.as_of, "2025-09-01");
+  assert.deepEqual(seasons.season_window, [2024, 2025, 2026]);
+  assert.deepEqual(seasons.seasons_present, [2024, 2025]);
+  assert.equal(seasons.current_season_missing, true);
   const players = await client.getPlayers({ season: 2026 });
   assert.deepEqual(players.players, []);
   assert.equal(players.current_season_missing, true);
@@ -127,7 +161,26 @@ test("live client hits /v1 without inventing rows", async () => {
   assert.ok(calls.some((url) => url.includes("/v1/players/judgeaa01?season=2026")));
 });
 
-test("prior-year API cards ship as-is; no invented 2026 rows", async () => {
+test("empty cards envelope is a miss, not a stub", async () => {
+  const client = createApiClient({
+    baseUrl: "https://api.example.test",
+    fetch: async () =>
+      new Response(
+        JSON.stringify({
+          schema_version: "1.0",
+          as_of: "2025-09-01",
+          current_season_missing: true,
+          cards: [],
+        }),
+      ),
+  });
+  const cards = await client.getCards();
+  assert.equal(cards.source, "api");
+  assert.deepEqual(cards.cards, []);
+  assert.equal(cards.current_season_missing, true);
+});
+
+test("prior-year API cards ship as-is; share.stat_line stays verbatim", async () => {
   const prior = {
     schema_version: "1.0",
     card_id: "prior-start-1",
@@ -141,7 +194,14 @@ test("prior-year API cards ship as-is; no invented 2026 rows", async () => {
     fetch: async (input) => {
       const url = String(input);
       if (url.endsWith("/v1/cards")) {
-        return new Response(JSON.stringify({ cards: [prior] }));
+        return new Response(
+          JSON.stringify({
+            schema_version: "1.0",
+            as_of: "2025-09-01",
+            current_season_missing: true,
+            cards: [prior],
+          }),
+        );
       }
       return new Response("missing", { status: 404 });
     },
@@ -150,13 +210,17 @@ test("prior-year API cards ship as-is; no invented 2026 rows", async () => {
   assert.equal(cards.source, "api");
   assert.equal(cards.cards.length, 1);
   assert.equal(cards.cards[0]?.season, 2025);
+  assert.equal(cards.cards[0]?.share?.stat_line, "+2.1 edge · 80% conf");
   assert.equal(cards.cards.some((card) => Number(card.season) === 2026), false);
 });
 
 test("stubHealth override stays explicit", () => {
   assert.equal(stubHealth().current_season_missing, false);
+  assert.deepEqual(stubHealth().season_window, [2024, 2025, 2026]);
+  assert.equal(stubHealth().source, "local");
   assert.equal(
     stubHealth({ current_season_missing: true }).current_season_missing,
     true,
   );
+  assert.equal(stubSeasons(2026, { stubCurrentSeasonMissing: true }).current_season_missing, true);
 });

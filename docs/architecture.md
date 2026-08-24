@@ -64,7 +64,7 @@ This is where metric logic becomes standardized and reusable:
 
 ### 5. Presentation layer
 - Streamlit dashboard for season, team, and trend exploration (FO / GM — `dashboard/app.py`)
-- Public BenchOrStart: Next.js (`apps/web`) over the #106 `/v1` read API
+- Public BenchOrStart: Next.js (`apps/web`) over the #144 / #106 `/v1` read API
 - Shared TS client (`packages/api-client`) + schema 1.0 presenters (`packages/card-schema`); Expo planned later, not scaffolded
 - Streamlit `dashboard/fantasy_app.py` remains a local fallback until Next parity
 - Thin read-only HTTP API (`services/api`) over published `current/` (`/v1/health`, `/v1/cards`, `/v1/seasons`)

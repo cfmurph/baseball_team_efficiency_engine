@@ -4,7 +4,7 @@ Thin waitlist + share-card product. Separate from the front-office GM dashboard.
 
 Public surface is **Next.js** (`apps/web`, [#140](https://github.com/cfmurph/baseball_team_efficiency_engine/issues/140)). The Streamlit shell at `dashboard/fantasy_app.py` stays as a **local fallback** until Next parity. Do not delete it. `dashboard/app.py` stays FO-only.
 
-Live cards come from the #111 nightly emitter via the #106 `/v1` API (when present). The web client stubs that contract so it runs without the API.
+Live cards come from the #111 nightly emitter via the #144 / #106 `/v1` API (when present). The web client stubs that contract so it runs without the API.
 
 ## How to run
 
@@ -50,13 +50,15 @@ Recommendation labels (schema v1.0): `start` → START, `sit` → BENCH, `pickup
 
 ## `/v1` client (Next.js)
 
-`packages/api-client` talks to the #106 contract:
+`packages/api-client` talks to the **#144 / #106** contract (`services/api/openapi.yaml`):
 
 | Endpoint | Shape |
 |---|---|
-| `GET /v1/health` | `{ as_of, active_season, current_season_missing, season_window, source, seasons_present, current_season_missing_reason }` |
-| `GET /v1/cards?season=&rec=` | schema 1.0 cards (`current/fantasy/cards.jsonl`) |
-| `GET /v1/seasons` | `{ season_window: [Y-2, Y], seasons_present }` — window may include 2026; `seasons_present` does not invent it |
+| `GET /v1/health` | `{ as_of, active_season, current_season_missing, season_window, source: remote\|local\|missing, seasons_present?, current_season_missing_reason? }` |
+| `GET /v1/seasons` | `{ as_of, active_season, season_window, seasons_present, current_season_missing }` |
+| `GET /v1/cards?season=&rec=` | `{ schema_version: "1.0", as_of, season?, rec?: start\|sit\|pickup\|stream, current_season_missing, cards }` |
+
+`season_window` is `[Y-2, Y]`. `seasons_present` is years that actually exist (2026 may be in the window and absent from `seasons_present`). Empty `cards` is a miss, not a stub. `share.stat_line` is verbatim from the API.
 
 If `NEXT_PUBLIC_API_URL` is unset, the client uses the same four fixtures as `fantasy/stub_cards.jsonl` plus a health object that can set `current_season_missing` (`STUB_CURRENT_SEASON_MISSING=true` at runtime, or `NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING=true` at build). When the API is up, set the env URL — no other client change.
 
