@@ -68,7 +68,7 @@ The web UI reuses the #137 BenchOrStart banner (`PRIOR_SEASON_BANNER` in `fantas
 - **Waitlist.** Email-only. Next route `POST /api/waitlist` validates, optionally POSTs `FANTASY_WAITLIST_WEBHOOK`, appends `data/waitlist/signups.jsonl` when the disk allows, otherwise no-op with the success state. Streamlit fallback uses `fantasy/waitlist.py`.
 - **No `vs repl`.** Face copy, Copy text, and Download image say **edge**. Schema field `edge.vs_replacement` is unchanged.
 - **Approx badge.** `war_source=approx` or `is_approx` shows the **early model** badge and hides confidence.
-- **Copy lock.** Use `fantasy/copy.py` as-is unless Cole edits it. `packages/card-schema` must match that file. Do not invent marketing copy.
+- **Copy lock.** VERBATIM port of `fantasy/copy.py` (Cole): product name, headline, CTA, tabs, footer, and empty states. Do not rewrite. `packages/card-schema` must match that file.
 - **No Contract Watch.** Missing-salary 2026 overlay rows (#136) stay on FO Streamlit. `apps/web` is cards / waitlist / share only.
 
 ## Waitlist hook (marketing)
@@ -90,4 +90,4 @@ Point `FANTASY_WAITLIST_WEBHOOK` at Zapier, Make, Buttondown, Mailchimp, or any 
 
 ## Copy lock
 
-Headline, subhead, CTA, microcopy, success, footer, and soft-launch chrome live in `fantasy/copy.py`. Mirror them in `packages/card-schema`. Cole owns edits to that file — do not invent new marketing copy here.
+Headline, subhead, CTA, tabs, footer, empty states, and soft-launch chrome live in `fantasy/copy.py`. Port them VERBATIM into `packages/card-schema`. Cole owns edits to that file — do not rewrite.

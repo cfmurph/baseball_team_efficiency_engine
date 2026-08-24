@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
 
+import fantasy.copy as copy_mod
 from fantasy.cards import load_stub_cards
 from fantasy.copy import (
     COPIED,
@@ -41,34 +43,47 @@ FO_APP = ROOT / "dashboard" / "app.py"
 FALLBACK = ROOT / "dashboard" / "fantasy_app.py"
 
 
+_TS_ARRAY = re.compile(r"export const (\w+)\s*=\s*\[([^\]]+)\]")
+_TS_STRING = re.compile(r'export const (\w+)\s*=\s*"((?:[^"\\]|\\.)*)"', re.MULTILINE)
+
+
+def _ts_copy_exports(text: str) -> dict[str, object]:
+    arrays = {
+        name: tuple(re.findall(r'"([^"]*)"', body))
+        for name, body in _TS_ARRAY.findall(text)
+    }
+    strings = {
+        name: value
+        for name, value in _TS_STRING.findall(text)
+        if name not in arrays
+    }
+    return {**strings, **arrays}
+
+
 def test_card_schema_copy_matches_python_lock() -> None:
     ts = COPY_TS.read_text(encoding="utf-8")
-    for value in (
-        PRODUCT_NAME,
-        PROMPT_LINE,
-        HEADLINE,
-        SUBHEAD,
-        CTA,
-        MICROCOPY,
-        SUCCESS,
-        FOOTER,
-        EARLY_MODEL_BADGE,
-        EMAIL_ERROR,
-        STUB_CAPTION,
-        INVITE_CHIP,
-        COPY_TEXT,
-        DOWNLOAD_IMAGE,
-        COPIED,
-        EMPTY_TAB,
-        TAB_ALL,
-        EMPTY_TITLE,
-        EMPTY_BODY,
-        PRIOR_SEASON_BANNER,
-        *TAB_LABELS,
-    ):
-        assert value in ts
+    parsed = _ts_copy_exports(ts)
+    # Cole / Product: these faces are VERBATIM — including empty states.
+    assert parsed["PRODUCT_NAME"] == PRODUCT_NAME
+    assert parsed["HEADLINE"] == HEADLINE
+    assert parsed["CTA"] == CTA
+    assert parsed["TAB_LABELS"] == tuple(TAB_LABELS)
+    assert parsed["TAB_ALL"] == TAB_ALL
+    assert parsed["FOOTER"] == FOOTER
+    assert parsed["EMPTY_TITLE"] == EMPTY_TITLE
+    assert parsed["EMPTY_BODY"] == EMPTY_BODY
+    assert parsed["EMPTY_TAB"] == EMPTY_TAB
+    for name in dir(copy_mod):
+        if name.startswith("_") or not name.isupper():
+            continue
+        value = getattr(copy_mod, name)
+        if isinstance(value, str):
+            assert parsed[name] == value, name
+        elif isinstance(value, tuple):
+            assert parsed[name] == value, name
     assert PRIOR_SEASON_BANNER == "These picks are not the current season yet."
     assert "Contract Watch" not in ts
+    assert "VERBATIM" in ts
 
 
 def test_web_stub_cards_match_fantasy_jsonl() -> None:
@@ -97,9 +112,23 @@ def test_next_web_exists_and_fo_stays_untouched() -> None:
     )
     assert "Contract Watch" not in web_text
     assert "filter_contract_watch_rows" not in web_text
-    assert "PRIOR_SEASON_BANNER" in (web_root / "components" / "Home.tsx").read_text(
-        encoding="utf-8"
-    )
+    home = (web_root / "components" / "Home.tsx").read_text(encoding="utf-8")
+    assert "PRIOR_SEASON_BANNER" in home
+    for symbol in (
+        "PRODUCT_NAME",
+        "HEADLINE",
+        "CTA",
+        "FOOTER",
+        "TAB_ALL",
+        "TAB_LABELS",
+        "EMPTY_TITLE",
+        "EMPTY_BODY",
+        "EMPTY_TAB",
+    ):
+        assert symbol in home
+    assert EMPTY_TITLE not in home
+    assert EMPTY_BODY not in home
+    assert HEADLINE not in home
 
 
 def test_architect_stub_contract_is_locked() -> None:
@@ -151,15 +180,15 @@ def test_docs_name_streamlit_as_fallback() -> None:
 def test_product_lock_copy_and_prior_only_ship() -> None:
     """Cole owns fantasy/copy.py. Live 2026 is #131, not an apps/web ship gate."""
     ts = COPY_TS.read_text(encoding="utf-8")
-    assert "unless Cole edits" in ts
-    assert "Do not invent" in ts
+    assert "VERBATIM" in ts
+    assert "do not rewrite" in ts
     guide = (ROOT / "docs" / "fantasy.md").read_text(encoding="utf-8")
-    assert "unless Cole edits" in guide
+    assert "VERBATIM" in guide
     assert "not a ship gate" in guide
     assert "#131" in guide
     web_readme = (ROOT / "apps" / "web" / "README.md").read_text(encoding="utf-8")
-    assert "unless Cole edits" in web_readme
+    assert "VERBATIM" in web_readme
     assert "#131" in web_readme
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
-    assert "unless Cole edits" in agents
+    assert "VERBATIM" in agents or "unless Cole edits" in agents
     assert "#131" in agents

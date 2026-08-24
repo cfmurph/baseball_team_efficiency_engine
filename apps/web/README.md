@@ -41,6 +41,6 @@ Create a project on this repo:
 
 ## Copy lock
 
-Headline, subhead, CTA, waitlist, footer, invite chip, and share chrome come from `@bos/card-schema` and must match `fantasy/copy.py` as-is unless Cole edits that file. Do not invent marketing copy.
+Headline, subhead, CTA, tabs, footer, empty states, waitlist, invite chip, and share chrome come from `@bos/card-schema` and must match `fantasy/copy.py` VERBATIM. Cole owns that file — do not rewrite.
 
 Live 2026 rows are not a ship gate. If `/v1` only has prior years, show `PRIOR_SEASON_BANNER` and ship those cards. Keyed 2026 publish stays on #131.

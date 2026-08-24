@@ -1,4 +1,4 @@
-/** Exact BenchOrStart marketing copy. Use `fantasy/copy.py` as-is unless Cole edits it. Do not invent strings here. */
+/** VERBATIM port of `fantasy/copy.py` (Cole). Product name, headline, CTA, tabs, footer, empty states — do not rewrite. */
 
 export const PRODUCT_NAME = "BenchOrStart";
 export const PROMPT_LINE = "Bench or start?";
