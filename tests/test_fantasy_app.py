@@ -161,6 +161,9 @@ def test_fantasy_apptest_stubs_do_not_show_prior_season_banner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(ROOT)
+    import streamlit as st
+
+    st.cache_data.clear()
     monkeypatch.setattr(
         "fantasy.cards.load_share_cards",
         lambda *args, **kwargs: CardLoad(cards=[], source=SOURCE_MISSING),
@@ -177,6 +180,9 @@ def test_fantasy_apptest_stubs_do_not_show_prior_season_banner(
 
 def test_fantasy_apptest_live_prior_only_shows_banner(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(ROOT)
+    import streamlit as st
+
+    st.cache_data.clear()
     live = [
         {
             "schema_version": "1.0",
