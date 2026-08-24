@@ -58,7 +58,7 @@ Recommendation labels (schema v1.0): `start` → START, `sit` → BENCH, `pickup
 | `GET /v1/cards?season=&rec=` | schema 1.0 cards (`current/fantasy/cards.jsonl`) |
 | `GET /v1/seasons` | default `[Y-2, Y]` (2024–2026 when Y=2026) |
 
-If `NEXT_PUBLIC_API_URL` is unset, the client uses the same four fixtures as `fantasy/stub_cards.jsonl` plus a health object that can set `current_season_missing` (`NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING=true` for QA). When the API is up, set the env URL — no other client change.
+If `NEXT_PUBLIC_API_URL` is unset, the client uses the same four fixtures as `fantasy/stub_cards.jsonl` plus a health object that can set `current_season_missing` (`STUB_CURRENT_SEASON_MISSING=true` at runtime, or `NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING=true` at build). When the API is up, set the env URL — no other client change.
 
 The web UI shows a not-current-year banner when `current_season_missing` is true **or** the max season in `/v1/seasons` is below `active_season`. It does **not** invent 2026 rows.
 

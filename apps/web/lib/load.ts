@@ -1,3 +1,5 @@
+import { env } from "node:process";
+
 import { createApiClient } from "@bos/api-client";
 import {
   DEFAULT_ACTIVE_SEASON,
@@ -20,18 +22,20 @@ export type HomeData = {
 };
 
 function envFlag(name: string): boolean {
-  return String(process.env[name] || "").trim().toLowerCase() === "true";
+  return String(env[name] || "").trim().toLowerCase() === "true";
 }
 
 export function publicApiUrl(): string | null {
-  const raw = String(process.env.NEXT_PUBLIC_API_URL || "").trim();
+  const raw = String(env.NEXT_PUBLIC_API_URL || "").trim();
   return raw || null;
 }
 
 export async function loadHomeData(): Promise<HomeData> {
   const client = createApiClient({
     baseUrl: publicApiUrl(),
-    stubCurrentSeasonMissing: envFlag("NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING"),
+    stubCurrentSeasonMissing:
+      envFlag("NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING") ||
+      envFlag("STUB_CURRENT_SEASON_MISSING"),
   });
 
   try {
