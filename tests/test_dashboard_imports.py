@@ -1,11 +1,15 @@
 """Guard that dashboard local imports work without a pre-set PYTHONPATH."""
 from __future__ import annotations
 
+import pytest
+
 import ast
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+pytestmark = pytest.mark.unit
 
 APP_PATH = Path(__file__).resolve().parents[1] / "dashboard" / "app.py"
 ROOT = APP_PATH.resolve().parents[1]

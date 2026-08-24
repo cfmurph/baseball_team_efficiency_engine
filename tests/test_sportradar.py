@@ -20,6 +20,8 @@ from pipeline.extract.pull_sportradar import (
     _parse_injuries,
 )
 
+pytestmark = pytest.mark.unit
+
 
 # ---------------------------------------------------------------------------
 # Fixtures — sample API response shapes

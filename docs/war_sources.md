@@ -56,4 +56,4 @@ If a BR revision nudges a pinned season:
 1. Run `python3 -m pipeline.extract.pull_war` locally.
 2. Copy the updated player-season rows into `tests/fixtures/war/war_daily_bat.txt` and/or `war_daily_pitch.txt`.
 3. Update the matching `player_war` / component fields in `tests/fixtures/war/expected.json`.
-4. Re-run `python3 -m pytest tests/test_golden_war.py -v`.
+4. Re-run `python3 -m pytest -m e2e -v` (or `python3 -m pytest tests/test_golden_war.py -v`).

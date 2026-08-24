@@ -13,6 +13,8 @@ from src.baseball_analytics.war import (
     load_real_war,
 )
 
+pytestmark = pytest.mark.e2e
+
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "war"
 TEAM_MAP = Path(__file__).resolve().parents[1] / "data" / "crosswalks" / "br_team_map.csv"
 EXPECTED_PATH = FIXTURE_DIR / "expected.json"

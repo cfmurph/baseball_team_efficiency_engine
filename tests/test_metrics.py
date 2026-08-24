@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import pytest
+
 import pandas as pd
 
 from src.baseball_analytics.metrics import pythagorean_wins, top_salary_shares, salary_concentration
+
+pytestmark = pytest.mark.unit
 
 
 def test_pythagorean_wins_length() -> None:

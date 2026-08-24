@@ -75,6 +75,7 @@ def _land_fixtures(raw_dir: Path, as_of: str = AS_OF, backend: FileBackend | Non
     )
 
 
+@pytest.mark.unit
 def test_raw_object_key_matches_locked_layout() -> None:
     key = raw_object_key("player_game_stats", AS_OF, "player_game_stats_2026-08-23.json")
     assert key == f"{RAW_REMOTE_PREFIX}/player_game_stats/{AS_OF}/player_game_stats_2026-08-23.json"
@@ -82,11 +83,13 @@ def test_raw_object_key_matches_locked_layout() -> None:
     assert local.as_posix().endswith(f"data/raw/sportsdataio/teams/{AS_OF}/teams.json")
 
 
+@pytest.mark.unit
 def test_default_season_window_is_y_minus_2_through_y() -> None:
     assert default_season_window("2026-08-23") == [2024, 2025, 2026]
     assert default_season_window("2027-04-01") == [2025, 2026, 2027]
 
 
+@pytest.mark.unit
 def test_seasons_from_settings_defaults_to_window_and_honors_overrides() -> None:
     assert seasons_from_settings({}, "2026-08-23", environ={}) == [2024, 2025, 2026]
     assert seasons_from_settings(
@@ -104,11 +107,13 @@ def test_seasons_from_settings_defaults_to_window_and_honors_overrides() -> None
     ) == [2024, 2026]
 
 
+@pytest.mark.unit
 def test_sdio_date_token_uses_month_abbrev() -> None:
     assert sdio_date_token("2024-07-31") == "2024-JUL-31"
     assert sdio_date_token("2017-09-01") == "2017-SEP-01"
 
 
+@pytest.mark.unit
 def test_stable_uuid_is_deterministic() -> None:
     first = stable_uuid("player", 10001967)
     second = stable_uuid("player", 10001967)
@@ -116,12 +121,14 @@ def test_stable_uuid_is_deterministic() -> None:
     assert first != stable_uuid("team", 10001967)
 
 
+@pytest.mark.unit
 def test_resolve_api_key_reads_env_only() -> None:
     assert resolve_api_key(environ={}) is None
     assert resolve_api_key(environ={API_KEY_ENV: "  secret-key  "}) == "secret-key"
     assert resolve_api_key("cli-key", environ={API_KEY_ENV: "env-key"}) == "cli-key"
 
 
+@pytest.mark.unit
 def test_parse_teams_and_players() -> None:
     teams = parse_teams(_payload("teams.json"))
     assert set(teams["sdio_team_id"]) == {31, 20}
@@ -133,6 +140,7 @@ def test_parse_teams_and_players() -> None:
     assert int(judge["mlb_player_id"]) == 592450
 
 
+@pytest.mark.unit
 def test_parse_games_and_player_game_stats() -> None:
     games = parse_games(_payload("games_by_date.json"))
     assert int(games.iloc[0]["sdio_game_id"]) == 74546
@@ -146,6 +154,7 @@ def test_parse_games_and_player_game_stats() -> None:
     assert int(season.iloc[0]["games"]) == 158
 
 
+@pytest.mark.unit
 def test_attach_mlb_and_bbref_aliases_via_people() -> None:
     people = pd.DataFrame(
         {
@@ -161,6 +170,7 @@ def test_attach_mlb_and_bbref_aliases_via_people() -> None:
     assert judge["bbref_id"] == "judgeaa01"
 
 
+@pytest.mark.integration
 def test_extract_writes_local_and_file_uri(tmp_path: Path) -> None:
     raw_dir = tmp_path / "data" / "raw"
     lake = tmp_path / "lake"
@@ -198,6 +208,7 @@ def test_extract_writes_local_and_file_uri(tmp_path: Path) -> None:
     assert raw_object_key("teams", AS_OF, "teams.json").startswith("raw/sportsdataio/")
 
 
+@pytest.mark.integration
 def test_extract_same_date_overwrite_is_idempotent(tmp_path: Path) -> None:
     raw_dir = tmp_path / "raw"
     write_raw_payload(
@@ -224,6 +235,7 @@ def test_extract_same_date_overwrite_is_idempotent(tmp_path: Path) -> None:
     assert len(landed) == 2
 
 
+@pytest.mark.unit
 def test_extract_had_in_season_from_season_rows_or_game_payload() -> None:
     in_season = {
         "as_of_date": AS_OF,
@@ -265,6 +277,7 @@ def test_extract_had_in_season_from_season_rows_or_game_payload() -> None:
     assert extract_had_in_season(None, active_season=2026) is False
 
 
+@pytest.mark.integration
 def test_extract_soft_fails_without_api_key(tmp_path: Path) -> None:
     raw_dir = tmp_path / "raw"
     client = SportsDataIOClient(api_key=None, environ={}, min_interval=0)
@@ -292,6 +305,7 @@ def test_extract_soft_fails_without_api_key(tmp_path: Path) -> None:
     assert landed["active_season"] == 2024
 
 
+@pytest.mark.integration
 def test_extract_soft_fails_on_api_error(tmp_path: Path) -> None:
     raw_dir = tmp_path / "raw"
 
@@ -313,6 +327,7 @@ def test_extract_soft_fails_on_api_error(tmp_path: Path) -> None:
     assert local_raw_path(raw_dir, "teams", AS_OF, "teams.json").is_file()
 
 
+@pytest.mark.integration
 def test_cli_soft_fail_without_key_exits_zero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from typer.testing import CliRunner
 
@@ -339,6 +354,7 @@ def test_cli_soft_fail_without_key_exits_zero(tmp_path: Path, monkeypatch: pytes
     assert "SPORTSDATAIO_API_KEY" in (report.get("error") or "")
 
 
+@pytest.mark.integration
 def test_cli_soft_fail_exits_zero_on_boom(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from typer.testing import CliRunner
 
@@ -365,6 +381,7 @@ def test_cli_soft_fail_exits_zero_on_boom(tmp_path: Path, monkeypatch: pytest.Mo
     assert report["soft_fail"] is True
 
 
+@pytest.mark.integration
 def test_warehouse_builds_without_sdio(tmp_path: Path) -> None:
     frames = load_sdio_frames(tmp_path / "missing-raw", as_of_date=AS_OF)
     assert frames.empty
@@ -381,6 +398,7 @@ def test_warehouse_builds_without_sdio(tmp_path: Path) -> None:
     assert not any(name.startswith("scout_") and name.endswith("_stat") for name in tables)
 
 
+@pytest.mark.integration
 def test_warehouse_loads_spine_and_aliases(tmp_path: Path) -> None:
     raw_dir = tmp_path / "raw"
     _land_fixtures(raw_dir)
@@ -457,6 +475,7 @@ def test_warehouse_loads_spine_and_aliases(tmp_path: Path) -> None:
     assert "scout_player_stat" not in tables
 
 
+@pytest.mark.integration
 def test_load_sdio_frames_reads_file_uri_when_local_missing(tmp_path: Path) -> None:
     lake = tmp_path / "lake"
     backend = FileBackend(lake)
@@ -473,6 +492,7 @@ def test_load_sdio_frames_reads_file_uri_when_local_missing(tmp_path: Path) -> N
     assert int(frames.teams.iloc[0]["sdio_team_id"]) in {31, 20}
 
 
+@pytest.mark.unit
 def test_sdio_probe_workflow_is_dispatch_only() -> None:
     text = Path(".github/workflows/sdio-probe.yml").read_text(encoding="utf-8")
     assert "workflow_dispatch:" in text
@@ -490,10 +510,12 @@ def test_sdio_probe_workflow_is_dispatch_only() -> None:
     assert "?key=" not in text
     nightly = Path(".github/workflows/nightly-refresh.yml").read_text(encoding="utf-8")
     assert "SPORTSDATAIO_API_KEY: ${{ secrets.SPORTSDATAIO_API_KEY }}" in nightly
-    smoke = Path(".github/workflows/ci-smoke.yml").read_text(encoding="utf-8")
-    assert "secrets.SPORTSDATAIO_API_KEY" not in smoke
+    ci = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "secrets.SPORTSDATAIO_API_KEY" not in ci
+    assert not Path(".github/workflows/ci-smoke.yml").exists()
 
 
+@pytest.mark.unit
 def test_warehouse_ddl_has_no_forked_stat_tables() -> None:
     assert "CREATE OR REPLACE TABLE fantasy_" not in WAREHOUSE_DDL
     assert "CREATE OR REPLACE TABLE scout_" not in WAREHOUSE_DDL

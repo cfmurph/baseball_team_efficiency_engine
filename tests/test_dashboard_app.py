@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import ast
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,6 +23,8 @@ from dashboard.helpers import (
     years_from_frame,
 )
 from src.baseball_analytics.dashboard_utils import player_id_columns_for_duplicate_names
+
+pytestmark = pytest.mark.unit
 
 
 APP_PATH = Path(__file__).resolve().parents[1] / "dashboard" / "app.py"

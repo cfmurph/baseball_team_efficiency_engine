@@ -12,6 +12,8 @@ from src.baseball_analytics.war import (
     base_runs,
 )
 
+pytestmark = pytest.mark.unit
+
 
 # ---- Fixtures ----
 
