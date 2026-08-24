@@ -13,11 +13,18 @@ from pipeline.transform.build_warehouse import insert_sdio_spine_tables
 from src.baseball_analytics.schema import WAREHOUSE_DDL
 from src.baseball_analytics.sportsdataio import (
     API_KEY_ENV,
+    ENDPOINT_PLAYER_SEASON_STATS,
     ENDPOINT_TEAMS,
+    NIGHTLY_EXTRACT_REPORT_NAME,
     RAW_REMOTE_PREFIX,
+    STATUS_EMPTY,
+    STATUS_HTTP_200,
+    STATUS_HTTP_401,
+    STATUS_SOFT_FAIL,
     SportsDataIOClient,
     SportsDataIOError,
     attach_lahman_aliases,
+    classify_endpoint_status,
     default_season_window,
     discover_as_of_dates,
     extract_had_in_season,
@@ -290,7 +297,10 @@ def test_extract_soft_fails_without_api_key(tmp_path: Path) -> None:
     assert report.ok is False
     assert report.soft_fail is True
     assert report.skipped_reason == "missing_api_key"
-    assert report.endpoints == []
+    season_rows = [item for item in report.endpoints if item.endpoint == ENDPOINT_PLAYER_SEASON_STATS]
+    assert {item.season for item in season_rows} == {2024}
+    assert all(item.status == STATUS_SOFT_FAIL for item in season_rows)
+    assert all(item.ok is False for item in season_rows)
     assert report.active_season == 2024
     assert report.current_season_missing is True
     landed = read_raw_payload(
@@ -352,6 +362,13 @@ def test_cli_soft_fail_without_key_exits_zero(tmp_path: Path, monkeypatch: pytes
     assert report["active_season"] == 2026
     assert report["seasons"] == [2024, 2025, 2026]
     assert "SPORTSDATAIO_API_KEY" in (report.get("error") or "")
+    season_rows = [
+        item for item in report["endpoints"] if item["endpoint"] == "player_season_stats"
+    ]
+    assert {item["season"] for item in season_rows} == {2024, 2025, 2026}
+    assert all(item["status"] == STATUS_SOFT_FAIL for item in season_rows)
+    staged = json.loads((tmp_path / "artifacts" / NIGHTLY_EXTRACT_REPORT_NAME).read_text())
+    assert staged["endpoints"] == report["endpoints"]
 
 
 @pytest.mark.integration
@@ -379,6 +396,17 @@ def test_cli_soft_fail_exits_zero_on_boom(tmp_path: Path, monkeypatch: pytest.Mo
     )
     assert report["ok"] is False
     assert report["soft_fail"] is True
+    season_rows = [
+        item for item in report["endpoints"] if item["endpoint"] == "player_season_stats"
+    ]
+    assert {item["season"] for item in season_rows} == {2024, 2025, 2026}
+    assert all(item["status"] == STATUS_SOFT_FAIL for item in season_rows)
+    staged = json.loads((tmp_path / "artifacts" / NIGHTLY_EXTRACT_REPORT_NAME).read_text())
+    assert {item["season"] for item in staged["endpoints"] if item["endpoint"] == "player_season_stats"} == {
+        2024,
+        2025,
+        2026,
+    }
 
 
 @pytest.mark.integration
@@ -510,9 +538,172 @@ def test_sdio_probe_workflow_is_dispatch_only() -> None:
     assert "?key=" not in text
     nightly = Path(".github/workflows/nightly-refresh.yml").read_text(encoding="utf-8")
     assert "SPORTSDATAIO_API_KEY: ${{ secrets.SPORTSDATAIO_API_KEY }}" in nightly
+    assert "artifacts/extract_report.json" in nightly
+    assert "data/raw/sportsdataio/extract_report/**" in nightly
     ci = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     assert "secrets.SPORTSDATAIO_API_KEY" not in ci
     assert not Path(".github/workflows/ci-smoke.yml").exists()
+
+
+@pytest.mark.unit
+def test_classify_endpoint_status_is_http_not_warehouse() -> None:
+    assert classify_endpoint_status(payload=_payload("player_season_stats.json")) == (
+        STATUS_HTTP_200,
+        200,
+    )
+    assert classify_endpoint_status(payload=[]) == (STATUS_EMPTY, 200)
+    assert classify_endpoint_status(
+        error=SportsDataIOError("HTTP 401 from SportsDataIO", status_code=401)
+    ) == (STATUS_HTTP_401, 401)
+    assert classify_endpoint_status(
+        error=SportsDataIOError("HTTP 503 from SportsDataIO", status_code=503)
+    ) == (STATUS_SOFT_FAIL, 503)
+    leftover_warehouse_error = RuntimeError("player_season_stat has 2025 and 2026 rows")
+    assert classify_endpoint_status(error=leftover_warehouse_error) == (STATUS_SOFT_FAIL, None)
+
+
+@pytest.mark.integration
+def test_player_season_stats_logs_status_per_season(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+    raw_dir = tmp_path / "raw"
+    artifacts_dir = tmp_path / "artifacts"
+
+    def fetcher(path: str, params: dict):
+        if path.endswith("/Teams"):
+            return _payload("teams.json")
+        if path.endswith("/Players"):
+            return _payload("players.json")
+        if "GamesByDate" in path:
+            return _payload("games_by_date.json")
+        if "PlayerGameStatsByDate" in path:
+            return _payload("player_game_stats.json")
+        if path.endswith("/PlayerSeasonStats/2024"):
+            return []
+        if path.endswith("/PlayerSeasonStats/2025"):
+            raise SportsDataIOError(
+                "HTTP 401 from SportsDataIO /v3/mlb/stats/json/PlayerSeasonStats/2025",
+                status_code=401,
+                url=path,
+            )
+        if path.endswith("/PlayerSeasonStats/2026"):
+            raise SportsDataIOError(
+                "HTTP 401 from SportsDataIO /v3/mlb/stats/json/PlayerSeasonStats/2026",
+                status_code=401,
+                url=path,
+            )
+        raise SportsDataIOError(f"unexpected path {path}")
+
+    client = SportsDataIOClient(api_key="test-key", fetcher=fetcher, min_interval=0)
+    with caplog.at_level("INFO"):
+        report = pull_phase0_feeds(
+            raw_dir=raw_dir,
+            as_of_date=AS_OF,
+            seasons=[2024, 2025, 2026],
+            client=client,
+            artifacts_dir=artifacts_dir,
+        )
+
+    by_season = {
+        item.season: item
+        for item in report.endpoints
+        if item.endpoint == ENDPOINT_PLAYER_SEASON_STATS
+    }
+    assert set(by_season) == {2024, 2025, 2026}
+    assert by_season[2024].status == STATUS_EMPTY
+    assert by_season[2024].http_status == 200
+    assert by_season[2024].ok is True
+    assert by_season[2024].http_path == "PlayerSeasonStats/2024"
+    assert by_season[2025].status == STATUS_HTTP_401
+    assert by_season[2025].http_status == 401
+    assert by_season[2025].ok is False
+    assert by_season[2026].status == STATUS_HTTP_401
+    assert by_season[2026].http_status == 401
+    assert by_season[2026].ok is False
+    messages = caplog.text
+    assert "SportsDataIO PlayerSeasonStats/2024 HTTP empty" in messages
+    assert "SportsDataIO PlayerSeasonStats/2025 HTTP 401" in messages
+    assert "SportsDataIO PlayerSeasonStats/2026 HTTP 401" in messages
+    assert "player_season_stats failed softly" not in messages
+
+    landed = read_raw_payload(
+        endpoint="extract_report",
+        as_of_date=AS_OF,
+        filename=NIGHTLY_EXTRACT_REPORT_NAME,
+        raw_dir=raw_dir,
+    )
+    assert landed is not None
+    assert {item["season"]: item["status"] for item in landed["endpoints"] if item["season"]} == {
+        2024: STATUS_EMPTY,
+        2025: STATUS_HTTP_401,
+        2026: STATUS_HTTP_401,
+    }
+    staged = json.loads((artifacts_dir / NIGHTLY_EXTRACT_REPORT_NAME).read_text())
+    assert staged["endpoints"] == landed["endpoints"]
+    assert by_season[2026].status != STATUS_HTTP_200
+
+
+@pytest.mark.integration
+def test_leftover_season_files_are_not_http_200(tmp_path: Path) -> None:
+    raw_dir = tmp_path / "raw"
+    leftover = _payload("player_season_stats.json")
+    leftover[0]["Season"] = 2025
+    write_raw_payload(
+        leftover,
+        endpoint="player_season_stats",
+        as_of_date=AS_OF,
+        filename="player_season_stats_2025.json",
+        raw_dir=raw_dir,
+    )
+    leftover_2026 = json.loads(json.dumps(leftover))
+    leftover_2026[0]["Season"] = 2026
+    write_raw_payload(
+        leftover_2026,
+        endpoint="player_season_stats",
+        as_of_date=AS_OF,
+        filename="player_season_stats_2026.json",
+        raw_dir=raw_dir,
+    )
+
+    def fetcher(path: str, params: dict):
+        if path.endswith("/Teams"):
+            return _payload("teams.json")
+        if path.endswith("/Players"):
+            return _payload("players.json")
+        if "GamesByDate" in path:
+            return _payload("games_by_date.json")
+        if "PlayerGameStatsByDate" in path:
+            return _payload("player_game_stats.json")
+        if "PlayerSeasonStats" in path:
+            raise SportsDataIOError(
+                f"HTTP 401 from SportsDataIO {path}",
+                status_code=401,
+                url=path,
+            )
+        raise SportsDataIOError(f"unexpected path {path}")
+
+    client = SportsDataIOClient(api_key="test-key", fetcher=fetcher, min_interval=0)
+    report = pull_phase0_feeds(
+        raw_dir=raw_dir,
+        as_of_date=AS_OF,
+        seasons=[2024, 2025, 2026],
+        client=client,
+        artifacts_dir=tmp_path / "artifacts",
+    )
+    season_status = {
+        item.season: item.status
+        for item in report.endpoints
+        if item.endpoint == ENDPOINT_PLAYER_SEASON_STATS
+    }
+    assert season_status == {
+        2024: STATUS_HTTP_401,
+        2025: STATUS_HTTP_401,
+        2026: STATUS_HTTP_401,
+    }
+    assert STATUS_HTTP_200 not in season_status.values()
+
+    frames = load_sdio_frames(raw_dir, as_of_date=AS_OF, team_map_path=TEAM_MAP)
+    if not frames.player_season_stat.empty:
+        leftover_years = set(frames.player_season_stat["season"].astype(int))
+        assert leftover_years.isdisjoint({2025, 2026})
 
 
 @pytest.mark.unit
