@@ -21,8 +21,7 @@ from src.baseball_analytics.sportsdataio import (
     SportsDataIOClient,
     SportsDataIOError,
     attach_lahman_aliases,
-    attach_team_aliases,
-    build_spine_frames,
+    default_season_window,
     discover_as_of_dates,
     load_sdio_frames,
     load_team_map,
@@ -85,6 +84,28 @@ def test_raw_object_key_matches_locked_layout() -> None:
     assert key == f"{RAW_REMOTE_PREFIX}/player_game_stats/{AS_OF}/player_game_stats_2026-08-23.json"
     local = local_raw_path("data/raw", "teams", AS_OF, "teams.json")
     assert local.as_posix().endswith(f"data/raw/sportsdataio/teams/{AS_OF}/teams.json")
+
+
+def test_default_season_window_is_y_minus_2_through_y() -> None:
+    assert default_season_window("2026-08-23") == [2024, 2025, 2026]
+    assert default_season_window("2027-04-01") == [2025, 2026, 2027]
+
+
+def test_seasons_from_settings_defaults_to_window_and_honors_overrides() -> None:
+    assert seasons_from_settings({}, "2026-08-23", environ={}) == [2024, 2025, 2026]
+    assert seasons_from_settings(
+        {"sportsdataio": {"seasons": []}}, "2026-12-31", environ={}
+    ) == [2024, 2025, 2026]
+    assert seasons_from_settings(
+        {"sportsdataio": {"seasons": [2023, 2024]}},
+        "2026-08-23",
+        environ={},
+    ) == [2023, 2024]
+    assert seasons_from_settings(
+        {"sportsdataio": {"seasons": [2023]}},
+        "2026-08-23",
+        environ={"SPORTSDATAIO_SEASONS": "2024,2026"},
+    ) == [2024, 2026]
 
 
 def test_sdio_date_token_uses_month_abbrev() -> None:
@@ -220,6 +241,8 @@ def test_extract_soft_fails_without_api_key(tmp_path: Path) -> None:
     assert report.soft_fail is True
     assert report.skipped_reason == "missing_api_key"
     assert report.endpoints == []
+    assert report.active_season == 2024
+    assert report.current_season_missing is True
     landed = read_raw_payload(
         endpoint="extract_report",
         as_of_date=AS_OF,
@@ -228,6 +251,8 @@ def test_extract_soft_fails_without_api_key(tmp_path: Path) -> None:
     )
     assert landed["ok"] is False
     assert landed["soft_fail"] is True
+    assert landed["current_season_missing"] is True
+    assert landed["active_season"] == 2024
 
 
 def test_extract_soft_fails_on_api_error(tmp_path: Path) -> None:
@@ -271,6 +296,9 @@ def test_cli_soft_fail_without_key_exits_zero(tmp_path: Path, monkeypatch: pytes
     )
     assert report["ok"] is False
     assert report["soft_fail"] is True
+    assert report["current_season_missing"] is True
+    assert report["active_season"] == 2026
+    assert report["seasons"] == [2024, 2025, 2026]
     assert "SPORTSDATAIO_API_KEY" in (report.get("error") or "")
 
 

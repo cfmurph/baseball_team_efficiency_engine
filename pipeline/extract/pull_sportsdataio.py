@@ -84,6 +84,8 @@ def main(
             "skipped_reason": "extract_exception",
             "source": "sportsdataio",
             "schema_version": "0.1",
+            "active_season": max(seasons) if seasons else int(resolved_date[:4]),
+            "current_season_missing": True,
             "endpoints": [],
         }
         try:

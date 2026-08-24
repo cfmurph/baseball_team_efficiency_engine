@@ -50,6 +50,10 @@ def test_phase0_schema_v01_is_locked() -> None:
     assert "player_game_stat" in md
     assert "SPORTSDATAIO_API_KEY" in md
     assert "fantasy_*_stat" in md
+    assert "Clarifying addendum (#131" in md
+    assert "season_year ∈ [Y-2, Y]" in md
+    assert "Active season in `current/`" in md
+    assert "current_season_missing" in md
     assert raw["status"] == "LOCKED"
     assert raw["locked_by"] == "Cole"
     assert raw["locked_on"] == "2026-08-23"
@@ -60,6 +64,10 @@ def test_phase0_schema_v01_is_locked() -> None:
     assert raw["spine"]["player_game_stat"]["pk"] == ["player_id", "game_id"]
     assert "source" in raw["provenance"]
     assert "is_approx" in raw["provenance"]
+    assert raw["clarifications"]["issue"] == 131
+    assert raw["clarifications"]["default_season_window"] == "[Y-2, Y]"
+    assert raw["clarifications"]["live_path_for_in_season"] == "sportsdataio"
+    assert raw["soft_fail"]["must_not_pretend_current_season"] is True
 
 
 def test_qa_guide_documents_file_uri_how_to_verify() -> None:
