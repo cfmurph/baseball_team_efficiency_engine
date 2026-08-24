@@ -36,7 +36,7 @@ PRs to `master` run `.github/workflows/ci.yml` as **four separate checks**:
 | Check name | Command | Supersedes from `ci-smoke.yml` |
 |---|---|---|
 | **Unit tests** | `pytest -m unit` | BenchOrStart copy lock (`tests/test_web_copy_lock.py`) |
-| **Integration tests** | `pytest -m integration` | Nightly pipeline contract (`tests/test_run_nightly.py`) + SportsDataIO ingest (`tests/test_sportsdataio.py`) + read API (`tests/test_api.py`) |
+| **Integration tests** | `pytest -m integration` | Nightly pipeline contract (`tests/test_run_nightly.py`) + SportsDataIO ingest (`tests/test_sportsdataio.py`) + read API (`tests/test_api.py`, including `/v1/players`) |
 | **E2E tests** | `pytest -m e2e` | AppTest (`tests/test_dashboard_apptest.py`) + golden WAR (`tests/test_golden_war.py`) |
 | **BenchOrStart Next.js** | `npm install && npm test && npm run build` | Next.js job from the old `ci-smoke.yml` |
 

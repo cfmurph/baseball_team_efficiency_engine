@@ -11,4 +11,9 @@ export type {
   ApiClientOptions,
   BosApiClient,
   CardQuery,
+  PlayerQuery,
+  PlayerRecord,
+  PlayerResponse,
+  PlayerSeason,
+  PlayersResponse,
 } from "./client.ts";

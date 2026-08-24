@@ -161,7 +161,10 @@ Season, team, and league widgets share `st.session_state` keys `season_year`, `s
 # against local artifacts/ (or ARTIFACTS_URI)
 python3 -m services.api
 # GET /v1/health  /v1/seasons  /v1/cards?season=&rec=
+# GET /v1/players  /v1/players/{id}
 curl 'http://127.0.0.1:8000/v1/cards?season=2026&rec=start'
+curl 'http://127.0.0.1:8000/v1/players'
+curl 'http://127.0.0.1:8000/v1/players/judgeaa01'
 ```
 
 Point at the committed fixture lake (no pipeline, no API key):
@@ -171,7 +174,7 @@ export ARTIFACTS_URI=file://$PWD/tests/fixtures/api/lake_current
 python3 -m services.api
 ```
 
-CORS allowlist: `API_CORS_ORIGINS` (comma-separated; defaults to localhost:3000). Optional `API_CORS_ORIGIN_REGEX` for Vercel preview hosts. Soft-fail is visible: `current_season_missing` is true and `/v1/cards?season=2026` is empty when the active season was not published — the API does not invent 2026 rows.
+CORS allowlist: `API_CORS_ORIGINS` (comma-separated; defaults to localhost:3000). Optional `API_CORS_ORIGIN_REGEX` for Vercel preview hosts. Soft-fail is visible: `current_season_missing` is true and `/v1/cards?season=2026` / `/v1/players?season=2026` are empty when the active season was not published — the API does not invent 2026 rows. Player grain is published `player_season_metrics` only (no warehouse, lake, or SportsDataIO pull). `{id}` is the internal `player_id`.
 
 ## Nightly refresh
 
@@ -251,7 +254,7 @@ python3 -m pytest tests/ -v
 PRs to `master` run `.github/workflows/ci.yml` as **Unit tests**, **Integration tests**, **E2E tests**, plus **BenchOrStart Next.js**. That replaces the old `ci-smoke.yml` job. Smoke coverage is preserved:
 
 - **E2E** — AppTest every sidebar page (empty `artifacts/` is fine) + golden WAR (Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023, `war_source=real`). Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
-- **Integration** — nightly `PIPELINE_STEPS` keeps `pull_war` immediately after `pull_sources`, `pull_mlb_stats` after `pull_war` (soft-fail), and `pull_sportsdataio` after Stats API (soft-fail without `SPORTSDATAIO_API_KEY`). Warehouse / storage / fantasy emitter / Stats API / SportsDataIO ingest / thin read API (`/v1/health`, `/v1/cards`, `/v1/seasons`) use fixtures or `file://` only.
+- **Integration** — nightly `PIPELINE_STEPS` keeps `pull_war` immediately after `pull_sources`, `pull_mlb_stats` after `pull_war` (soft-fail), and `pull_sportsdataio` after Stats API (soft-fail without `SPORTSDATAIO_API_KEY`). Warehouse / storage / fantasy emitter / Stats API / SportsDataIO ingest / thin read API (`/v1/health`, `/v1/cards`, `/v1/seasons`, `/v1/players`, `/v1/players/{id}`) use fixtures or `file://` only.
 - **Unit** — includes BenchOrStart copy lock (`tests/test_web_copy_lock.py`).
 - **BenchOrStart Next.js** — `npm install && npm test && npm run build`.
 
