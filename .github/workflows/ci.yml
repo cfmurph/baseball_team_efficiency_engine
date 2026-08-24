@@ -87,3 +87,18 @@ jobs:
 
       - name: Run e2e tests
         run: python3 -m pytest -m e2e -v
+
+  # Ruleset 21254328 still requires this exact check name from ci-smoke.yml.
+  # Coverage lives in the three pyramid jobs; this is a pass-through alias only.
+  smoke_alias:
+    name: Dashboard + pipeline + golden WAR
+    if: ${{ always() && !cancelled() }}
+    needs: [unit, integration, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Succeed only when the three pyramid jobs succeeded
+        run: |
+          test "${{ needs.unit.result }}" = success
+          test "${{ needs.integration.result }}" = success
+          test "${{ needs.e2e.result }}" = success

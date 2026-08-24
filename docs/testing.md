@@ -39,7 +39,7 @@ PRs to `master` run `.github/workflows/ci.yml` as **three separate checks**:
 | **Integration tests** | `pytest -m integration` | Nightly pipeline contract (`tests/test_run_nightly.py`) + SportsDataIO ingest (`tests/test_sportsdataio.py`) + read API (`tests/test_api.py`) |
 | **E2E tests** | `pytest -m e2e` | AppTest (`tests/test_dashboard_apptest.py`) + golden WAR (`tests/test_golden_war.py`) |
 
-The old single job **Dashboard + pipeline + golden WAR** is gone. Its coverage is split:
+The old single job **Dashboard + pipeline + golden WAR** is a thin alias in `ci.yml` that depends on the three pyramid jobs (the master ruleset still requires that exact name). Its coverage is split:
 
 - AppTest all sidebar pages → **E2E tests**
 - Golden WAR fixtures (Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023) → **E2E tests**
