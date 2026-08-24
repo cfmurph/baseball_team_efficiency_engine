@@ -101,6 +101,17 @@ test("tabs filter by recommendation label", () => {
   );
 });
 
+test("share.stat_line is verbatim then vs-repl is rewritten to edge", () => {
+  const verbatim = cardStatLine({
+    recommendation_type: "start",
+    share: { stat_line: "+3.4 edge · 91% conf" },
+    edge: { vs_replacement: 9, confidence: 0.1 },
+  });
+  assert.equal(verbatim, "+3.4 edge · 91% conf");
+  assert.equal(normalizeStatLine("+1.6 vs repl"), "+1.6 edge");
+  assert.equal(normalizeStatLine("1.1 vs replacement · 74% conf"), "1.1 edge · 74% conf");
+});
+
 test("share filename slugs the player", () => {
   const view = presentCard(steer);
   assert.equal(cardShareFilename(view), "benchorstart-spencer-steer-pickup.png");

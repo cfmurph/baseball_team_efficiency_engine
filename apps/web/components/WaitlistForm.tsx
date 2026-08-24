@@ -18,10 +18,15 @@ export function WaitlistForm() {
     setStatus("idle");
     setError("");
     try {
+      const created_at = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
       const response = await fetch("/api/waitlist", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({
+          email,
+          source: "benchorstart",
+          created_at,
+        }),
       });
       const payload = (await response.json()) as { ok?: boolean; error?: string };
       if (!response.ok || !payload.ok) {

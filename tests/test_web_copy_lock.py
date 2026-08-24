@@ -102,6 +102,43 @@ def test_next_web_exists_and_fo_stays_untouched() -> None:
     )
 
 
+def test_architect_stub_contract_is_locked() -> None:
+    """#140 / architect stub contract — cards 1.0, waitlist shape, sit→BENCH."""
+    client = (ROOT / "packages" / "api-client" / "src" / "client.ts").read_text(
+        encoding="utf-8"
+    )
+    present = (ROOT / "packages" / "card-schema" / "src" / "present.ts").read_text(
+        encoding="utf-8"
+    )
+    types = (ROOT / "packages" / "card-schema" / "src" / "types.ts").read_text(
+        encoding="utf-8"
+    )
+    home = (ROOT / "apps" / "web" / "components" / "Home.tsx").read_text(encoding="utf-8")
+    waitlist = (ROOT / "apps" / "web" / "app" / "api" / "waitlist" / "route.ts").read_text(
+        encoding="utf-8"
+    )
+    form = (ROOT / "apps" / "web" / "components" / "WaitlistForm.tsx").read_text(
+        encoding="utf-8"
+    )
+    assert "schema_version" in json.dumps(load_stub_cards())
+    assert {card["recommendation_type"] for card in load_stub_cards()} == {
+        "start",
+        "sit",
+        "pickup",
+        "stream",
+    }
+    assert 'sit: "BENCH"' in types
+    assert "normalizeStatLine" in present
+    assert "INVITE_CHIP" in home
+    assert 'source: "benchorstart"' in form
+    assert "created_at" in form
+    assert 'WAITLIST_SOURCE = "benchorstart"' in waitlist
+    assert "created_at" in waitlist
+    assert "defaultSeasonYears" in client
+    assert "current_season_missing" in client
+    assert "PRIOR_SEASON_BANNER" in home
+
+
 def test_docs_name_streamlit_as_fallback() -> None:
     guide = (ROOT / "docs" / "fantasy.md").read_text(encoding="utf-8")
     assert "apps/web" in guide

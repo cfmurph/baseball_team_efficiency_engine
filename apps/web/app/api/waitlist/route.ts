@@ -9,6 +9,8 @@ const WAITLIST_SOURCE = "benchorstart";
 
 type WaitlistBody = {
   email?: unknown;
+  source?: unknown;
+  created_at?: unknown;
 };
 
 function normalizeEmail(value: unknown): string | null {
@@ -83,7 +85,10 @@ export async function POST(request: Request): Promise<Response> {
   if (!email) {
     return Response.json({ ok: false, error: EMAIL_ERROR }, { status: 400 });
   }
-  const createdAt = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
+  const createdAt =
+    typeof payload.created_at === "string" && payload.created_at.trim()
+      ? payload.created_at.trim()
+      : new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   try {
     await postWebhook(email, createdAt);
     try {
