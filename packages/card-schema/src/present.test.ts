@@ -150,4 +150,14 @@ test("season banner when missing or stale max year", () => {
   );
   assert.equal(shouldShowSeasonBanner(base, [2024, 2025]), true);
   assert.equal(shouldShowSeasonBanner(base, []), false);
+  assert.equal(
+    shouldShowSeasonBanner({ ...base, current_season_missing: true }, [2024], {
+      liveFeed: false,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldShowSeasonBanner({ ...base, seasons_present: [2024, 2025] }, [2024, 2025, 2026]),
+    true,
+  );
 });

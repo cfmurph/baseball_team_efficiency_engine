@@ -55,7 +55,10 @@ test("live client hits /v1 without inventing rows", async () => {
             as_of: "2025-09-01",
             active_season: 2026,
             current_season_missing: true,
-            season_window: [2024, 2026],
+            season_window: [2024, 2025, 2026],
+            source: "local",
+            seasons_present: [2024, 2025],
+            current_season_missing_reason: "sdio_unavailable",
           }),
         );
       }
@@ -105,6 +108,9 @@ test("live client hits /v1 without inventing rows", async () => {
   assert.equal(client.source, "api");
   const health = await client.getHealth();
   assert.equal(health.current_season_missing, true);
+  assert.deepEqual(health.seasons_present, [2024, 2025]);
+  assert.equal(health.seasons_present?.includes(2026), false);
+  assert.equal(health.source, "local");
   const cards = await client.getCards({ season: 2026, rec: "start" });
   assert.equal(cards.source, "api");
   assert.deepEqual(cards.cards, []);

@@ -257,15 +257,22 @@ export function labelTone(label: string): string {
 export function shouldShowSeasonBanner(
   health: Health,
   seasons: number[] = [],
+  options: { liveFeed?: boolean } = {},
 ): boolean {
+  // Bundled stubs are not a live prior-only feed (#137 / Streamlit live_feed=False).
+  if (options.liveFeed === false) {
+    return false;
+  }
   if (health.current_season_missing) {
     return true;
   }
-  const years = seasons.filter((year) => Number.isFinite(year));
-  if (!years.length || !Number.isFinite(health.active_season)) {
+  const published = (health.seasons_present?.length ? health.seasons_present : seasons).filter(
+    (year) => Number.isFinite(year),
+  );
+  if (!published.length || !Number.isFinite(health.active_season)) {
     return false;
   }
-  return Math.max(...years) < health.active_season;
+  return Math.max(...published) < health.active_season;
 }
 
 export function earlyModelBadge(): string {

@@ -2,7 +2,7 @@
 
 Public Next.js client for BenchOrStart. Consumes the thin `#106` read API (`GET /v1/health`, `/v1/cards`, `/v1/seasons`). When `NEXT_PUBLIC_API_URL` is unset it renders the four fixture cards from `fantasy/stub_cards.jsonl` — no invented live 2026 rows.
 
-The Streamlit shell at `dashboard/fantasy_app.py` stays as a local fallback. The front-office GM app (`dashboard/app.py`) is out of scope.
+The Streamlit shell at `dashboard/fantasy_app.py` stays as a local fallback. The front-office GM app (`dashboard/app.py`) is out of scope — including Contract Watch (#136). This app reuses the #137 prior-only banner from `fantasy/copy.py` when `/v1/health` says the current season is missing.
 
 ## Run locally
 
@@ -27,7 +27,7 @@ See `.env.example`. Only `NEXT_PUBLIC_API_URL` is required to leave stub mode. D
 | Variable | Role |
 |---|---|
 | `NEXT_PUBLIC_API_URL` | `#106` origin. Unset → fixture cards + stub health. |
-| `NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING` | QA: raise the not-current-year banner on stubs. |
+| `NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING` | QA: raise the #137 banner on stubs. Runtime alias: `STUB_CURRENT_SEASON_MISSING`. |
 | `FANTASY_WAITLIST_WEBHOOK` | Server-only HTTPS POST `{email,source,created_at}`. |
 | `FANTASY_WAITLIST_PATH` | Optional JSONL append (local). No-op success on Vercel if the disk is read-only. |
 

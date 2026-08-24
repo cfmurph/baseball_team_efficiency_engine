@@ -21,6 +21,7 @@ from fantasy.copy import (
     HEADLINE,
     INVITE_CHIP,
     MICROCOPY,
+    PRIOR_SEASON_BANNER,
     PRODUCT_NAME,
     PROMPT_LINE,
     STUB_CAPTION,
@@ -62,9 +63,12 @@ def test_card_schema_copy_matches_python_lock() -> None:
         TAB_ALL,
         EMPTY_TITLE,
         EMPTY_BODY,
+        PRIOR_SEASON_BANNER,
         *TAB_LABELS,
     ):
         assert value in ts
+    assert PRIOR_SEASON_BANNER == "These picks are not the current season yet."
+    assert "Contract Watch" not in ts
 
 
 def test_web_stub_cards_match_fantasy_jsonl() -> None:
@@ -83,6 +87,19 @@ def test_next_web_exists_and_fo_stays_untouched() -> None:
     fo = FO_APP.read_text(encoding="utf-8")
     assert "BenchOrStart" not in fo
     assert "apps/web" not in fo
+    web_root = ROOT / "apps" / "web"
+    web_text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in web_root.rglob("*")
+        if path.suffix in {".ts", ".tsx"}
+        and "node_modules" not in path.parts
+        and ".next" not in path.parts
+    )
+    assert "Contract Watch" not in web_text
+    assert "filter_contract_watch_rows" not in web_text
+    assert "PRIOR_SEASON_BANNER" in (web_root / "components" / "Home.tsx").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_docs_name_streamlit_as_fallback() -> None:

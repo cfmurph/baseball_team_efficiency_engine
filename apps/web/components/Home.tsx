@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import {
-  CURRENT_SEASON_BANNER,
+  PRIOR_SEASON_BANNER,
   CTA,
   EMPTY_BODY,
   EMPTY_TAB,
@@ -48,7 +48,7 @@ export function Home({
 
       {showSeasonBanner ? (
         <p className="bos-banner" role="status">
-          {CURRENT_SEASON_BANNER}
+          {PRIOR_SEASON_BANNER}
         </p>
       ) : null}
 

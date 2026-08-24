@@ -97,6 +97,8 @@ export function stubHealth(
     active_season: DEFAULT_ACTIVE_SEASON,
     current_season_missing: Boolean(options.stubCurrentSeasonMissing),
     season_window: stubSeasonWindow(),
+    seasons_present: defaultSeasonYears(),
+    source: "stub",
     ...overrides,
   };
 }
@@ -133,11 +135,18 @@ function parseHealth(payload: unknown): Health {
     Number(windowRaw.start ?? windowRaw.min ?? windowList[0]) || DEFAULT_ACTIVE_SEASON - 2;
   const end =
     Number(windowRaw.end ?? windowRaw.max ?? windowList[1]) || DEFAULT_ACTIVE_SEASON;
+  const present = yearsFromUnknown(raw.seasons_present);
   return {
     as_of: String(raw.as_of ?? raw.as_of_date ?? ""),
     active_season: Number(raw.active_season) || DEFAULT_ACTIVE_SEASON,
     current_season_missing: Boolean(raw.current_season_missing),
     season_window: { start, end },
+    seasons_present: present,
+    source: parseSource(raw.source),
+    current_season_missing_reason:
+      raw.current_season_missing_reason == null
+        ? null
+        : String(raw.current_season_missing_reason),
   };
 }
 
@@ -145,25 +154,34 @@ function yearsFromUnknown(value: unknown): number[] {
   return Array.isArray(value) ? value.map(Number).filter(Number.isFinite) : [];
 }
 
+function parseSource(value: unknown): Health["source"] {
+  const raw = String(value || "").trim().toLowerCase();
+  if (raw === "remote" || raw === "local" || raw === "missing" || raw === "stub") {
+    return raw;
+  }
+  return undefined;
+}
+
 function parseSeasons(payload: unknown): SeasonsResponse {
   if (Array.isArray(payload)) {
     const seasons = yearsFromUnknown(payload);
     return {
       seasons,
+      seasons_present: seasons,
       active_season: seasons.length ? Math.max(...seasons) : DEFAULT_ACTIVE_SEASON,
     };
   }
   const raw = asRecord(payload);
-  // #144 returns seasons_present (honest years) + season_window ([Y-2, Y]).
-  // Keep `seasons` as a compat alias so older fixtures still parse.
-  const named = yearsFromUnknown(raw.seasons);
+  // Honest years only. season_window is the product default [Y-2, Y] and
+  // may include 2026 even when that year was never published.
   const present = yearsFromUnknown(raw.seasons_present);
-  const seasons = named.length ? named : present;
-  const windowYears = yearsFromUnknown(raw.season_window);
-  const resolved = seasons.length ? seasons : windowYears;
+  const named = yearsFromUnknown(raw.seasons);
+  const seasons = present.length ? present : named;
   return {
-    seasons: resolved,
-    active_season: Number(raw.active_season) || (resolved.length ? Math.max(...resolved) : DEFAULT_ACTIVE_SEASON),
+    seasons,
+    seasons_present: present.length ? present : named,
+    active_season: Number(raw.active_season) || (seasons.length ? Math.max(...seasons) : DEFAULT_ACTIVE_SEASON),
+    current_season_missing: Boolean(raw.current_season_missing),
   };
 }
 

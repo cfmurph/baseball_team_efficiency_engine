@@ -45,12 +45,20 @@ export async function loadHomeData(): Promise<HomeData> {
       client.getCards(),
     ]);
     const views = presentCards(feed.cards);
+    const qaMissing =
+      envFlag("NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING") ||
+      envFlag("STUB_CURRENT_SEASON_MISSING");
+    const present = health.seasons_present?.length
+      ? health.seasons_present
+      : (seasons.seasons_present ?? seasons.seasons);
     return {
       views,
       health,
       seasons,
       source: feed.source,
-      showSeasonBanner: shouldShowSeasonBanner(health, seasons.seasons),
+      showSeasonBanner: shouldShowSeasonBanner(health, present, {
+        liveFeed: feed.source === "api" || qaMissing,
+      }),
       showingStubs: feed.source === "stub",
     };
   } catch {

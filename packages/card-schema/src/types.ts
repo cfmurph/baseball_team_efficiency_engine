@@ -71,11 +71,16 @@ export type Health = {
   active_season: number;
   current_season_missing: boolean;
   season_window: SeasonWindow;
+  seasons_present?: number[];
+  source?: "remote" | "local" | "missing" | "stub";
+  current_season_missing_reason?: string | null;
 };
 
 export type SeasonsResponse = {
   seasons: number[];
   active_season: number;
+  seasons_present?: number[];
+  current_season_missing?: boolean;
 };
 
 export type CardsResponse = {

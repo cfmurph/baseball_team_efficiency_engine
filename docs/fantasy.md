@@ -54,13 +54,13 @@ Recommendation labels (schema v1.0): `start` → START, `sit` → BENCH, `pickup
 
 | Endpoint | Shape |
 |---|---|
-| `GET /v1/health` | `{ as_of, active_season, current_season_missing, season_window }` |
+| `GET /v1/health` | `{ as_of, active_season, current_season_missing, season_window, source, seasons_present, current_season_missing_reason }` |
 | `GET /v1/cards?season=&rec=` | schema 1.0 cards (`current/fantasy/cards.jsonl`) |
-| `GET /v1/seasons` | default `[Y-2, Y]` (2024–2026 when Y=2026) |
+| `GET /v1/seasons` | `{ season_window: [Y-2, Y], seasons_present }` — window may include 2026; `seasons_present` does not invent it |
 
 If `NEXT_PUBLIC_API_URL` is unset, the client uses the same four fixtures as `fantasy/stub_cards.jsonl` plus a health object that can set `current_season_missing` (`STUB_CURRENT_SEASON_MISSING=true` at runtime, or `NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING=true` at build). When the API is up, set the env URL — no other client change.
 
-The web UI shows a not-current-year banner when `current_season_missing` is true **or** the max season in `/v1/seasons` is below `active_season`. It does **not** invent 2026 rows.
+The web UI reuses the #137 BenchOrStart banner (`PRIOR_SEASON_BANNER` in `fantasy/copy.py`: “These picks are not the current season yet.”) when `/v1/health` says `current_season_missing` **or** max `seasons_present` is below `active_season`. Fixture stubs do not raise that banner (same as Streamlit `live_feed=False`). It does **not** invent 2026 rows. #136 Contract Watch missing-salary filtering stays FO Streamlit only — not ported here.
 
 ## QA notes
 
@@ -68,7 +68,8 @@ The web UI shows a not-current-year banner when `current_season_missing` is true
 - **Waitlist.** Email-only. Next route `POST /api/waitlist` validates, optionally POSTs `FANTASY_WAITLIST_WEBHOOK`, appends `data/waitlist/signups.jsonl` when the disk allows, otherwise no-op with the success state. Streamlit fallback uses `fantasy/waitlist.py`.
 - **No `vs repl`.** Face copy, Copy text, and Download image say **edge**. Schema field `edge.vs_replacement` is unchanged.
 - **Approx badge.** `war_source=approx` or `is_approx` shows the **early model** badge and hides confidence.
-- **Copy lock.** `packages/card-schema` strings must match `fantasy/copy.py` (Invite only, sit→BENCH, tabs, footer).
+- **Copy lock.** `packages/card-schema` strings must match `fantasy/copy.py` (Invite only, sit→BENCH, tabs, footer, #137 prior-season banner).
+- **No Contract Watch.** Missing-salary 2026 overlay rows (#136) stay on FO Streamlit. `apps/web` is cards / waitlist / share only.
 
 ## Waitlist hook (marketing)
 

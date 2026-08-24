@@ -23,6 +23,5 @@ export const EMPTY_TITLE = "This week's card isn't up yet.";
 export const EMPTY_BODY =
   "Weekly pickup, bench, and stream picks land here once the feed is published. Join the list below.";
 
-/** Soft-fail chrome for #131 / #106 — not marketing-locked. */
-export const CURRENT_SEASON_BANNER =
-  "Current-season cards aren't published yet. Showing the latest available feed — we do not invent this year's rows.";
+/** #137 prior-only banner — lockstep with `fantasy/copy.py`. */
+export const PRIOR_SEASON_BANNER = "These picks are not the current season yet.";
