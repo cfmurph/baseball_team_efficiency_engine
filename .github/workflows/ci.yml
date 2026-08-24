@@ -31,6 +31,7 @@ jobs:
 
       - name: Fail if any test is unmarked
         run: |
+          set -o pipefail
           python3 -m pytest tests/ -m "not unit and not integration and not e2e" --collect-only -q | tee /tmp/unmarked.txt
           if grep -E '::' /tmp/unmarked.txt; then
             echo "Every test must have exactly one of: unit, integration, e2e"

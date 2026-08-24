@@ -235,6 +235,7 @@ def test_extract_same_date_overwrite_is_idempotent(tmp_path: Path) -> None:
     assert len(landed) == 2
 
 
+@pytest.mark.unit
 def test_extract_had_in_season_from_season_rows_or_game_payload() -> None:
     in_season = {
         "as_of_date": AS_OF,
@@ -276,6 +277,7 @@ def test_extract_had_in_season_from_season_rows_or_game_payload() -> None:
     assert extract_had_in_season(None, active_season=2026) is False
 
 
+@pytest.mark.integration
 def test_extract_soft_fails_without_api_key(tmp_path: Path) -> None:
     raw_dir = tmp_path / "raw"
     client = SportsDataIOClient(api_key=None, environ={}, min_interval=0)
