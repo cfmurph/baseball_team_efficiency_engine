@@ -21,8 +21,9 @@ Turn a simple historical baseball CSV merge into an analytics platform that can 
   `{ARTIFACTS_URI}/raw/sportsdataio/{endpoint}/{as_of_date}/` — default
   seasons `[Y-2, Y]` from `as_of_date`; soft-fail without
   `SPORTSDATAIO_API_KEY`; warehouse skips the spine if empty; metrics
-  overlay those years onto `player_season_metrics` so `current/` can
-  include the active season
+  overlay those years onto `player_season_metrics` and
+  `team_onfield_contract_metrics` so `current/` can include the active
+  season on both fantasy cards and FO league desks
 - Maintain one file per source
 - Preserve raw column names for traceability
 

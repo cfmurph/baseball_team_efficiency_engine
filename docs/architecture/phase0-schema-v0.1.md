@@ -147,3 +147,28 @@ This is **not** v0.2. No new forked tables.
    `max(season) < Y`, do **not** promote `current/`. The run may still
    land under `runs/{run_id}/`; the promote step fails so the bad run
    cannot look current. Do not invent season-`Y` rows.
+
+## Clarifying addendum (#138 — team grain, not a schema fork)
+
+#133 overlaid SDIO onto `player_season_metrics` / cards only. FO league
+desks (Overview, Deep Dive, Compare, Frontier, What-If) take years from
+`team_onfield_contract_metrics.csv`, which stayed Lahman-capped.
+
+Same overlay, team grain — not a new publish path and not v0.2:
+
+1. After the Lahman `fact_team_season` export, UNION SDIO team-season
+   rows for window years **missing from Lahman**. Historical Lahman + BR
+   team rows stay intact.
+2. v0.1 has no `team_season_stat`. Roll up `player_season_stat` (or
+   `player_game_stat` when the stub is thin) by `team_id` + season.
+   Optional `game` scores fill W/L/RS/RA only for years with no counting
+   overlay (do not treat a one-day `games_by_date` W-L as a season record
+   on top of a fat season-stat rollup).
+3. Overlay WAR is `war_source=approx` (counting proxy). Do not invent
+   payroll/salary. No WAR dual-write onto the SDIO spine. No
+   `fantasy_*` / `scout_*` forks.
+4. Reuse the #131 window `[Y-2, Y]`. `current_season_missing` on
+   `metrics_manifest.json` stays honest when 2026 team rows are absent
+   (True if the active season is missing from player **or** team
+   publish). `team_current_season_missing` is the team-grain detail.
+   Soft-fail must not present prior-only team metrics as current.
