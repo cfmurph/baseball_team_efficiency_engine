@@ -8,7 +8,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from fantasy.cards import CARD_LAKE_KEY, RUN_CARD_TEMPLATE
+import pytest
+from streamlit.testing.v1 import AppTest
+
+from fantasy.cards import CARD_LAKE_KEY, RUN_CARD_TEMPLATE, SOURCE_MISSING, CardLoad
 from fantasy.copy import (
     COPY_TEXT,
     CTA,
@@ -19,6 +22,7 @@ from fantasy.copy import (
     HEADLINE,
     INVITE_CHIP,
     MICROCOPY,
+    PRIOR_SEASON_BANNER,
     PRODUCT_NAME,
     SUBHEAD,
     SUCCESS,
@@ -76,8 +80,10 @@ def test_fantasy_app_uses_shared_cards_jsonl_and_marketing_copy() -> None:
         "FOOTER",
         "EMPTY_TITLE",
         "EMPTY_BODY",
+        "PRIOR_SEASON_BANNER",
     ):
         assert name in source
+    assert PRIOR_SEASON_BANNER == "These picks are not the current season yet."
     assert HEADLINE.startswith("Know who to start")
     assert CTA == "Get early access"
     assert PRODUCT_NAME == "BenchOrStart"
@@ -144,3 +150,77 @@ print("ok")
     )
     assert result.returncode == 0, result.stderr
     assert "ok" in result.stdout
+
+
+def test_fantasy_app_wires_prior_season_banner_helpers() -> None:
+    source = APP_PATH.read_text(encoding="utf-8")
+    assert "is_prior_only_publish" in source
+    assert "load_metrics_manifest" in source
+    assert "max_season_from_cards" in source
+    assert "seasons_from_manifest" in source
+    assert "live_feed=True" in source
+    assert "SOURCE_MISSING" in source
+
+
+def test_fantasy_apptest_stubs_do_not_show_prior_season_banner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(ROOT)
+    import streamlit as st
+
+    st.cache_data.clear()
+    monkeypatch.setattr(
+        "fantasy.cards.load_share_cards",
+        lambda *args, **kwargs: CardLoad(cards=[], source=SOURCE_MISSING),
+    )
+    monkeypatch.setattr(
+        "dashboard.data.load_metrics_manifest",
+        lambda: {"current_season_missing": True, "active_season": 2026},
+    )
+    at = AppTest.from_file(str(APP_PATH), default_timeout=15).run()
+    assert not at.exception
+    info_text = " ".join(str(item.value) for item in at.info)
+    assert PRIOR_SEASON_BANNER not in info_text
+
+
+def test_fantasy_apptest_live_prior_only_shows_banner(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(ROOT)
+    import streamlit as st
+
+    st.cache_data.clear()
+    live = [
+        {
+            "schema_version": "1.0",
+            "card_id": "live-start-1",
+            "recommendation_type": "start",
+            "as_of_date": "2026-08-23",
+            "season": 2024,
+            "player": {"player_id": "judgeaa01", "name": "Aaron Judge", "position": "OF", "team": "NYY"},
+            "edge": {
+                "vs_replacement": 3.4,
+                "war": 6.1,
+                "war_source": "bbref",
+                "is_approx": False,
+                "confidence": 0.91,
+            },
+            "rank": {"among_rec_type": 1},
+            "reason": "Lock him in.",
+            "share": {"stat_line": "+3.4 edge · 91% conf"},
+        }
+    ]
+    monkeypatch.setattr(
+        "fantasy.cards.load_share_cards",
+        lambda *args, **kwargs: CardLoad(cards=live, source="local"),
+    )
+    monkeypatch.setattr(
+        "dashboard.data.load_metrics_manifest",
+        lambda: {
+            "current_season_missing": True,
+            "active_season": 2026,
+            "as_of_date": "2026-08-23",
+        },
+    )
+    at = AppTest.from_file(str(APP_PATH), default_timeout=15).run()
+    assert not at.exception
+    info_text = " ".join(str(item.value) for item in at.info)
+    assert PRIOR_SEASON_BANNER in info_text

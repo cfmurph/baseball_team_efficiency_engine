@@ -5,8 +5,19 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from dashboard.data import load_player_season_metrics
-from dashboard.helpers import CONTRACT_COLORS, scale_money_columns, teams_from_frame, years_from_frame
+from dashboard.data import load_metrics_manifest, load_player_season_metrics
+from dashboard.helpers import (
+    CONTRACT_COLORS,
+    blank_unknown_salary,
+    filter_contract_watch_rows,
+    is_prior_only_publish,
+    max_season_from_frame,
+    resolve_active_year,
+    seasons_from_manifest,
+    scale_money_columns,
+    teams_from_frame,
+    years_from_frame,
+)
 from dashboard.state import SEASON_YEAR, SELECTED_TEAM
 from dashboard.ui import (
     SCATTER_MARKER,
@@ -15,6 +26,7 @@ from dashboard.ui import (
     page_header as _page_header,
     panel_head,
     player_column_config,
+    prior_season_note as _prior_season_note,
     salary_note as _salary_note,
     show_table as _show_table,
 )
@@ -67,15 +79,24 @@ def page_contract_analysis() -> None:
     if year != "All Seasons":
         _salary_note(int(year))
 
-    filt = players.copy()
-    if year != "All Seasons":
-        filt = filt[filt["year_id"] == int(year)]
-    if team != "All Teams" and "team_name" in filt.columns:
-        filt = filt[filt["team_name"] == team]
-    if name_search and "name_full" in filt.columns:
-        filt = filt[filt["name_full"].str.contains(name_search, case=False, na=False)]
-    if "salary" in filt.columns:
-        filt = filt[filt["salary"] > 0]
+    manifest = load_metrics_manifest()
+    selected_season = None if year == "All Seasons" else int(year)
+    _prior_season_note(
+        show=is_prior_only_publish(
+            current_season_missing=(manifest or {}).get("current_season_missing"),
+            selected_season=selected_season,
+            max_season=max_season_from_frame(players),
+            seasons_present=seasons_from_manifest(manifest),
+            active_year=resolve_active_year(manifest=manifest),
+        )
+    )
+
+    filt = filter_contract_watch_rows(
+        players,
+        year=year,
+        team=team,
+        name_search=name_search,
+    )
     if filt.empty:
         _empty("generic")
         return
@@ -91,7 +112,9 @@ def page_contract_analysis() -> None:
         if df.empty:
             _empty("generic")
             return
-        display = scale_money_columns(df[contract_cols]).sort_values(sort, ascending=asc, na_position="last").reset_index(drop=True)
+        display = blank_unknown_salary(
+            scale_money_columns(df[contract_cols])
+        ).sort_values(sort, ascending=asc, na_position="last").reset_index(drop=True)
         st.caption(f"{len(display):,} contracts")
         _show_table(display, _cfg())
 

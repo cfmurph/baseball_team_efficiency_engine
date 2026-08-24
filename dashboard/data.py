@@ -17,6 +17,7 @@ Schemes: ``s3://``, ``r2://``, ``gs://``, ``file://``.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -24,6 +25,8 @@ import streamlit as st
 
 from src.baseball_analytics.config import ArtifactSettings, load_artifact_settings
 from src.baseball_analytics.storage import artifact_source_label, resolve_artifact
+
+METRICS_MANIFEST_NAME = "metrics_manifest.json"
 
 # Logical name → filename. Paths are resolved; pages never see these strings.
 ARTIFACT_NAMES: dict[str, str] = {
@@ -43,6 +46,7 @@ ARTIFACT_NAMES: dict[str, str] = {
     "sr_players": "sr_player_season_metrics.csv",
     "sr_injuries": "sr_injuries.csv",
     "sr_tx": "sr_transactions.csv",
+    "metrics_manifest": METRICS_MANIFEST_NAME,
 }
 
 
@@ -73,8 +77,33 @@ def _read_csv(path_str: str) -> pd.DataFrame:
     return pd.read_csv(path_str)
 
 
+@st.cache_data(ttl=300)
+def _read_json(path_str: str) -> dict:
+    return json.loads(Path(path_str).read_text(encoding="utf-8"))
+
+
+def resolve_metrics_manifest(settings: ArtifactSettings | None = None) -> Path | None:
+    """Same ``resolve_file`` / ``current/`` path as the metric CSVs."""
+    return resolve_file("metrics_manifest", settings)
+
+
+def load_metrics_manifest() -> dict | None:
+    """Published season-coverage flag from ``metrics_manifest.json``, if present."""
+    path = resolve_metrics_manifest()
+    if path is None:
+        return None
+    try:
+        payload = _read_json(str(path))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def load_named_artifact(key: str) -> pd.DataFrame | None:
-    """Load a logical artifact by key (``metrics``, ``players``, …)."""
+    """Load a logical CSV artifact by key (``metrics``, ``players``, …)."""
+    name = ARTIFACT_NAMES.get(key)
+    if name is None or Path(name).suffix.lower() == ".json":
+        return None
     path = resolve_file(key)
     if path is None:
         return None
