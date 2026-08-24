@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.baseball_analytics.config import load_artifact_settings, load_settings, resolve_artifacts_uri
 
 
@@ -16,6 +18,10 @@ def test_load_settings() -> None:
     assert settings["mlb_stats"]["team_crosswalk"] == "data/crosswalks/mlb_team_map.csv"
     assert settings["sportsdataio"]["base_url"] == "https://api.sportsdata.io"
     assert settings["sportsdataio"]["team_crosswalk"] == "data/crosswalks/mlb_team_map.csv"
+    assert settings["sportsdataio"]["seasons"] == []
+    text = Path("config/settings.yaml").read_text(encoding="utf-8")
+    assert "[Y-2, Y]" in text
+    assert "SPORTSDATAIO_SEASONS" in text
 
 
 def test_resolve_artifacts_uri_precedence() -> None:

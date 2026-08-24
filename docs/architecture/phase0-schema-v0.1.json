@@ -66,6 +66,15 @@
   "soft_fail": {
     "missing_key_env": "SPORTSDATAIO_API_KEY",
     "exit_code": 0,
-    "warehouse": "skip spine load when raw empty"
+    "warehouse": "skip spine load when raw empty",
+    "must_not_pretend_current_season": true
+  },
+  "clarifications": {
+    "issue": 131,
+    "not_a_schema_fork": true,
+    "season_id_is_not_as_of": true,
+    "active_season_required_in_current": true,
+    "default_season_window": "[Y-2, Y]",
+    "live_path_for_in_season": "sportsdataio"
   }
 }

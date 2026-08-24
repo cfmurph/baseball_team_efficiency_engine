@@ -274,6 +274,8 @@ def classify_artifact_relpath(relpath: str) -> str:
     name = Path(rel).name
     if name == MANIFEST_NAME:
         return MANIFEST_NAME
+    if name == "metrics_manifest.json":
+        return "metrics/metrics_manifest.json"
     if rel.startswith(("metrics/", "models/", "fantasy/")):
         if rel.startswith("fantasy/") and name != Path(FANTASY_CARDS_RELPATH).name:
             return FANTASY_CARDS_RELPATH
