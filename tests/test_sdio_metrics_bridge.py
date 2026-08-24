@@ -479,6 +479,7 @@ def test_team_bridge_overlays_sdio_years_missing_from_lahman() -> None:
     )
     years = set(combined["year_id"].astype(int))
     assert years == {2024, 2025, 2026}
+    assert (combined["year_id"] == 2024).sum() == 1
     kept = combined.loc[combined["year_id"] == 2024].iloc[0]
     assert kept["team_total_war"] == pytest.approx(45.0)
     assert kept["war_source"] == "real"
@@ -537,6 +538,37 @@ def test_team_soft_fail_missing_sdio_does_not_pretend_current_season(tmp_path: P
     assert payload["team_current_season_missing"] is True
     assert payload["active_season"] == 2026
     assert payload["season_window"] == [2024, 2025, 2026]
+    assert 2026 not in payload["team_seasons_present"]
+
+
+def test_current_season_missing_stays_honest_when_team_2026_absent(tmp_path: Path) -> None:
+    """Player overlay can have 2026; FO team rails must not look current without it."""
+    player_df, player_coverage = bridge_sdio_player_season_metrics(
+        _lahman_frame(2024),
+        _sdio_season_frame(2026),
+        None,
+        as_of_date=AS_OF,
+        window=[2024, 2025, 2026],
+    )
+    team_df, team_coverage = bridge_sdio_team_season_metrics(
+        _lahman_team_frame(2024),
+        None,
+        None,
+        None,
+        as_of_date=AS_OF,
+        window=[2024, 2025, 2026],
+    )
+    assert 2026 in set(player_df["year_id"].astype(int))
+    assert player_coverage.current_season_missing is False
+    assert 2026 not in set(team_df["year_id"].astype(int))
+    coverage = attach_team_coverage(player_coverage, team_coverage)
+    assert coverage.current_season_missing is True
+    assert coverage.team_current_season_missing is True
+    assert coverage.current_season_missing_reason == "sdio_unavailable"
+    dest = write_metrics_manifest(tmp_path, coverage)
+    payload = json.loads(dest.read_text(encoding="utf-8"))
+    assert payload["current_season_missing"] is True
+    assert payload["team_current_season_missing"] is True
     assert 2026 not in payload["team_seasons_present"]
 
 
