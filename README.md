@@ -27,7 +27,8 @@ Raw CSV / Lahman API
     → models/train_win_model.py               (LinearRegression + XGBoost + frontier)
     → models/cluster_teams.py                 (KMeans team archetypes)
     → dashboard/app.py                        (Streamlit 8-section FO / GM UI)
-    → dashboard/fantasy_app.py                (BenchOrStart waitlist + share cards)
+    → apps/web                                (public BenchOrStart Next.js)
+    → dashboard/fantasy_app.py                (BenchOrStart Streamlit fallback)
     → services/api                            (thin read API over current/)
 ```
 
@@ -58,7 +59,10 @@ models/
   cluster_teams.py              KMeans team archetype clustering
 dbt/                            dbt scaffold (staging + mart SQL models)
 dashboard/app.py                Streamlit multi-section FO / GM dashboard
-dashboard/fantasy_app.py        BenchOrStart waitlist + share-card shell
+dashboard/fantasy_app.py        BenchOrStart Streamlit fallback (local / until Next parity)
+apps/web                        Public BenchOrStart (Next.js) — cards, tabs, waitlist
+packages/api-client             Typed /v1 client (stub when NEXT_PUBLIC_API_URL is unset)
+packages/card-schema            Schema 1.0 types + presenters (edge, sit→BENCH)
 fantasy/                        Card loader, stub cards.jsonl, waitlist helper
 docs/                           Architecture, ADRs, schema, metrics framework, shared artifacts, roadmap
 services/api                    Thin read-only HTTP API over published current/ (#106)
@@ -244,10 +248,12 @@ python3 -m pytest -m e2e -v
 python3 -m pytest tests/ -v
 ```
 
-PRs to `master` run `.github/workflows/ci.yml` as three checks: **Unit tests**, **Integration tests**, **E2E tests**. That replaces the old `ci-smoke.yml` job. Smoke coverage is preserved:
+PRs to `master` run `.github/workflows/ci.yml` as **Unit tests**, **Integration tests**, **E2E tests**, plus **BenchOrStart Next.js**. That replaces the old `ci-smoke.yml` job. Smoke coverage is preserved:
 
 - **E2E** — AppTest every sidebar page (empty `artifacts/` is fine) + golden WAR (Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023, `war_source=real`). Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
 - **Integration** — nightly `PIPELINE_STEPS` keeps `pull_war` immediately after `pull_sources`, `pull_mlb_stats` after `pull_war` (soft-fail), and `pull_sportsdataio` after Stats API (soft-fail without `SPORTSDATAIO_API_KEY`). Warehouse / storage / fantasy emitter / Stats API / SportsDataIO ingest / thin read API (`/v1/health`, `/v1/cards`, `/v1/seasons`) use fixtures or `file://` only.
+- **Unit** — includes BenchOrStart copy lock (`tests/test_web_copy_lock.py`).
+- **BenchOrStart Next.js** — `npm install && npm test && npm run build`.
 
 ## Data sources
 

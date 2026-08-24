@@ -1,0 +1,17 @@
+{
+  "name": "baseball-team-efficiency-engine",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@bos/web",
+    "build": "npm run build --workspace=@bos/web",
+    "start": "npm run start --workspace=@bos/web",
+    "test": "npm test --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

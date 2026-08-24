@@ -31,13 +31,14 @@ python3 -m pytest tests/ -v
 
 ## What CI enforces
 
-PRs to `master` run `.github/workflows/ci.yml` as **three separate checks**:
+PRs to `master` run `.github/workflows/ci.yml` as **four separate checks**:
 
 | Check name | Command | Supersedes from `ci-smoke.yml` |
 |---|---|---|
-| **Unit tests** | `pytest -m unit` | — (new; was not in smoke) |
+| **Unit tests** | `pytest -m unit` | BenchOrStart copy lock (`tests/test_web_copy_lock.py`) |
 | **Integration tests** | `pytest -m integration` | Nightly pipeline contract (`tests/test_run_nightly.py`) + SportsDataIO ingest (`tests/test_sportsdataio.py`) + read API (`tests/test_api.py`) |
 | **E2E tests** | `pytest -m e2e` | AppTest (`tests/test_dashboard_apptest.py`) + golden WAR (`tests/test_golden_war.py`) |
+| **BenchOrStart Next.js** | `npm install && npm test && npm run build` | Next.js job from the old `ci-smoke.yml` |
 
 The old single job **Dashboard + pipeline + golden WAR** is a thin alias in `ci.yml` that depends on the three pyramid jobs (the master ruleset still requires that exact name). Its coverage is split:
 
@@ -47,7 +48,7 @@ The old single job **Dashboard + pipeline + golden WAR** is a thin alias in `ci.
 
 The unit job also fails if any test is missing a layer marker.
 
-Jobs are independent so GitHub shows three required-style checks. Wall clock stays well under 15 minutes (the full suite is a few seconds on a warm checkout).
+Jobs are independent so GitHub shows separate required-style checks. Wall clock stays well under 15 minutes (the Python suite is a few seconds on a warm checkout).
 
 ## Adding a test
 
