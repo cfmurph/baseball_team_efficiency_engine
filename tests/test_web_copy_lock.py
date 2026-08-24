@@ -36,6 +36,8 @@ ROOT = Path(__file__).resolve().parents[1]
 COPY_TS = ROOT / "packages" / "card-schema" / "src" / "copy.ts"
 STUB_JSON = ROOT / "packages" / "api-client" / "src" / "stub-cards.json"
 WEB_APP = ROOT / "apps" / "web" / "app" / "page.tsx"
+PLAYERS_APP = ROOT / "apps" / "web" / "app" / "players" / "page.tsx"
+PLAYER_APP = ROOT / "apps" / "web" / "app" / "players" / "[id]" / "page.tsx"
 FO_APP = ROOT / "dashboard" / "app.py"
 FALLBACK = ROOT / "dashboard" / "fantasy_app.py"
 
@@ -79,6 +81,8 @@ def test_web_stub_cards_match_fantasy_jsonl() -> None:
 
 def test_next_web_exists_and_fo_stays_untouched() -> None:
     assert WEB_APP.is_file()
+    assert PLAYERS_APP.is_file()
+    assert PLAYER_APP.is_file()
     assert FALLBACK.is_file()
     fo = FO_APP.read_text(encoding="utf-8")
     assert "BenchOrStart" not in fo

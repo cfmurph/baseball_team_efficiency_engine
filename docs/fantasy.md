@@ -57,14 +57,17 @@ Recommendation labels (schema v1.0): `start` → START, `sit` → BENCH, `pickup
 | `GET /v1/health` | `{ as_of, active_season, current_season_missing, season_window }` |
 | `GET /v1/cards?season=&rec=` | schema 1.0 cards (`current/fantasy/cards.jsonl`) |
 | `GET /v1/seasons` | default `[Y-2, Y]` (2024–2026 when Y=2026) |
+| `GET /v1/players?season=&sort=&min_pa=` | directory (client-stubbed until the API ships it) |
+| `GET /v1/players/{id}` | identity + `[Y-2, Y]` lines + recent games |
 
-If `NEXT_PUBLIC_API_URL` is unset, the client uses the same four fixtures as `fantasy/stub_cards.jsonl` plus a health object that can set `current_season_missing` (`NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING=true` for QA). When the API is up, set the env URL — no other client change.
+If `NEXT_PUBLIC_API_URL` is unset, the client uses the same four fixtures as `fantasy/stub_cards.jsonl` plus a health object that can set `current_season_missing` (`NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING=true` for QA). Player pages use the same honesty rule and do not invent a 2026 season line when that flag is on. When the API is up, set the env URL — no other client change.
 
 The web UI shows a not-current-year banner when `current_season_missing` is true **or** the max season in `/v1/seasons` is below `active_season`. It does **not** invent 2026 rows.
 
 ## QA notes
 
 - **Cards from API or stub.** Unset `NEXT_PUBLIC_API_URL` → four stubs (Steer / Suárez / Judge / Soler) and the sample caption. Set the URL → `/v1/cards` only; empty API payloads stay empty (no silent 2026 invention).
+- **Players directory.** `/players` + `/players/[id]`. Card names on `/` deep-link via `player.player_id`. Silent 50 PA / 20 IP floor. No compare chrome.
 - **Waitlist.** Email-only. Next route `POST /api/waitlist` validates, optionally POSTs `FANTASY_WAITLIST_WEBHOOK`, appends `data/waitlist/signups.jsonl` when the disk allows, otherwise no-op with the success state. Streamlit fallback uses `fantasy/waitlist.py`.
 - **No `vs repl`.** Face copy, Copy text, and Download image say **edge**. Schema field `edge.vs_replacement` is unchanged.
 - **Approx badge.** `war_source=approx` or `is_approx` shows the **early model** badge and hides confidence.

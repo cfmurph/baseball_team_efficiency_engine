@@ -44,10 +44,46 @@ a {
   padding: 1.4rem 0 3.5rem;
 }
 
+.bos-shell-wide {
+  --max: 58rem;
+}
+
 .bos-top {
   display: flex;
   justify-content: center;
   margin-bottom: 1.4rem;
+}
+
+.bos-brandblock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+
+.bos-nav {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.bos-nav-link {
+  color: var(--dim);
+  text-decoration: none;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.32rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.bos-nav-link:hover,
+.bos-nav-link.is-on {
+  color: var(--ink);
+  background: #161b22;
+  border-color: var(--line);
 }
 
 .bos-brandrow {
@@ -62,6 +98,7 @@ a {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--red);
+  text-decoration: none;
 }
 
 .bos-chip {
@@ -249,6 +286,16 @@ a {
   margin: 0.35rem 0 0.2rem;
 }
 
+.bos-card-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.bos-card-title a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+}
+
 .bos-sub {
   color: var(--muted);
   font-size: 0.98rem;
@@ -402,8 +449,200 @@ a {
   border: 0;
 }
 
+.bos-pagehead {
+  text-align: center;
+  margin: 0 0 1.4rem;
+}
+
+.bos-pagehead h1,
+.bos-identity h1 {
+  font-family: var(--font-serif), "Times New Roman", serif;
+  font-size: clamp(2rem, 6vw, 2.5rem);
+  font-weight: 400;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.45rem;
+}
+
+.bos-pagehead p,
+.bos-identity p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.bos-filters {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0 0 1.2rem;
+}
+
+.bos-search input {
+  width: 100%;
+  min-height: 2.6rem;
+  padding: 0 0.85rem;
+  background: #161b22;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  font: inherit;
+}
+
+.bos-search input:focus {
+  outline: 2px solid #3d3420;
+  border-color: var(--gold);
+}
+
+.bos-chiprow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.bos-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-raise);
+}
+
+.bos-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.bos-table th,
+.bos-table td {
+  text-align: left;
+  padding: 0.62rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.bos-table th {
+  color: var(--dim);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.bos-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.bos-table tbody tr.is-on {
+  background: #161b22;
+}
+
+.bos-table a {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.bos-table a:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.14em;
+}
+
+.bos-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.bos-table-compact th,
+.bos-table-compact td {
+  padding: 0.48rem 0.6rem;
+}
+
+.bos-crumb {
+  color: var(--dim);
+  font-size: 0.8rem;
+  margin: 0 0 0.85rem;
+}
+
+.bos-crumb a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.bos-crumb a:hover {
+  color: var(--ink);
+}
+
+.bos-identity {
+  margin: 0 0 1rem;
+}
+
+.bos-rec {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  margin: 1rem 0 1.2rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-raise);
+}
+
+.bos-rec p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.bos-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin: 1.1rem 0 1.4rem;
+}
+
+.bos-statbox {
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.75rem 0.7rem 0.65rem;
+  text-align: center;
+}
+
+.bos-statbox-value {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.bos-statbox-label {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--dim);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bos-block {
+  margin: 1.5rem 0 0;
+}
+
+.bos-block h2 {
+  margin: 0 0 0.55rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 @media (max-width: 520px) {
   .bos-actions {
     grid-template-columns: 1fr;
+  }
+
+  .bos-hero-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

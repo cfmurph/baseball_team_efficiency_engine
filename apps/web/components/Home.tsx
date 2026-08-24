@@ -10,8 +10,6 @@ import {
   EMPTY_TITLE,
   FOOTER,
   HEADLINE,
-  INVITE_CHIP,
-  PRODUCT_NAME,
   STUB_CAPTION,
   SUBHEAD,
   TAB_ALL,
@@ -21,6 +19,7 @@ import {
 } from "@bos/card-schema";
 
 import { ShareCard } from "@/components/ShareCard";
+import { SiteHeader } from "@/components/SiteHeader";
 import { WaitlistForm } from "@/components/WaitlistForm";
 import type { HomeData } from "@/lib/load";
 
@@ -39,12 +38,7 @@ export function Home({
 
   return (
     <div className="bos-shell">
-      <header className="bos-top">
-        <div className="bos-brandrow">
-          <span className="bos-brand">{PRODUCT_NAME}</span>
-          <span className="bos-chip">{INVITE_CHIP}</span>
-        </div>
-      </header>
+      <SiteHeader active="cards" />
 
       {showSeasonBanner ? (
         <p className="bos-banner" role="status">

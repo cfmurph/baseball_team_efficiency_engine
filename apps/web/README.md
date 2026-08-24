@@ -1,6 +1,8 @@
 # BenchOrStart (`apps/web`)
 
-Public Next.js client for BenchOrStart. Consumes the thin `#106` read API (`GET /v1/health`, `/v1/cards`, `/v1/seasons`). When `NEXT_PUBLIC_API_URL` is unset it renders the four fixture cards from `fantasy/stub_cards.jsonl` — no invented live 2026 rows.
+Public Next.js client for BenchOrStart. Consumes the thin `#106` read API (`GET /v1/health`, `/v1/cards`, `/v1/seasons`) and stubs `GET /v1/players` / `GET /v1/players/{id}` until Fullstack lands them. When `NEXT_PUBLIC_API_URL` is unset it renders the four fixture cards from `fantasy/stub_cards.jsonl` plus a player directory — no invented live 2026 rows.
+
+Routes: `/` cards home, `/players` directory, `/players/[id]` player page (`id` = schema 1.0 `player.player_id`). No `/compare` in this wave.
 
 The Streamlit shell at `dashboard/fantasy_app.py` stays as a local fallback. The front-office GM app (`dashboard/app.py`) is out of scope.
 

@@ -1,4 +1,12 @@
-import { createApiClient } from "@bos/api-client";
+import {
+  createApiClient,
+  defaultDirectorySeason,
+  listItemFromDetail,
+  parsePlayerDetail,
+  seasonWindowYears,
+  type PlayerDetail,
+  type PlayerListItem,
+} from "@bos/api-client";
 import {
   DEFAULT_ACTIVE_SEASON,
   presentCards,
@@ -67,6 +75,111 @@ export async function loadHomeData(): Promise<HomeData> {
       source: "api",
       showSeasonBanner: true,
       showingStubs: false,
+    };
+  }
+}
+
+export type PlayersPageData = {
+  bySeason: Record<number, PlayerListItem[]>;
+  seasons: number[];
+  defaultSeason: number;
+  health: Health;
+  showSeasonBanner: boolean;
+  showingStubs: boolean;
+};
+
+export type PlayerPageData = {
+  detail: PlayerDetail | null;
+  seasons: number[];
+  defaultSeason: number;
+  health: Health;
+  showSeasonBanner: boolean;
+};
+
+function missingHealth(): Health {
+  return {
+    as_of: "",
+    active_season: DEFAULT_ACTIVE_SEASON,
+    current_season_missing: true,
+    season_window: { start: DEFAULT_ACTIVE_SEASON - 2, end: DEFAULT_ACTIVE_SEASON },
+  };
+}
+
+export async function loadPlayersData(): Promise<PlayersPageData> {
+  const client = createApiClient({
+    baseUrl: publicApiUrl(),
+    stubCurrentSeasonMissing: envFlag("NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING"),
+  });
+
+  try {
+    const [health, seasons] = await Promise.all([client.getHealth(), client.getSeasons()]);
+    const years = seasonWindowYears(health);
+    const defaultSeason = defaultDirectorySeason(health, seasons.seasons);
+    const lists = await Promise.all(
+      years.map((season) => client.getPlayers({ season })),
+    );
+    const bySeason: Record<number, PlayerListItem[]> = {};
+    years.forEach((year, index) => {
+      const source = client.source === "stub" ? "stub" : "api";
+      bySeason[year] = (lists[index]?.players ?? [])
+        .map((record) => {
+          const detail = parsePlayerDetail({ player: record }, source);
+          return detail ? listItemFromDetail(detail, year) : null;
+        })
+        .filter((row): row is PlayerListItem => row !== null);
+    });
+    return {
+      bySeason,
+      seasons: years,
+      defaultSeason,
+      health,
+      showSeasonBanner: shouldShowSeasonBanner(health, seasons.seasons),
+      showingStubs: client.source === "stub",
+    };
+  } catch {
+    const health = missingHealth();
+    return {
+      bySeason: {},
+      seasons: seasonWindowYears(health),
+      defaultSeason: defaultDirectorySeason(health, []),
+      health,
+      showSeasonBanner: true,
+      showingStubs: false,
+    };
+  }
+}
+
+export async function loadPlayerData(id: string): Promise<PlayerPageData> {
+  const client = createApiClient({
+    baseUrl: publicApiUrl(),
+    stubCurrentSeasonMissing: envFlag("NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING"),
+  });
+
+  try {
+    const [health, seasons, response] = await Promise.all([
+      client.getHealth(),
+      client.getSeasons(),
+      client.getPlayer(id),
+    ]);
+    const source = client.source === "stub" ? "stub" : "api";
+    const detail = response.player
+      ? parsePlayerDetail({ player: response.player, ...response }, source)
+      : null;
+    return {
+      detail,
+      seasons: seasonWindowYears(health),
+      defaultSeason: defaultDirectorySeason(health, seasons.seasons),
+      health,
+      showSeasonBanner: shouldShowSeasonBanner(health, seasons.seasons),
+    };
+  } catch {
+    const health = missingHealth();
+    return {
+      detail: null,
+      seasons: seasonWindowYears(health),
+      defaultSeason: defaultDirectorySeason(health, []),
+      health,
+      showSeasonBanner: true,
     };
   }
 }

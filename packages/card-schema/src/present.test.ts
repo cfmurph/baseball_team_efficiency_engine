@@ -104,6 +104,16 @@ test("tabs filter by recommendation label", () => {
 test("share filename slugs the player", () => {
   const view = presentCard(steer);
   assert.equal(cardShareFilename(view), "benchorstart-spencer-steer-pickup.png");
+  assert.equal(view.player_id, "");
+});
+
+test("schema 1.0 player.player_id is the player-page deep link", () => {
+  const view = presentCard({
+    ...steer,
+    player: { player_id: "steersp01", name: "Spencer Steer", position: "1B", team: "CIN" },
+  });
+  assert.equal(view.player_id, "steersp01");
+  assert.equal(view.headline, "Spencer Steer");
 });
 
 test("reason vs replacement is rewritten on face and copy, not the payload", () => {

@@ -190,6 +190,7 @@ export function presentCard(card: FantasyCard): ShareCardView {
     early_model: isApprox(card),
     card_id: String(card.card_id || "").trim(),
     prompt: PROMPT_LINE,
+    player_id: String(asRecord(card.player).player_id || "").trim(),
   };
 }
 
