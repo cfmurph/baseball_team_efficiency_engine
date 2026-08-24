@@ -191,6 +191,11 @@ def test_docs_name_streamlit_as_fallback() -> None:
     assert "vs repl" in guide
     assert "early model" in guide
     assert "#144" in guide
+    assert "unmerged" not in guide.lower()
+    assert "only if that process is down" in guide or "only if the API is down" in guide
+    web_readme = (ROOT / "apps" / "web" / "README.md").read_text(encoding="utf-8")
+    assert "unmerged" not in web_readme.lower()
+    assert "only if that process is down" in web_readme
 
 
 def test_product_lock_copy_and_prior_only_ship() -> None:

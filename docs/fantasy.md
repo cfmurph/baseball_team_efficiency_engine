@@ -4,7 +4,7 @@ Thin waitlist + share-card product. Separate from the front-office GM dashboard.
 
 Public surface is **Next.js** (`apps/web`, [#140](https://github.com/cfmurph/baseball_team_efficiency_engine/issues/140)). The Streamlit shell at `dashboard/fantasy_app.py` stays as a **local fallback** until Next parity. Do not delete it. `dashboard/app.py` stays FO-only.
 
-Live cards come from the #111 nightly emitter via the #144 / #106 `/v1` API (when present). The web client stubs that contract so it runs without the API.
+Live cards come from the #111 nightly emitter through the merged `/v1` API on master (`python3 -m services.api`). The Next.js client hits `/v1/health`, `/v1/cards`, and `/v1/seasons`. Fixture stubs render only if that process is down.
 
 ## How to run
 
@@ -60,13 +60,13 @@ Recommendation labels (schema v1.0): `start` → START, `sit` → BENCH, `pickup
 
 `season_window` is `[Y-2, Y]`. `seasons_present` is years that actually exist (2026 may be in the window and absent from `seasons_present`). Empty `cards` is a miss, not a stub. `share.stat_line` is verbatim from the API.
 
-If `NEXT_PUBLIC_API_URL` is unset, the client uses the same four fixtures as `fantasy/stub_cards.jsonl` plus a health object that can set `current_season_missing` (`STUB_CURRENT_SEASON_MISSING=true` at runtime, or `NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING=true` at build). When the API is up, set the env URL — no other client change.
+If `NEXT_PUBLIC_API_URL` is unset, the loader probes `http://127.0.0.1:8000/v1/health` and uses that origin when the process is up. Fixture cards (`fantasy/stub_cards.jsonl`) render only if the API is down. `STUB_CURRENT_SEASON_MISSING=true` (or `NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING=true`) can still raise the not-current-year banner on those fixtures.
 
 The web UI reuses the #137 BenchOrStart banner (`PRIOR_SEASON_BANNER` in `fantasy/copy.py`: “These picks are not the current season yet.”) when `/v1/health` says `current_season_missing` **or** max `seasons_present` is below `active_season`. Fixture stubs do not raise that banner (same as Streamlit `live_feed=False`). Prior-year cards still render — live 2026 rows are **not a ship gate** for `apps/web`. That stays on #131 keyed publish. Do **not** invent 2026 rows. #136 Contract Watch missing-salary filtering stays FO Streamlit only — not ported here.
 
 ## QA notes
 
-- **Cards from API or stub.** Unset `NEXT_PUBLIC_API_URL` → four stubs (Steer / Suárez / Judge / Soler) and the sample caption. Set the URL → `/v1/cards` only; empty API payloads stay empty (no silent 2026 invention).
+- **Cards from live `/v1`.** Start `python3 -m services.api` (fixture lake or `current/`). Stub caption only if that process is down. Empty API payloads stay empty (no silent 2026 invention).
 - **Waitlist.** Email-only. Next route `POST /api/waitlist` validates, optionally POSTs `FANTASY_WAITLIST_WEBHOOK`, appends `data/waitlist/signups.jsonl` when the disk allows, otherwise no-op with the success state. Streamlit fallback uses `fantasy/waitlist.py`.
 - **No `vs repl`.** Face copy, Copy text, and Download image say **edge**. Schema field `edge.vs_replacement` is unchanged.
 - **Approx badge.** `war_source=approx` or `is_approx` shows the **early model** badge and hides confidence.
