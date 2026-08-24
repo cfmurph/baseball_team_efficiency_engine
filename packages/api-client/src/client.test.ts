@@ -215,6 +215,31 @@ test("prior-year API cards ship as-is; share.stat_line stays verbatim", async ()
   assert.equal(cards.cards.some((card) => Number(card.season) === 2026), false);
 });
 
+test("live local /v1 is not the stub feed when the process is up", async () => {
+  let health: Response;
+  try {
+    health = await fetch("http://127.0.0.1:8000/v1/health", {
+      headers: { accept: "application/json" },
+    });
+  } catch {
+    return;
+  }
+  if (!health.ok) {
+    return;
+  }
+  const client = createApiClient({ baseUrl: "http://127.0.0.1:8000" });
+  const [seasons, cards] = await Promise.all([
+    client.getSeasons(),
+    client.getCards(),
+  ]);
+  assert.equal(client.source, "api");
+  assert.equal(cards.source, "api");
+  assert.equal(cards.schema_version, "1.0");
+  assert.equal(cards.cards.some((card) => String(card.card_id || "").startsWith("stub-")), false);
+  assert.ok(Array.isArray(seasons.season_window));
+  assert.ok(Array.isArray(seasons.seasons_present));
+});
+
 test("probeLocalV1 prefers a live /v1 health and falls back when down", async () => {
   const up = await probeLocalV1(async (input) => {
     assert.equal(String(input), "http://127.0.0.1:8000/v1/health");
