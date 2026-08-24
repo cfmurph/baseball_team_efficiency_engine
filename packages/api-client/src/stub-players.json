@@ -65,9 +65,9 @@
     {
       "player": { "player_id": "solerjo01", "name": "Jorge Soler", "position": "OF", "team": "LAA" },
       "hitting": [
-        { "season": 2024, "g": 138, "pa": 558, "ab": 496, "r": 68, "h": 119, "hr": 21, "rbi": 64, "sb": 1, "bb": 58, "so": 148, "avg": 0.241, "obp": 0.333, "slg": 0.439, "ops": 0.772, "war": 1.1 },
-        { "season": 2025, "g": 132, "pa": 530, "ab": 472, "r": 61, "h": 108, "hr": 19, "rbi": 58, "sb": 0, "bb": 52, "so": 142, "avg": 0.229, "obp": 0.318, "slg": 0.421, "ops": 0.739, "war": 0.6 },
-        { "season": 2026, "g": 98, "pa": 390, "ab": 348, "r": 42, "h": 76, "hr": 12, "rbi": 41, "sb": 1, "bb": 38, "so": 108, "avg": 0.218, "obp": 0.305, "slg": 0.385, "ops": 0.690, "war": 0.2 }
+        { "season": 2024, "g": 138, "pa": 558, "ab": 496, "r": 68, "h": 119, "hr": 21, "rbi": 64, "sb": 1, "bb": 58, "so": 148, "avg": 0.241, "obp": 0.333, "slg": 0.439, "ops": 0.772, "war": 1.1, "war_source": "approx" },
+        { "season": 2025, "g": 132, "pa": 530, "ab": 472, "r": 61, "h": 108, "hr": 19, "rbi": 58, "sb": 0, "bb": 52, "so": 142, "avg": 0.229, "obp": 0.318, "slg": 0.421, "ops": 0.739, "war": 0.6, "war_source": "approx" },
+        { "season": 2026, "g": 98, "pa": 390, "ab": 348, "r": 42, "h": 76, "hr": 12, "rbi": 41, "sb": 1, "bb": 38, "so": 108, "avg": 0.218, "obp": 0.305, "slg": 0.385, "ops": 0.690, "war": 0.2, "war_source": "approx" }
       ],
       "pitching": [],
       "recent_games": {

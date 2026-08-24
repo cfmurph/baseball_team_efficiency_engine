@@ -5,19 +5,19 @@ import { useMemo, useState } from "react";
 
 import {
   RECENT_GAME_LIMIT,
-  formatAvg,
   formatCount,
-  formatEra,
   formatIp,
-  formatOps,
-  formatWar,
-  formatWhip,
-  formatWl,
+  hittingCountingLine,
+  hittingRatesLine,
+  isApproxWar,
+  pitchingCountingLine,
+  pitchingRatesLine,
+  selectedYearMissing,
   type HittingSeason,
   type PitchingSeason,
   type PlayerSide,
 } from "@bos/api-client";
-import { CURRENT_SEASON_BANNER, FOOTER, labelTone } from "@bos/card-schema";
+import { CURRENT_SEASON_BANNER, EARLY_MODEL_BADGE, FOOTER, labelTone } from "@bos/card-schema";
 
 import { SiteHeader } from "@/components/SiteHeader";
 import type { PlayerPageData } from "@/lib/load";
@@ -26,60 +26,38 @@ function lineForSeason<T extends { season: number }>(rows: T[], season: number):
   return rows.find((row) => row.season === season) || null;
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bos-statbox">
-      <span className="bos-statbox-value">{value}</span>
-      <span className="bos-statbox-label">{label}</span>
-    </div>
-  );
-}
-
-function hittingHero(row: HittingSeason) {
-  return [
-    { label: "AVG", value: formatAvg(row.avg) },
-    { label: "OBP", value: formatAvg(row.obp) },
-    { label: "SLG", value: formatAvg(row.slg) },
-    { label: "HR", value: formatCount(row.hr) },
-    { label: "RBI", value: formatCount(row.rbi) },
-    { label: "SB", value: formatCount(row.sb) },
-  ];
-}
-
-function pitchingHero(row: PitchingSeason) {
-  return [
-    { label: "ERA", value: formatEra(row.era) },
-    { label: "WHIP", value: formatWhip(row.whip) },
-    { label: "IP", value: formatIp(row.ip) },
-    { label: "K", value: formatCount(row.so) },
-    { label: "W–L", value: formatWl(row) },
-    { label: "WAR", value: formatWar(row.war) },
-  ];
+function countingAndRates(side: PlayerSide, hitting: HittingSeason | null, pitching: PitchingSeason | null) {
+  if (side === "pitching" && pitching) {
+    return { counting: pitchingCountingLine(pitching), rates: pitchingRatesLine(pitching), approx: isApproxWar(pitching.war_source) };
+  }
+  if (hitting) {
+    return { counting: hittingCountingLine(hitting), rates: hittingRatesLine(hitting), approx: isApproxWar(hitting.war_source) };
+  }
+  return { counting: "", rates: "", approx: false };
 }
 
 export function PlayerProfile({
   detail,
   seasons,
   defaultSeason,
-  showSeasonBanner,
+  health,
 }: PlayerPageData) {
   const [season, setSeason] = useState(defaultSeason);
   const [side, setSide] = useState<PlayerSide | null>(null);
 
-  const hasBothSides = Boolean(detail && detail.hitting.length && detail.pitching.length);
+  const hitting = detail ? lineForSeason(detail.hitting, season) : null;
+  const pitching = detail ? lineForSeason(detail.pitching, season) : null;
+  const hasBothSides = Boolean(hitting && pitching);
 
   const resolvedSide: PlayerSide = useMemo(() => {
-    if (!detail) {
-      return "hitting";
-    }
     if (side) {
       return side;
     }
-    if (detail.hitting.length && detail.pitching.length) {
-      return detail.hitting.some((row) => row.season === season) ? "hitting" : "pitching";
+    if (pitching && !hitting) {
+      return "pitching";
     }
-    return detail.pitching.length && !detail.hitting.length ? "pitching" : "hitting";
-  }, [detail, season, side]);
+    return "hitting";
+  }, [hitting, pitching, side]);
 
   if (!detail) {
     return (
@@ -97,14 +75,9 @@ export function PlayerProfile({
     );
   }
 
-  const hitting = lineForSeason(detail.hitting, season);
-  const pitching = lineForSeason(detail.pitching, season);
   const activeRow = resolvedSide === "pitching" ? pitching : hitting;
-  const hero = pitching && resolvedSide === "pitching"
-    ? pitchingHero(pitching)
-    : hitting
-      ? hittingHero(hitting)
-      : [];
+  const lines = countingAndRates(resolvedSide, hitting, pitching);
+  const yearMissing = selectedYearMissing(health, season, Boolean(activeRow));
 
   const hittingGames = detail.recent_games.hitting
     .filter((game) => !game.season || game.season === season)
@@ -118,7 +91,7 @@ export function PlayerProfile({
     <div className="bos-shell">
       <SiteHeader active="players" />
 
-      {showSeasonBanner ? (
+      {yearMissing ? (
         <p className="bos-banner" role="status">
           {CURRENT_SEASON_BANNER}
         </p>
@@ -131,20 +104,27 @@ export function PlayerProfile({
       </p>
 
       <header className="bos-identity">
-        <h1>{detail.player.name}</h1>
+        <h1>
+          {detail.player.name}
+          {lines.approx ? <span className="bos-badge">{EARLY_MODEL_BADGE}</span> : null}
+        </h1>
         <p>
-          {detail.player.position} · {detail.player.team} · {season}
+          {detail.player.team} · {detail.player.position}
         </p>
       </header>
 
-      <div className="bos-chiprow" role="group" aria-label="Season">
+      <div className="bos-tabs" role="tablist" aria-label="Season">
         {seasons.map((year) => (
           <button
             key={year}
             type="button"
+            role="tab"
+            aria-selected={season === year}
             className={season === year ? "bos-tab is-on" : "bos-tab"}
-            aria-pressed={season === year}
-            onClick={() => setSeason(year)}
+            onClick={() => {
+              setSeason(year);
+              setSide(null);
+            }}
           >
             {year}
           </button>
@@ -186,97 +166,22 @@ export function PlayerProfile({
         </div>
       ) : null}
 
-      {activeRow && hero.length ? (
-        <div className="bos-hero-stats">
-          {hero.map((stat) => (
-            <Stat key={stat.label} label={stat.label} value={stat.value} />
-          ))}
-        </div>
+      {activeRow ? (
+        <section className="bos-lines">
+          {lines.counting ? <p className="bos-counting">{lines.counting}</p> : null}
+          {lines.rates ? <p className="bos-rates">{lines.rates}</p> : null}
+        </section>
       ) : (
         <div className="bos-empty" role="status">
           <h2>No {season} line yet</h2>
-          <p>We do not invent a season that has not been published.</p>
+          <p>Empty tab until the nightly publishes that year. We do not invent rows.</p>
         </div>
       )}
-
-      {resolvedSide === "hitting" && detail.hitting.length ? (
-        <section className="bos-block">
-          <h2>Years</h2>
-          <div className="bos-table-wrap">
-            <table className="bos-table bos-table-compact">
-              <thead>
-                <tr>
-                  <th>Year</th>
-                  <th className="bos-num">G</th>
-                  <th className="bos-num">PA</th>
-                  <th className="bos-num">HR</th>
-                  <th className="bos-num">RBI</th>
-                  <th className="bos-num">SB</th>
-                  <th className="bos-num">AVG</th>
-                  <th className="bos-num">OPS</th>
-                  <th className="bos-num">WAR</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.hitting.map((row) => (
-                  <tr key={row.season} className={row.season === season ? "is-on" : undefined}>
-                    <td>{row.season}</td>
-                    <td className="bos-num">{formatCount(row.g)}</td>
-                    <td className="bos-num">{formatCount(row.pa)}</td>
-                    <td className="bos-num">{formatCount(row.hr)}</td>
-                    <td className="bos-num">{formatCount(row.rbi)}</td>
-                    <td className="bos-num">{formatCount(row.sb)}</td>
-                    <td className="bos-num">{formatAvg(row.avg)}</td>
-                    <td className="bos-num">{formatOps(row.ops)}</td>
-                    <td className="bos-num">{formatWar(row.war)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
-
-      {resolvedSide === "pitching" && detail.pitching.length ? (
-        <section className="bos-block">
-          <h2>Years</h2>
-          <div className="bos-table-wrap">
-            <table className="bos-table bos-table-compact">
-              <thead>
-                <tr>
-                  <th>Year</th>
-                  <th className="bos-num">G</th>
-                  <th className="bos-num">IP</th>
-                  <th className="bos-num">W–L</th>
-                  <th className="bos-num">K</th>
-                  <th className="bos-num">ERA</th>
-                  <th className="bos-num">WHIP</th>
-                  <th className="bos-num">WAR</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.pitching.map((row) => (
-                  <tr key={row.season} className={row.season === season ? "is-on" : undefined}>
-                    <td>{row.season}</td>
-                    <td className="bos-num">{formatCount(row.g)}</td>
-                    <td className="bos-num">{formatIp(row.ip)}</td>
-                    <td className="bos-num">{formatWl(row)}</td>
-                    <td className="bos-num">{formatCount(row.so)}</td>
-                    <td className="bos-num">{formatEra(row.era)}</td>
-                    <td className="bos-num">{formatWhip(row.whip)}</td>
-                    <td className="bos-num">{formatWar(row.war)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
 
       <section className="bos-block">
         <h2>Recent games</h2>
         {games.length === 0 ? (
-          <p className="bos-caption">No recent games for {season}.</p>
+          <p className="bos-caption">No recent games yet</p>
         ) : resolvedSide === "pitching" ? (
           <div className="bos-table-wrap">
             <table className="bos-table bos-table-compact">
@@ -289,7 +194,6 @@ export function PlayerProfile({
                   <th className="bos-num">ER</th>
                   <th className="bos-num">BB</th>
                   <th className="bos-num">K</th>
-                  <th>Dec</th>
                 </tr>
               </thead>
               <tbody>
@@ -302,7 +206,6 @@ export function PlayerProfile({
                     <td className="bos-num">{formatCount(game.er)}</td>
                     <td className="bos-num">{formatCount(game.bb)}</td>
                     <td className="bos-num">{formatCount(game.so)}</td>
-                    <td>{game.decision || "—"}</td>
                   </tr>
                 ))}
               </tbody>

@@ -574,6 +574,33 @@ a {
   margin: 0 0 1rem;
 }
 
+.bos-identity h1 {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.bos-lines {
+  margin: 1.1rem 0 0.4rem;
+  text-align: center;
+}
+
+.bos-counting {
+  margin: 0 0 0.35rem;
+  font-size: 1.08rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.bos-rates {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
 .bos-rec {
   display: flex;
   align-items: flex-start;

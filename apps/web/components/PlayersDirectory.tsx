@@ -94,18 +94,22 @@ export function PlayersDirectory({
             placeholder="Search name, team, or position"
           />
         </label>
-        <div className="bos-chiprow" role="group" aria-label="Season">
+        <div className="bos-tabs" role="tablist" aria-label="Season">
           {seasons.map((year) => (
-            <Chip
+            <button
               key={year}
-              label={String(year)}
-              selected={season === year}
+              type="button"
+              role="tab"
+              aria-selected={season === year}
+              className={season === year ? "bos-tab is-on" : "bos-tab"}
               onClick={() => {
                 setSeason(year);
                 setPosition("");
                 setTeam("");
               }}
-            />
+            >
+              {year}
+            </button>
           ))}
         </div>
         <div className="bos-chiprow" role="group" aria-label="Position">

@@ -8,10 +8,16 @@ import {
   defaultDirectorySeason,
   formatAvg,
   formatOps,
+  hittingCountingLine,
   hittingLine,
+  hittingRatesLine,
+  isApproxWar,
+  parsePlayerDetail,
+  parsePlayersList,
   playerQualifies,
   pitchingLine,
   seasonWindowYears,
+  selectedYearMissing,
 } from "./players.ts";
 import { stubHealth } from "./client.ts";
 
@@ -35,6 +41,7 @@ test("friendly labels never leak raw SDIO keys", () => {
     slg: 0.701,
     ops: 1.159,
     war: 10.8,
+    war_source: "bbref",
   });
   assert.equal(hit, ".322 AVG · 1.159 OPS · 58 HR");
   assert.equal(hit.includes("BattingAverage"), false);
@@ -51,6 +58,7 @@ test("friendly labels never leak raw SDIO keys", () => {
     era: 2.39,
     whip: 0.92,
     war: 6.4,
+    war_source: "bbref",
   });
   assert.equal(pitch, "2.39 ERA · 0.92 WHIP · 228 K");
   assert.equal(pitch.includes("EarnedRunAverage"), false);
@@ -70,4 +78,93 @@ test("directory season falls back when current year is missing", () => {
   assert.deepEqual(seasonWindowYears(health), [2024, 2025, 2026]);
   assert.equal(defaultDirectorySeason(health, [2024, 2025, 2026]), 2025);
   assert.equal(defaultDirectorySeason(stubHealth(), [2024, 2025, 2026]), 2026);
+});
+
+test("counting and rates stay friendly and never say vs repl", () => {
+  const row = {
+    season: 2026,
+    g: 118,
+    pa: 528,
+    ab: 420,
+    r: 88,
+    h: 132,
+    hr: 41,
+    rbi: 98,
+    sb: 7,
+    bb: 95,
+    so: 128,
+    avg: 0.314,
+    obp: 0.445,
+    slg: 0.688,
+    ops: 1.133,
+    war: 7.1,
+    war_source: "bbref",
+  };
+  const counting = hittingCountingLine(row);
+  const rates = hittingRatesLine(row);
+  assert.match(counting, /118 G/);
+  assert.match(counting, /41 HR/);
+  assert.match(rates, /\.314 AVG/);
+  assert.equal(counting.includes("vs repl"), false);
+  assert.equal(rates.includes("woba"), false);
+  assert.equal(isApproxWar("approx"), true);
+  assert.equal(isApproxWar("real"), false);
+});
+
+test("parses #152 PlayerRecord and keeps an empty game log honest", () => {
+  const detail = parsePlayerDetail({
+    as_of: "2026-08-23",
+    active_season: 2026,
+    current_season_missing: false,
+    season_window: [2024, 2025, 2026],
+    source: "local",
+    player: {
+      player_id: "judgeaa01",
+      name: "Aaron Judge",
+      position: "OF",
+      team: "NYY",
+      seasons: [
+        {
+          season: 2026,
+          team: "NYY",
+          player_type: "batter",
+          war_source: "real",
+          war: 6.1,
+          games: 120,
+          pa: 500,
+          hits: 140,
+          hr: 40,
+          rbi: 100,
+          sb: 8,
+          avg: 0.35,
+        },
+      ],
+    },
+  });
+  assert.equal(detail?.player.player_id, "judgeaa01");
+  assert.equal(detail?.hitting[0]?.hr, 40);
+  assert.deepEqual(detail?.recent_games.hitting, []);
+  const list = parsePlayersList(
+    {
+      players: [
+        {
+          player_id: "judgeaa01",
+          name: "Aaron Judge",
+          position: "OF",
+          team: "NYY",
+          seasons: [{ season: 2026, pa: 500, war: 6.1, avg: 0.35, hr: 40, ops: 1.1 }],
+        },
+      ],
+    },
+    2026,
+  );
+  assert.equal(list[0]?.player_id, "judgeaa01");
+  assert.equal(list[0]?.war, 6.1);
+});
+
+test("banner only when the selected year is the missing current season", () => {
+  const health = stubHealth({ current_season_missing: true });
+  assert.equal(selectedYearMissing(health, 2026, false), true);
+  assert.equal(selectedYearMissing(health, 2025, false), false);
+  assert.equal(selectedYearMissing(health, 2026, true), false);
 });

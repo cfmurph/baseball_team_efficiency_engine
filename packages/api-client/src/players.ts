@@ -38,6 +38,7 @@ export type HittingSeason = {
   slg: number | null;
   ops: number | null;
   war: number | null;
+  war_source: string;
 };
 
 export type PitchingSeason = {
@@ -53,6 +54,47 @@ export type PitchingSeason = {
   era: number | null;
   whip: number | null;
   war: number | null;
+  war_source: string;
+};
+
+/** #152 published season row on GET /v1/players and /v1/players/{id}. */
+export type PlayerSeason = {
+  season: number;
+  team?: string | null;
+  team_name?: string | null;
+  position?: string | null;
+  player_type?: string | null;
+  stat_source?: string | null;
+  war_source?: string | null;
+  war?: number | null;
+  games?: number | null;
+  pa?: number | null;
+  ab?: number | null;
+  hits?: number | null;
+  hr?: number | null;
+  bb?: number | null;
+  so?: number | null;
+  rbi?: number | null;
+  sb?: number | null;
+  ip?: number | null;
+  pitching_so?: number | null;
+  pitching_bb?: number | null;
+  avg?: number | null;
+  obp?: number | null;
+  slg?: number | null;
+  ops?: number | null;
+  woba?: number | null;
+  era?: number | null;
+  whip?: number | null;
+  fip?: number | null;
+};
+
+export type PlayerRecord = {
+  player_id: string;
+  name?: string | null;
+  position?: string | null;
+  team?: string | null;
+  seasons: PlayerSeason[];
 };
 
 export type HittingGame = {
@@ -226,6 +268,61 @@ export function pitchingLine(row: PitchingSeason): string {
   return `${formatEra(row.era)} ERA · ${formatWhip(row.whip)} WHIP · ${formatCount(row.so)} K`;
 }
 
+function joinBits(bits: Array<string | null>): string {
+  return bits.filter((bit): bit is string => Boolean(bit)).join(" · ");
+}
+
+export function hittingCountingLine(row: HittingSeason): string {
+  return joinBits([
+    row.g !== null ? `${formatCount(row.g)} G` : null,
+    row.pa !== null ? `${formatCount(row.pa)} PA` : null,
+    row.h !== null ? `${formatCount(row.h)} H` : null,
+    row.hr !== null ? `${formatCount(row.hr)} HR` : null,
+    row.rbi !== null ? `${formatCount(row.rbi)} RBI` : null,
+    row.sb !== null ? `${formatCount(row.sb)} SB` : null,
+    row.war !== null ? `${formatWar(row.war)} WAR` : null,
+  ]);
+}
+
+export function hittingRatesLine(row: HittingSeason): string {
+  return joinBits([
+    `${formatAvg(row.avg)} AVG`,
+    `${formatAvg(row.obp)} OBP`,
+    `${formatAvg(row.slg)} SLG`,
+    `${formatOps(row.ops)} OPS`,
+  ]);
+}
+
+export function pitchingCountingLine(row: PitchingSeason): string {
+  return joinBits([
+    row.g !== null ? `${formatCount(row.g)} G` : null,
+    row.ip !== null ? `${formatIp(row.ip)} IP` : null,
+    row.so !== null ? `${formatCount(row.so)} K` : null,
+    row.bb !== null ? `${formatCount(row.bb)} BB` : null,
+    row.w !== null || row.l !== null ? formatWl(row) : null,
+    row.war !== null ? `${formatWar(row.war)} WAR` : null,
+  ]);
+}
+
+export function pitchingRatesLine(row: PitchingSeason): string {
+  return joinBits([`${formatEra(row.era)} ERA`, `${formatWhip(row.whip)} WHIP`]);
+}
+
+export function isApproxWar(source: string | null | undefined): boolean {
+  return String(source || "").trim().toLowerCase() === "approx";
+}
+
+export function selectedYearMissing(
+  health: Health,
+  season: number,
+  hasLine: boolean,
+): boolean {
+  if (hasLine) {
+    return false;
+  }
+  return Boolean(health.current_season_missing && season === health.active_season);
+}
+
 export function isPitcherPosition(position: string): boolean {
   const key = position.trim().toUpperCase();
   return key === "P" || key === "SP" || key === "RP" || key === "CL";
@@ -323,6 +420,7 @@ function parseHittingSeason(value: unknown): HittingSeason | null {
     slg: num(raw.slg),
     ops: num(raw.ops),
     war: num(raw.war),
+    war_source: text(raw.war_source),
   };
 }
 
@@ -345,6 +443,7 @@ function parsePitchingSeason(value: unknown): PitchingSeason | null {
     era: num(raw.era),
     whip: num(raw.whip),
     war: num(raw.war),
+    war_source: text(raw.war_source),
   };
 }
 
@@ -387,6 +486,48 @@ function parsePitchingGame(value: unknown): PitchingGame | null {
   };
 }
 
+function seasonLooksLikePitching(raw: Record<string, unknown>): boolean {
+  const type = text(raw.player_type).toLowerCase();
+  if (type === "pitcher" || type === "pitching") {
+    return true;
+  }
+  return num(raw.ip) !== null || num(raw.era) !== null || num(raw.whip) !== null;
+}
+
+function seasonLooksLikeHitting(raw: Record<string, unknown>): boolean {
+  const type = text(raw.player_type).toLowerCase();
+  if (type === "batter" || type === "hitting" || type === "hitter") {
+    return true;
+  }
+  return num(raw.pa) !== null || num(raw.avg) !== null || num(raw.ops) !== null;
+}
+
+function expandPublishedSeasons(seasons: unknown[]): {
+  hitting: HittingSeason[];
+  pitching: PitchingSeason[];
+} {
+  const hitting: HittingSeason[] = [];
+  const pitching: PitchingSeason[] = [];
+  for (const row of seasons) {
+    const raw = asRecord(row);
+    const hit = seasonLooksLikeHitting(raw);
+    const pitch = seasonLooksLikePitching(raw);
+    if (hit || !pitch) {
+      const parsed = parseHittingSeason(row);
+      if (parsed) {
+        hitting.push(parsed);
+      }
+    }
+    if (pitch) {
+      const parsed = parsePitchingSeason(row);
+      if (parsed) {
+        pitching.push(parsed);
+      }
+    }
+  }
+  return { hitting, pitching };
+}
+
 export function parsePlayerDetail(
   payload: unknown,
   source: "api" | "stub" = "api",
@@ -400,16 +541,23 @@ export function parsePlayerDetail(
   if (!player.player_id) {
     return null;
   }
-  const gamesRaw = asRecord(raw.recent_games || raw.game_log || raw.games);
+  const nestedRecord = asRecord(nested);
+  const published = asList(nestedRecord.seasons || raw.seasons);
+  const fromPublished = published.length ? expandPublishedSeasons(published) : null;
+  const gamesRaw = asRecord(raw.recent_games || raw.game_log || raw.games || nestedRecord.recent_games);
   const cardRaw = raw.card === undefined || raw.card === null ? null : asRecord(raw.card);
   return {
     player,
-    hitting: asList(raw.hitting || raw.batting)
-      .map(parseHittingSeason)
-      .filter((row): row is HittingSeason => row !== null),
-    pitching: asList(raw.pitching)
-      .map(parsePitchingSeason)
-      .filter((row): row is PitchingSeason => row !== null),
+    hitting: fromPublished
+      ? fromPublished.hitting
+      : asList(raw.hitting || raw.batting)
+          .map(parseHittingSeason)
+          .filter((row): row is HittingSeason => row !== null),
+    pitching: fromPublished
+      ? fromPublished.pitching
+      : asList(raw.pitching)
+          .map(parsePitchingSeason)
+          .filter((row): row is PitchingSeason => row !== null),
     recent_games: {
       hitting: asList(gamesRaw.hitting)
         .map(parseHittingGame)
@@ -466,7 +614,30 @@ export function parsePlayersList(
 ): PlayerListItem[] {
   const raw = Array.isArray(payload) ? payload : asList(asRecord(payload).players || asRecord(payload).items);
   return raw
-    .map((row) => parseListItem(row, fallbackSeason))
+    .map((row) => {
+      const rec = asRecord(row);
+      const seasons = asList(rec.seasons);
+      if (!seasons.length) {
+        return parseListItem(row, fallbackSeason);
+      }
+      const match =
+        seasons.find((season) => num(asRecord(season).season) === fallbackSeason) ||
+        (Number.isFinite(fallbackSeason) ? null : seasons[0]);
+      if (!match) {
+        return null;
+      }
+      const line = asRecord(match);
+      return parseListItem(
+        {
+          player_id: rec.player_id,
+          name: rec.name,
+          position: rec.position || line.position,
+          team: rec.team || line.team,
+          ...line,
+        },
+        fallbackSeason,
+      );
+    })
     .filter((row): row is PlayerListItem => row !== null);
 }
 
