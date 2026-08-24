@@ -8,7 +8,7 @@ Every test has exactly one of `unit`, `integration`, or `e2e`.
 | Layer | Marker | What belongs here |
 |---|---|---|
 | Unit | `unit` | Pure functions, mappers, schema, `war_source`, `share.stat_line`, config, metrics helpers. No network. No heavy I/O. |
-| Integration | `integration` | Warehouse / metrics / storage / fantasy emitter / MLB Stats API / SportsDataIO ingest with fixtures or `file://` backends. Nightly `PIPELINE_STEPS` contract (`pull_war` after `pull_sources`, `pull_mlb_stats` after `pull_war`, `pull_sportsdataio` after Stats API). |
+| Integration | `integration` | Warehouse / metrics / storage / fantasy emitter / MLB Stats API / SportsDataIO ingest / thin read API with fixtures or `file://` backends. Nightly `PIPELINE_STEPS` contract (`pull_war` after `pull_sources`, `pull_mlb_stats` after `pull_war`, `pull_sportsdataio` after Stats API). |
 | E2E | `e2e` | Streamlit AppTest (all GM nav pages + BenchOrStart boot), golden rWAR spot checks, and fantasy `cards.jsonl` path under `current/` and `runs/{run_id}/`. |
 
 No layer talks to live Baseball-Reference, MLB Stats API, SportsDataIO, or object storage. E2E uses committed fixtures and in-process AppTest only.
@@ -36,7 +36,7 @@ PRs to `master` run `.github/workflows/ci.yml` as **three separate checks**:
 | Check name | Command | Supersedes from `ci-smoke.yml` |
 |---|---|---|
 | **Unit tests** | `pytest -m unit` | — (new; was not in smoke) |
-| **Integration tests** | `pytest -m integration` | Nightly pipeline contract (`tests/test_run_nightly.py`) + SportsDataIO ingest (`tests/test_sportsdataio.py`) |
+| **Integration tests** | `pytest -m integration` | Nightly pipeline contract (`tests/test_run_nightly.py`) + SportsDataIO ingest (`tests/test_sportsdataio.py`) + read API (`tests/test_api.py`) |
 | **E2E tests** | `pytest -m e2e` | AppTest (`tests/test_dashboard_apptest.py`) + golden WAR (`tests/test_golden_war.py`) |
 
 The old single job **Dashboard + pipeline + golden WAR** is gone. Its coverage is split:
