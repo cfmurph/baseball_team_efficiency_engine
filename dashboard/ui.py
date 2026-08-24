@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from dashboard.helpers import (
+    PRIOR_SEASON_TABLE_NOTE,
     app_frame_html,
     artifact_status,
     empty_state_copy,
@@ -50,6 +51,11 @@ def salary_note(year: int | None) -> None:
     note = salary_coverage_note(year)
     if note:
         st.info(note)
+
+
+def prior_season_note(*, show: bool, message: str | None = None) -> None:
+    if show:
+        st.info(message or PRIOR_SEASON_TABLE_NOTE)
 
 
 def panel_head(title: str, hint: str = "") -> None:
@@ -251,6 +257,7 @@ __all__ = [
     "page_header",
     "panel_head",
     "player_column_config",
+    "prior_season_note",
     "render_app_frame",
     "render_sidebar",
     "salary_note",

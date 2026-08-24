@@ -5,7 +5,7 @@ import ast
 from pathlib import Path
 
 from src.baseball_analytics.config import ArtifactSettings
-from dashboard.data import ARTIFACT_NAMES, resolve_file
+from dashboard.data import ARTIFACT_NAMES, METRICS_MANIFEST_NAME, resolve_file, resolve_metrics_manifest
 from dashboard.state import SEASON_YEAR, SELECTED_LEAGUE, SELECTED_TEAM, SHARED_STATE_KEYS
 
 
@@ -49,10 +49,13 @@ def test_data_module_has_named_loaders() -> None:
         "load_window_phases",
         "load_frontier_data",
         "load_win_model_metrics",
+        "load_metrics_manifest",
     ):
         assert f"def {name}(" in source
     assert "resolve_artifact" in source
     assert ARTIFACT_NAMES["metrics"] == "team_onfield_contract_metrics.csv"
+    assert METRICS_MANIFEST_NAME == "metrics_manifest.json"
+    assert "metrics_manifest.json" not in ARTIFACT_NAMES.values()
 
 
 def test_resolve_file_uses_local_fallback(tmp_path: Path) -> None:
@@ -70,6 +73,11 @@ def test_resolve_file_uses_local_fallback(tmp_path: Path) -> None:
     path = resolve_file("metrics", settings)
     assert path == local / "team_onfield_contract_metrics.csv"
     assert resolve_file("players", settings) is None
+    (local / METRICS_MANIFEST_NAME).write_text(
+        '{"current_season_missing": true, "active_season": 2026}\n'
+    )
+    manifest_path = resolve_metrics_manifest(settings)
+    assert manifest_path == local / METRICS_MANIFEST_NAME
 
 
 def test_resolve_file_uses_shared_latest_when_uri_set(tmp_path: Path) -> None:

@@ -23,6 +23,7 @@ EMPTY_BODY = (
     "Weekly pickup, bench, and stream picks land here once the feed is published. "
     "Join the list below."
 )
+PRIOR_SEASON_BANNER = "These picks are not the current season yet."
 INVITE_CHIP = "Invite only"
 COPY_TEXT = "Copy text"
 DOWNLOAD_IMAGE = "Download image"

@@ -8,7 +8,10 @@ from streamlit.testing.v1 import AppTest
 
 import ast
 
-from dashboard.helpers import NAV_PAGES, nav_labels
+import pandas as pd
+
+from dashboard.helpers import NAV_PAGES, PRIOR_SEASON_TABLE_NOTE, nav_labels
+from dashboard.state import SEASON_YEAR
 from dashboard import ui as ui_mod
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +68,108 @@ _REQUIRED_UI_EXPORTS = (
     "render_app_frame",
     "SCATTER_MARKER",
 )
+
+
+def test_contract_watch_apptest_keeps_2026_nan_salary(monkeypatch: pytest.MonkeyPatch) -> None:
+    """AppTest: SDIO overlay row with no Lahman salary still renders on Contract Watch."""
+    monkeypatch.chdir(ROOT)
+    players = pd.DataFrame(
+        [
+            {
+                "name_full": "Juan Soto",
+                "year_id": 2026,
+                "team_name": "Mets",
+                "player_type": "batter",
+                "player_war": 4.1,
+                "war_source": "approx",
+                "salary": float("nan"),
+                "surplus_value": float("nan"),
+                "contract_label": None,
+                "pa": 400,
+                "ip": 0.0,
+            }
+        ]
+    )
+    monkeypatch.setattr(
+        "dashboard.views.contracts.load_player_season_metrics",
+        lambda: players,
+    )
+    monkeypatch.setattr(
+        "dashboard.views.roster.load_player_season_metrics",
+        lambda: players,
+    )
+    monkeypatch.setattr(
+        "dashboard.views.contracts.load_metrics_manifest",
+        lambda: {
+            "current_season_missing": True,
+            "active_season": 2026,
+            "as_of_date": "2026-08-23",
+        },
+    )
+    monkeypatch.setattr(
+        "dashboard.views.roster.load_metrics_manifest",
+        lambda: {
+            "current_season_missing": True,
+            "active_season": 2026,
+            "as_of_date": "2026-08-23",
+        },
+    )
+
+    at = AppTest.from_file(str(APP_PATH), default_timeout=15)
+    at.session_state[SEASON_YEAR] = 2026
+    at.session_state["contracts_season_filter"] = 2026
+    at.run()
+    _fail_if_exception(at, "initial boot")
+    _nav_button(at, "Contract Watch").click().run()
+    _fail_if_exception(at, "Contract Watch")
+
+    frames = [element.value for element in at.dataframe]
+    assert frames, "Contract Watch should render a table"
+    names = set()
+    for frame in frames:
+        if frame is not None and "name_full" in getattr(frame, "columns", []):
+            names.update(frame["name_full"].astype(str).tolist())
+    assert "Juan Soto" in names
+    info_text = " ".join(str(item.value) for item in at.info)
+    assert PRIOR_SEASON_TABLE_NOTE in info_text
+
+
+def test_roster_lab_apptest_shows_prior_season_banner(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(ROOT)
+    players = pd.DataFrame(
+        [
+            {
+                "name_full": "Aaron Judge",
+                "year_id": 2024,
+                "team_name": "Yankees",
+                "player_type": "batter",
+                "player_war": 10.8,
+                "war_source": "real",
+                "salary": float("nan"),
+                "surplus_value": float("nan"),
+                "pa": 700,
+                "ip": 0.0,
+            }
+        ]
+    )
+    monkeypatch.setattr("dashboard.views.roster.load_player_season_metrics", lambda: players)
+    monkeypatch.setattr("dashboard.views.roster.load_sr_player_metrics", lambda: None)
+    monkeypatch.setattr(
+        "dashboard.views.roster.load_metrics_manifest",
+        lambda: {
+            "current_season_missing": True,
+            "active_season": 2026,
+            "as_of_date": "2026-08-23",
+        },
+    )
+    at = AppTest.from_file(str(APP_PATH), default_timeout=15)
+    at.session_state[SEASON_YEAR] = 2024
+    at.run()
+    _fail_if_exception(at, "initial boot")
+    _nav_button(at, "Roster Lab").click().run()
+    _fail_if_exception(at, "Roster Lab")
+    info_text = " ".join(str(item.value) for item in at.info)
+    assert PRIOR_SEASON_TABLE_NOTE in info_text
 
 
 def test_ui_module_exports_chrome_app_uses() -> None:

@@ -1,13 +1,15 @@
 """Pure helpers for the Streamlit dashboard. No Streamlit imports."""
 from __future__ import annotations
 
+from datetime import date
 import html
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import pandas as pd
 
 SALARY_DATA_LAST_YEAR = 2016
+PRIOR_SEASON_TABLE_NOTE = "This table is not the current season yet."
 
 MONEY_COLS_TO_MILLIONS = (
     "payroll",
@@ -432,6 +434,101 @@ def years_from_frame(df: pd.DataFrame | None, column: str = "year_id") -> list[i
     if df is None or df.empty or column not in df.columns:
         return []
     return sorted(df[column].dropna().astype(int).unique().tolist())
+
+
+def max_season_from_frame(df: pd.DataFrame | None, column: str = "year_id") -> int | None:
+    years = years_from_frame(df, column)
+    return years[-1] if years else None
+
+
+def max_season_from_cards(cards: list[Mapping[str, Any]] | None) -> int | None:
+    """Latest ``season`` on published share cards. Skips missing / invalid values."""
+    years: list[int] = []
+    for card in cards or []:
+        raw = card.get("season") if isinstance(card, Mapping) else None
+        if raw in (None, ""):
+            continue
+        try:
+            years.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    return max(years) if years else None
+
+
+def resolve_active_year(
+    *,
+    today: date | None = None,
+    as_of: str | None = None,
+    manifest: Mapping[str, Any] | None = None,
+) -> int:
+    """Active MLB year from the manifest, then as_of, then the calendar year."""
+    if manifest:
+        active = manifest.get("active_season")
+        if active not in (None, ""):
+            try:
+                return int(active)
+            except (TypeError, ValueError):
+                pass
+        as_of = as_of or (None if manifest.get("as_of_date") in (None, "") else str(manifest.get("as_of_date")))
+    if as_of:
+        text = str(as_of).strip()
+        if len(text) >= 4 and text[:4].isdigit():
+            return int(text[:4])
+    return (today or date.today()).year
+
+
+def is_prior_only_publish(
+    *,
+    current_season_missing: bool | None = None,
+    max_season: int | None = None,
+    selected_season: int | None = None,
+    active_year: int | None = None,
+    live_feed: bool = True,
+) -> bool:
+    """True when published / selected data is not the active MLB season.
+
+    Bundled BenchOrStart stubs pass ``live_feed=False`` so sample cards never
+    look like a live prior-only feed.
+    """
+    if not live_feed:
+        return False
+    if current_season_missing:
+        return True
+    if active_year is None:
+        return False
+    if selected_season is not None:
+        return int(selected_season) != int(active_year)
+    if max_season is not None:
+        return int(max_season) < int(active_year)
+    return False
+
+
+def filter_contract_watch_rows(
+    players: pd.DataFrame,
+    *,
+    year: int | str | None = None,
+    team: str | None = None,
+    name_search: str | None = None,
+) -> pd.DataFrame:
+    """Season / team / name filters only. Missing or zero salary rows stay."""
+    filt = players.copy()
+    if year not in (None, "All Seasons"):
+        filt = filt[filt["year_id"] == int(year)]
+    if team not in (None, "All Teams") and "team_name" in filt.columns:
+        filt = filt[filt["team_name"] == team]
+    if name_search and "name_full" in filt.columns:
+        filt = filt[filt["name_full"].str.contains(name_search, case=False, na=False)]
+    return filt
+
+
+def blank_unknown_salary(df: pd.DataFrame, column: str = "salary") -> pd.DataFrame:
+    """Show missing / non-positive salary as blank in tables. Other columns stay."""
+    if column not in df.columns:
+        return df
+    out = df.copy()
+    values = pd.to_numeric(out[column], errors="coerce")
+    out[column] = values.where(values > 0)
+    return out
 
 
 def teams_from_frame(df: pd.DataFrame | None, column: str = "team_name") -> list[str]:
