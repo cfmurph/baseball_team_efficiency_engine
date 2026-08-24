@@ -958,18 +958,70 @@ def mark_extract_season_coverage(report: ExtractReport) -> ExtractReport:
     if report.skipped_reason == "missing_api_key" or not report.endpoints:
         report.current_season_missing = True
         return report
-    landed_season = any(
-        item.ok
-        and item.endpoint == ENDPOINT_PLAYER_SEASON_STATS
-        and item.season == active
-        for item in report.endpoints
-    )
-    landed_games = int(str(report.as_of_date)[:4]) == active and any(
-        item.ok and item.endpoint == ENDPOINT_PLAYER_GAME_STATS
-        for item in report.endpoints
-    )
-    report.current_season_missing = not (landed_season or landed_games)
+    report.current_season_missing = not extract_had_in_season(report, active_season=active)
     return report
+
+
+def extract_had_in_season(
+    report: ExtractReport | Mapping[str, Any] | None,
+    *,
+    active_season: int | None = None,
+) -> bool:
+    """True when SDIO landed active-season rows or an in-season game payload.
+
+    Missing-key / empty extracts are not in-season. Used by the ``current/``
+    promote gate so a prior-only publish cannot look current after a live pull.
+    """
+    if report is None:
+        return False
+    if isinstance(report, ExtractReport):
+        skipped = report.skipped_reason
+        as_of = str(report.as_of_date or "")
+        seasons = list(report.seasons or [])
+        endpoints = [
+            {
+                "ok": item.ok,
+                "endpoint": item.endpoint,
+                "season": item.season,
+            }
+            for item in report.endpoints
+        ]
+        flagged = report.current_season_missing
+        reported_active = report.active_season
+    else:
+        skipped = report.get("skipped_reason")
+        as_of = str(report.get("as_of_date") or "")
+        seasons = list(report.get("seasons") or [])
+        endpoints = list(report.get("endpoints") or [])
+        flagged = report.get("current_season_missing")
+        reported_active = report.get("active_season")
+    if skipped in {"missing_api_key", "extract_exception"}:
+        return False
+    if not endpoints:
+        return False
+    active = active_season if active_season is not None else reported_active
+    if active is None:
+        if seasons:
+            active = max(int(year) for year in seasons)
+        elif len(as_of) >= 4 and as_of[:4].isdigit():
+            active = int(as_of[:4])
+        else:
+            return False
+    active = int(active)
+    if flagged is False:
+        return True
+    landed_season = any(
+        bool(item.get("ok"))
+        and item.get("endpoint") == ENDPOINT_PLAYER_SEASON_STATS
+        and item.get("season") == active
+        for item in endpoints
+    )
+    as_of_year = int(as_of[:4]) if len(as_of) >= 4 and as_of[:4].isdigit() else None
+    landed_games = as_of_year == active and any(
+        bool(item.get("ok")) and item.get("endpoint") == ENDPOINT_PLAYER_GAME_STATS
+        for item in endpoints
+    )
+    return bool(landed_season or landed_games)
 
 
 def seasons_from_settings(

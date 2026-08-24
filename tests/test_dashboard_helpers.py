@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import ast
 from pathlib import Path
 from unittest.mock import Mock
@@ -34,6 +36,8 @@ from src.baseball_analytics.dashboard_helpers import (
     apply_layout_and_render_chart,
     compute_slider_max,
 )
+
+pytestmark = pytest.mark.unit
 
 
 def _season() -> pd.DataFrame:

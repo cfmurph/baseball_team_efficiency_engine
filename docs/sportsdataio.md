@@ -14,8 +14,8 @@ key. GitHub Actions nightly maps `secrets.SPORTSDATAIO_API_KEY` → env.
 When the key is missing the extract **soft-fails** (exit 0), writes
 `extract_report.json` with `ok: false` / `skipped_reason: missing_api_key`
 / `current_season_missing: true`, and the warehouse skips the spine. That
-is not a successful current-year publish. CI smoke without the secret
-still passes.
+is not a successful current-year publish. PR CI (`ci.yml`) without the
+secret still passes.
 
 Nightly ingest **soft-fails** when the key is absent (CI / forks stay green).
 The dedicated probe is the auth-proof path and **hard-fails**:
@@ -59,7 +59,10 @@ Default pull is incremental: Teams + Players bootstrap, then date feeds for
 for years Lahman does not have (typically the active season). Soft-fail
 without a key still writes `extract_report.json` with
 `current_season_missing: true` and `metrics_manifest.json` so prior-only
-publish is not mistaken for current-year coverage.
+publish is not mistaken for current-year coverage. Nightly then skips
+promoting that run over `current/` (exit 0, prior `current/` stays).
+If SDIO did land in-season data and published `max(season) < Y`,
+`current/` promote is refused and the upload step exits non-zero.
 
 The client sends the key as `Ocp-Apim-Subscription-Key` (never in the URL
 or landed JSON). Default interval 0.5s; 3 retries on 429 / 5xx.

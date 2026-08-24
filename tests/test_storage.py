@@ -17,9 +17,11 @@ from src.baseball_analytics.storage import (
     artifact_source_label,
     classify_artifact_relpath,
     current_object_key,
+    decide_current_promote,
     default_as_of_date,
     default_run_date,
     default_run_id,
+    evaluate_current_promote,
     object_key,
     parse_artifacts_uri,
     partition_key,
@@ -31,6 +33,8 @@ from src.baseball_analytics.storage import (
     run_object_key,
     upload_artifacts,
 )
+
+pytestmark = pytest.mark.integration
 
 
 class MemoryBackend:
@@ -51,7 +55,6 @@ class MemoryBackend:
             raise RuntimeError("remote unreachable")
         return self.objects.get(relative_key)
 
-
 def _settings(tmp_path: Path, **overrides) -> ArtifactSettings:
     defaults = dict(
         uri="memory://unused",
@@ -63,7 +66,6 @@ def _settings(tmp_path: Path, **overrides) -> ArtifactSettings:
     )
     defaults.update(overrides)
     return ArtifactSettings(**defaults)
-
 
 def _seed_local(tmp_path: Path) -> Path:
     local = tmp_path / "artifacts"
@@ -77,7 +79,6 @@ def _seed_local(tmp_path: Path) -> Path:
     (local / ".remote_cache").mkdir()
     (local / ".remote_cache" / "stale.csv").write_text("nope\n")
     return local
-
 
 def test_parse_s3_uri_with_and_without_prefix() -> None:
     bare = parse_artifacts_uri("s3://metrics-bucket")
@@ -93,7 +94,6 @@ def test_parse_s3_uri_with_and_without_prefix() -> None:
     assert alias.scheme == "s3"
     assert alias.prefix == "data"
 
-
 def test_parse_r2_and_gs_schemes() -> None:
     r2 = parse_artifacts_uri("r2://my-r2/baseball")
     assert r2.scheme == "s3"
@@ -105,7 +105,6 @@ def test_parse_r2_and_gs_schemes() -> None:
     assert gs.bucket == "lake"
     assert gs.prefix == "prefix"
 
-
 def test_parse_file_and_bare_paths(tmp_path: Path) -> None:
     parsed = parse_artifacts_uri("file:///shared/artifacts")
     assert parsed.scheme == "file"
@@ -115,7 +114,6 @@ def test_parse_file_and_bare_paths(tmp_path: Path) -> None:
     assert bare.scheme == "file"
     assert bare.prefix == str(tmp_path / "store")
 
-
 def test_parse_rejects_empty_and_unknown_schemes() -> None:
     with pytest.raises(ValueError, match="empty"):
         parse_artifacts_uri("  ")
@@ -123,7 +121,6 @@ def test_parse_rejects_empty_and_unknown_schemes() -> None:
         parse_artifacts_uri("https://example.com/bucket")
     with pytest.raises(ValueError, match="bucket"):
         parse_artifacts_uri("s3:///no-bucket")
-
 
 def test_legacy_partition_and_object_key_are_league_level_date() -> None:
     assert partition_key("MLB", "mlb", "2026-08-23") == "mlb/mlb/2026-08-23"
@@ -145,7 +142,6 @@ def test_legacy_partition_and_object_key_are_league_level_date() -> None:
     with pytest.raises(ValueError, match="league"):
         partition_key("mlb/extra", "mlb", "2026-08-23")
 
-
 def test_run_and_current_object_keys() -> None:
     assert run_object_key("20260823T080012Z", "metrics/a.csv") == (
         "runs/20260823T080012Z/metrics/a.csv"
@@ -155,7 +151,6 @@ def test_run_and_current_object_keys() -> None:
         run_object_key("current", "metrics/a.csv")
     with pytest.raises(ValueError, match="run_id"):
         run_object_key("runs/nested", "metrics/a.csv")
-
 
 def test_classify_keeps_csv_names_and_cards_path() -> None:
     assert classify_artifact_relpath("player_season_metrics.csv") == (
@@ -167,13 +162,11 @@ def test_classify_keeps_csv_names_and_cards_path() -> None:
     assert classify_artifact_relpath("cards.jsonl") == FANTASY_CARDS_RELPATH
     assert classify_artifact_relpath("fantasy/cards.jsonl") == FANTASY_CARDS_RELPATH
 
-
 def test_default_as_of_and_run_id_use_env_overrides() -> None:
     assert default_as_of_date(environ={"ARTIFACTS_AS_OF_DATE": "2024-07-04"}) == "2024-07-04"
     assert default_run_date(environ={"ARTIFACTS_RUN_DATE": "2024-07-04"}) == "2024-07-04"
     assert default_run_id(environ={"ARTIFACTS_RUN_ID": "20240704T120000Z"}) == "20240704T120000Z"
     assert default_run_id(environ={"GITHUB_RUN_ID": "987654321"}) == "987654321"
-
 
 def test_env_uri_overrides_settings_yaml() -> None:
     settings = load_artifact_settings(
@@ -191,14 +184,12 @@ def test_env_uri_overrides_settings_yaml() -> None:
     assert settings.league == "mlb"
     assert settings.level == "aa"
 
-
 def test_blank_uri_means_local_only() -> None:
     settings = load_artifact_settings(
         settings={"artifacts_uri": "  ", "artifacts_dir": "artifacts"},
         environ={},
     )
     assert settings.uri is None
-
 
 def test_upload_writes_runs_and_current_not_latest(tmp_path: Path) -> None:
     local = _seed_local(tmp_path)
@@ -241,7 +232,6 @@ def test_upload_writes_runs_and_current_not_latest(tmp_path: Path) -> None:
     assert FANTASY_CARDS_RELPATH in manifest["files"]
     assert "stale.csv" not in manifest["files"]
 
-
 def test_upload_refuses_to_mutate_existing_run(tmp_path: Path) -> None:
     local = _seed_local(tmp_path)
     backend = MemoryBackend()
@@ -266,6 +256,134 @@ def test_upload_refuses_to_mutate_existing_run(tmp_path: Path) -> None:
     assert stored == b"year_id\n2015\n"
 
 
+def _write_metrics_manifest(local: Path, **overrides) -> None:
+    payload = {
+        "as_of_date": "2026-08-23",
+        "active_season": 2026,
+        "season_window": [2024, 2025, 2026],
+        "seasons_present": [2024],
+        "overlay_seasons": [],
+        "overlay_rows": 0,
+        "active_season_present": False,
+        "active_season_source": None,
+        "current_season_missing": True,
+        "current_season_missing_reason": "sdio_unavailable",
+        "sdio_in_season": False,
+    }
+    payload.update(overrides)
+    (local / "metrics_manifest.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_decide_current_promote_fail_closed_when_in_season_but_stale() -> None:
+    assert (
+        decide_current_promote(
+            sdio_in_season=True,
+            active_season=2026,
+            metrics_max_season=2024,
+            current_season_missing=True,
+        )
+        == "fail_closed"
+    )
+
+
+def test_decide_current_promote_skip_soft_when_missing_key() -> None:
+    assert (
+        decide_current_promote(
+            sdio_in_season=False,
+            active_season=2026,
+            metrics_max_season=2024,
+            current_season_missing=True,
+        )
+        == "skip_soft"
+    )
+
+
+def test_upload_refuses_current_promote_when_sdio_in_season_but_stale(
+    tmp_path: Path,
+) -> None:
+    local = _seed_local(tmp_path)
+    _write_metrics_manifest(
+        local,
+        sdio_in_season=True,
+        current_season_missing=True,
+        current_season_missing_reason="sdio_empty_active_season",
+        seasons_present=[2024, 2025],
+    )
+    backend = MemoryBackend()
+    backend.put("current/manifest.json", b'{"prior":true}')
+    backend.put("current/metrics/player_season_metrics.csv", b"prior-current\n")
+
+    with pytest.raises(ArtifactUploadError, match="promote refused"):
+        upload_artifacts(
+            local,
+            _settings(tmp_path, uri="s3://bucket/prefix"),
+            run_id="20260824T080000Z",
+            as_of_date="2026-08-24",
+            backend=backend,
+        )
+
+    assert "runs/20260824T080000Z/manifest.json" in backend.objects
+    assert backend.objects["current/manifest.json"] == b'{"prior":true}'
+    assert backend.objects["current/metrics/player_season_metrics.csv"] == b"prior-current\n"
+    assert not any(
+        key.startswith("current/") and key not in {
+            "current/manifest.json",
+            "current/metrics/player_season_metrics.csv",
+        }
+        for key in backend.objects
+    )
+
+
+def test_upload_promotes_when_active_season_is_present(tmp_path: Path) -> None:
+    local = _seed_local(tmp_path)
+    _write_metrics_manifest(
+        local,
+        sdio_in_season=True,
+        current_season_missing=False,
+        current_season_missing_reason=None,
+        active_season_present=True,
+        active_season_source="sportsdataio",
+        seasons_present=[2024, 2025, 2026],
+        overlay_seasons=[2026],
+        overlay_rows=1,
+    )
+    backend = MemoryBackend()
+    result = upload_artifacts(
+        local,
+        _settings(tmp_path, uri="s3://bucket/prefix"),
+        run_id="20260824T080099Z",
+        as_of_date="2026-08-24",
+        backend=backend,
+    )
+    assert result.current_updated is True
+    assert "current/manifest.json" in backend.objects
+    assert evaluate_current_promote(local)[0] == "promote"
+
+
+def test_upload_skips_current_promote_on_missing_key_without_failing(
+    tmp_path: Path,
+) -> None:
+    local = _seed_local(tmp_path)
+    _write_metrics_manifest(local)
+    backend = MemoryBackend()
+    backend.put("current/manifest.json", b'{"prior":true}')
+    backend.put("current/metrics/player_season_metrics.csv", b"prior-current\n")
+
+    result = upload_artifacts(
+        local,
+        _settings(tmp_path, uri="s3://bucket/prefix"),
+        run_id="20260824T080012Z",
+        as_of_date="2026-08-24",
+        backend=backend,
+    )
+    assert result.current_updated is False
+    assert result.reason == "sdio_unavailable"
+    assert "runs/20260824T080012Z/manifest.json" in backend.objects
+    assert backend.objects["current/manifest.json"] == b'{"prior":true}'
+    assert backend.objects["current/metrics/player_season_metrics.csv"] == b"prior-current\n"
+    assert evaluate_current_promote(local)[0] == "skip_soft"
+
+
 def test_failed_run_write_does_not_update_current(tmp_path: Path) -> None:
     local = _seed_local(tmp_path)
     backend = MemoryBackend()
@@ -279,12 +397,10 @@ def test_failed_run_write_does_not_update_current(tmp_path: Path) -> None:
         )
     assert not any(key.startswith("current/") for key in backend.objects)
 
-
 def test_upload_skipped_when_uri_unset(tmp_path: Path) -> None:
     result = upload_artifacts(tmp_path, _settings(tmp_path, uri=None), as_of_date="2026-08-23")
     assert result.skipped is True
     assert result.reason == "no_uri"
-
 
 def test_upload_fails_when_local_dir_empty(tmp_path: Path) -> None:
     empty = tmp_path / "artifacts"
@@ -296,7 +412,6 @@ def test_upload_fails_when_local_dir_empty(tmp_path: Path) -> None:
             as_of_date="2026-08-23",
             backend=MemoryBackend(),
         )
-
 
 def test_resolve_prefers_remote_current_over_local(tmp_path: Path) -> None:
     local = tmp_path / "artifacts"
@@ -311,6 +426,20 @@ def test_resolve_prefers_remote_current_over_local(tmp_path: Path) -> None:
     assert path.read_text() == "remote\n"
     assert "current" in path.parts
 
+def test_remote_lookup_keys_current_before_legacy_latest(tmp_path: Path) -> None:
+    keys = remote_lookup_keys("team_onfield_contract_metrics.csv", _settings(tmp_path))
+    assert keys[0].startswith("current/")
+    current_idx = next(i for i, key in enumerate(keys) if key.startswith("current/"))
+    latest_idx = next(i for i, key in enumerate(keys) if "latest" in key)
+    assert current_idx < latest_idx
+    assert "mlb/mlb/latest/team_onfield_contract_metrics.csv" in keys
+
+    card_keys = remote_lookup_keys(FANTASY_CARDS_RELPATH, _settings(tmp_path))
+    assert card_keys[0] == "current/fantasy/cards.jsonl"
+    assert "mlb/mlb/latest/fantasy/cards.jsonl" in card_keys
+    assert card_keys.index("current/fantasy/cards.jsonl") < card_keys.index(
+        "mlb/mlb/latest/fantasy/cards.jsonl"
+    )
 
 def test_resolve_compat_bridge_reads_legacy_latest(tmp_path: Path) -> None:
     backend = MemoryBackend()
@@ -320,7 +449,6 @@ def test_resolve_compat_bridge_reads_legacy_latest(tmp_path: Path) -> None:
     assert path.read_text() == "legacy\n"
     assert any(key == "mlb/mlb/latest/metrics.csv" for key in remote_lookup_keys("metrics.csv", _settings(tmp_path)))
 
-
 def test_resolve_falls_back_to_local_when_uri_unset(tmp_path: Path) -> None:
     local = tmp_path / "artifacts"
     local.mkdir()
@@ -329,7 +457,6 @@ def test_resolve_falls_back_to_local_when_uri_unset(tmp_path: Path) -> None:
     path = resolve_artifact("metrics.csv", _settings(tmp_path, uri=None))
     assert path == local / "metrics.csv"
     assert path.read_text() == "local-only\n"
-
 
 def test_resolve_falls_back_to_local_when_remote_unreachable(tmp_path: Path) -> None:
     local = tmp_path / "artifacts"
@@ -347,7 +474,6 @@ def test_resolve_falls_back_to_local_when_remote_unreachable(tmp_path: Path) -> 
     assert path == local / "metrics.csv"
     assert path.read_text() == "local-fallback\n"
 
-
 def test_resolve_uses_stale_cache_when_remote_fails_and_local_missing(tmp_path: Path) -> None:
     cache = tmp_path / "cache" / "current" / "metrics"
     cache.mkdir(parents=True)
@@ -364,14 +490,12 @@ def test_resolve_uses_stale_cache_when_remote_fails_and_local_missing(tmp_path: 
     )
     assert path == cached
 
-
 def test_resolve_returns_none_when_everywhere_missing(tmp_path: Path) -> None:
     backend = MemoryBackend()
     assert (
         resolve_artifact("missing.csv", _settings(tmp_path, uri="s3://bucket"), backend=backend)
         is None
     )
-
 
 def test_resolve_named_artifacts_maps_keys(tmp_path: Path) -> None:
     local = tmp_path / "artifacts"
@@ -383,7 +507,6 @@ def test_resolve_named_artifacts_maps_keys(tmp_path: Path) -> None:
     )
     assert resolved["metrics"] == local / "team_onfield_contract_metrics.csv"
     assert resolved["players"] is None
-
 
 def test_resolve_nested_current_fantasy_cards_jsonl(tmp_path: Path) -> None:
     backend = MemoryBackend()
@@ -398,14 +521,12 @@ def test_resolve_nested_current_fantasy_cards_jsonl(tmp_path: Path) -> None:
     assert backend.gets[0] == "current/fantasy/cards.jsonl"
     assert not any("fantasy_cards_" in key for key in backend.gets)
 
-
 def test_resolve_nested_local_current_fantasy_cards_jsonl(tmp_path: Path) -> None:
     lake = tmp_path / "artifacts" / "current" / "fantasy"
     lake.mkdir(parents=True)
     (lake / "cards.jsonl").write_text("local-cards\n", encoding="utf-8")
     path = resolve_artifact("current/fantasy/cards.jsonl", _settings(tmp_path, uri=None))
     assert path == lake / "cards.jsonl"
-
 
 def test_file_uri_qa_layout_and_fallback(tmp_path: Path) -> None:
     """How-to-verify with ARTIFACTS_URI=file:// (docs/shared_artifacts.md)."""
@@ -450,7 +571,6 @@ def test_file_uri_qa_layout_and_fallback(tmp_path: Path) -> None:
     assert fallback == local / "win_model_metrics.csv"
     assert artifact_source_label(_settings(tmp_path, uri=None)) == "local"
 
-
 def test_file_backend_round_trip(tmp_path: Path) -> None:
     root = tmp_path / "shared"
     backend = FileBackend(root)
@@ -459,7 +579,6 @@ def test_file_backend_round_trip(tmp_path: Path) -> None:
     assert backend.get(key) == b"from-file\n"
     assert backend.get("current/metrics/missing.csv") is None
     assert (root / key).read_bytes() == b"from-file\n"
-
 
 def test_s3_backend_uses_prefix_and_maps_404() -> None:
     stored: dict[str, bytes] = {}
@@ -482,7 +601,6 @@ def test_s3_backend_uses_prefix_and_maps_404() -> None:
     assert backend.get("current/metrics/metrics.csv") == b"s3\n"
     assert backend.get("current/metrics/missing.csv") is None
 
-
 def test_artifact_source_badge_remote_local_missing(tmp_path: Path) -> None:
     local = tmp_path / "artifacts"
     local.mkdir()
@@ -502,7 +620,6 @@ def test_artifact_source_badge_remote_local_missing(tmp_path: Path) -> None:
 
     backend.fail_get = True
     assert artifact_source_label(remote, backend=backend) == "local"
-
 
 def test_publish_nightly_skips_without_uri(tmp_path: Path) -> None:
     result = publish_nightly_artifacts(
