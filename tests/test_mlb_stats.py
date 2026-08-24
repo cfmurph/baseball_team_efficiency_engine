@@ -39,10 +39,8 @@ FIXTURES = Path(__file__).parent / "fixtures" / "mlb_stats"
 TEAM_MAP = Path(__file__).resolve().parents[1] / "data" / "crosswalks" / "mlb_team_map.csv"
 AS_OF = "2026-08-23"
 
-
 def _payload(name: str) -> dict:
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
-
 
 def _land_fixtures(raw_dir: Path, as_of: str = AS_OF, backend: FileBackend | None = None) -> None:
     mapping = {
@@ -72,14 +70,14 @@ def _land_fixtures(raw_dir: Path, as_of: str = AS_OF, backend: FileBackend | Non
         backend=backend,
     )
 
-
+@pytest.mark.unit
 def test_raw_object_key_matches_locked_layout() -> None:
     key = raw_object_key("player_hitting", AS_OF, "player_hitting_2024.json")
     assert key == f"{RAW_REMOTE_PREFIX}/player_hitting/{AS_OF}/player_hitting_2024.json"
     local = local_raw_path("data/raw", "teams", AS_OF, "teams.json")
     assert local.as_posix().endswith(f"data/raw/mlb_stats/teams/{AS_OF}/teams.json")
 
-
+@pytest.mark.unit
 def test_parse_teams_keeps_majors_ids() -> None:
     teams = parse_teams(_payload("teams.json"))
     assert set(teams["mlb_team_id"]) == {147, 133}
@@ -87,7 +85,7 @@ def test_parse_teams_keeps_majors_ids() -> None:
     assert yankees["mlb_abbr"] == "NYY"
     assert yankees["league_id"] == 103
 
-
+@pytest.mark.unit
 def test_parse_standings_and_team_stats() -> None:
     standings = parse_standings(_payload("standings_2024.json"))
     assert standings.iloc[0]["wins"] == 94
@@ -98,7 +96,7 @@ def test_parse_standings_and_team_stats() -> None:
     assert pitching.iloc[0]["era"] == pytest.approx(3.74)
     assert pitching.iloc[0]["ip"] == pytest.approx(1446.0)
 
-
+@pytest.mark.unit
 def test_parse_player_stats_and_schedule() -> None:
     hitting = parse_player_stats(_payload("player_hitting_2024.json"), "hitting")
     judge = hitting.set_index("mlb_player_id").loc[592450]
@@ -110,7 +108,7 @@ def test_parse_player_stats_and_schedule() -> None:
     assert int(games.iloc[0]["home_score"]) == 6
     assert int(games.iloc[0]["away_mlb_team_id"]) == 113
 
-
+@pytest.mark.unit
 def test_join_mlb_team_to_lahman_is_year_aware() -> None:
     team_map = load_team_map(TEAM_MAP)
     rows = pd.DataFrame(
@@ -126,7 +124,7 @@ def test_join_mlb_team_to_lahman_is_year_aware() -> None:
     assert by_key.loc[(133, 2026)] == "ATH"
     assert pd.isna(by_key.loc[(999, 2024)])
 
-
+@pytest.mark.unit
 def test_join_mlb_player_to_lahman_via_people_mlbid() -> None:
     people = pd.DataFrame(
         {
@@ -139,14 +137,14 @@ def test_join_mlb_player_to_lahman_via_people_mlbid() -> None:
     assert joined.set_index("mlb_player_id").loc[592450, "lahman_player_id"] == "judgeaa01"
     assert pd.isna(joined.set_index("mlb_player_id").loc[123, "lahman_player_id"])
 
-
+@pytest.mark.unit
 def test_join_leaves_null_when_people_has_no_mlbid() -> None:
     people = pd.DataFrame({"playerID": ["judgeaa01"], "bbrefID": ["judgeaa01"]})
     players = pd.DataFrame({"mlb_player_id": [592450], "player_name": ["Aaron Judge"]})
     joined = join_mlb_player_ids(players, people)
     assert pd.isna(joined.iloc[0]["lahman_player_id"])
 
-
+@pytest.mark.integration
 def test_extract_writes_local_and_file_uri(tmp_path: Path) -> None:
     raw_dir = tmp_path / "data" / "raw"
     lake = tmp_path / "lake"
@@ -187,7 +185,7 @@ def test_extract_writes_local_and_file_uri(tmp_path: Path) -> None:
     assert (lake / raw_object_key("extract_report", AS_OF, "extract_report.json")).is_file()
     assert discover_as_of_dates(raw_dir) == [AS_OF]
 
-
+@pytest.mark.integration
 def test_extract_same_date_overwrite_is_idempotent(tmp_path: Path) -> None:
     raw_dir = tmp_path / "raw"
     write_raw_payload(
@@ -213,7 +211,7 @@ def test_extract_same_date_overwrite_is_idempotent(tmp_path: Path) -> None:
     assert landed is not None
     assert len(landed["teams"]) == 2
 
-
+@pytest.mark.integration
 def test_extract_soft_fails_on_api_error(tmp_path: Path) -> None:
     raw_dir = tmp_path / "raw"
 
@@ -234,7 +232,7 @@ def test_extract_soft_fails_on_api_error(tmp_path: Path) -> None:
     assert any(item.endpoint == "player_hitting" and not item.ok for item in report.endpoints)
     assert local_raw_path(raw_dir, "teams", AS_OF, "teams.json").is_file()
 
-
+@pytest.mark.integration
 def test_cli_soft_fail_exits_zero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from typer.testing import CliRunner
 
@@ -260,7 +258,7 @@ def test_cli_soft_fail_exits_zero(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert report["ok"] is False
     assert report["soft_fail"] is True
 
-
+@pytest.mark.integration
 def test_warehouse_builds_without_stats_api(tmp_path: Path) -> None:
     frames = load_mlb_frames(tmp_path / "missing-raw", as_of_date=AS_OF)
     assert frames.empty
@@ -271,7 +269,7 @@ def test_warehouse_builds_without_stats_api(tmp_path: Path) -> None:
     count = con.execute("SELECT COUNT(*) FROM fact_mlb_team_season").fetchone()[0]
     assert count == 0
 
-
+@pytest.mark.integration
 def test_warehouse_loads_stats_api_joins_and_skips_war(tmp_path: Path) -> None:
     raw_dir = tmp_path / "raw"
     _land_fixtures(raw_dir)
@@ -323,7 +321,7 @@ def test_warehouse_loads_stats_api_joins_and_skips_war(tmp_path: Path) -> None:
     assert "player_war" not in mlb_cols
     assert "war_source" not in mlb_cols
 
-
+@pytest.mark.integration
 def test_load_mlb_frames_reads_file_uri_when_local_missing(tmp_path: Path) -> None:
     lake = tmp_path / "lake"
     backend = FileBackend(lake)
@@ -339,11 +337,30 @@ def test_load_mlb_frames_reads_file_uri_when_local_missing(tmp_path: Path) -> No
     assert not frames.team_season.empty
     assert int(frames.team_season.iloc[0]["mlb_team_id"]) == 147
 
+@pytest.mark.unit
+def test_warehouse_ddl_keeps_war_on_lahman_facts_only() -> None:
+    """No dual-write WAR: MLB Stats facts have no war / war_source columns."""
+    lahman_player = WAREHOUSE_DDL.split("CREATE OR REPLACE TABLE fact_player_season")[1].split(
+        "CREATE OR REPLACE TABLE"
+    )[0]
+    assert "war_source" in lahman_player
+    mlb_team = WAREHOUSE_DDL.split("CREATE OR REPLACE TABLE fact_mlb_team_season")[1].split(
+        "CREATE OR REPLACE TABLE"
+    )[0]
+    mlb_player = WAREHOUSE_DDL.split("CREATE OR REPLACE TABLE fact_mlb_player_season")[1].split(
+        "CREATE OR REPLACE TABLE"
+    )[0]
+    assert "No WAR columns" in WAREHOUSE_DDL
+    for section in (mlb_team, mlb_player):
+        assert "war_source" not in section
+        assert "player_war" not in section
+        assert "\n    war " not in section.lower()
 
+@pytest.mark.unit
 def test_default_as_of_date_env_is_shared_with_lake() -> None:
     assert default_as_of_date(environ={"ARTIFACTS_AS_OF_DATE": "2024-07-04"}) == "2024-07-04"
 
-
+@pytest.mark.integration
 def test_insert_rejects_war_column() -> None:
     frames = MlbFrames(
         as_of_date=AS_OF,

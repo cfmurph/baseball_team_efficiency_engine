@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import pandas as pd
 import plotly.graph_objects as go
 
@@ -9,6 +11,8 @@ from src.baseball_analytics.dashboard_utils import (
     render_plotly_chart,
     scale_payroll_for_display,
 )
+
+pytestmark = pytest.mark.unit
 
 
 class RecordingStreamlit:

@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import yaml
 from fastapi.testclient import TestClient
 
@@ -12,6 +13,8 @@ from src.baseball_analytics.fantasy import FANTASY_SCHEMA_VERSION, card_schema_e
 from src.baseball_analytics.published import redact_secrets
 from src.baseball_analytics.storage import FileBackend
 from services.api.app import create_app
+
+pytestmark = pytest.mark.integration
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "api"

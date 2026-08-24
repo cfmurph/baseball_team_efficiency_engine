@@ -14,8 +14,8 @@ key. GitHub Actions nightly maps `secrets.SPORTSDATAIO_API_KEY` → env.
 When the key is missing the extract **soft-fails** (exit 0), writes
 `extract_report.json` with `ok: false` / `skipped_reason: missing_api_key`
 / `current_season_missing: true`, and the warehouse skips the spine. That
-is not a successful current-year publish. CI smoke without the secret
-still passes.
+is not a successful current-year publish. PR CI (`ci.yml`) without the
+secret still passes.
 
 Nightly ingest **soft-fails** when the key is absent (CI / forks stay green).
 The dedicated probe is the auth-proof path and **hard-fails**:
