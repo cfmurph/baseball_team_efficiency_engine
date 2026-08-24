@@ -31,6 +31,7 @@ from src.baseball_analytics.mlb_stats import (
     raw_object_key,
     read_raw_payload,
     write_raw_payload,
+    _merge_player_seasons,
 )
 from src.baseball_analytics.schema import WAREHOUSE_DDL
 from src.baseball_analytics.storage import FileBackend, default_as_of_date
@@ -355,3 +356,111 @@ def test_insert_rejects_war_column() -> None:
     con.execute(WAREHOUSE_DDL)
     with pytest.raises(ValueError, match="must not write WAR"):
         insert_mlb_stats_tables(con, frames)
+
+
+def test_parse_schedule_drops_missing_pk_and_keeps_postponed_null_scores() -> None:
+    payload = {
+        "dates": [
+            {
+                "date": "2024-08-23",
+                "games": [
+                    {
+                        "season": "2024",
+                        "officialDate": "2024-08-23",
+                        "status": {"detailedState": "Cancelled"},
+                        "teams": {
+                            "away": {"team": {"id": 113}},
+                            "home": {"team": {"id": 134}},
+                        },
+                    },
+                    {
+                        "gamePk": 745461,
+                        "season": "2024",
+                        "officialDate": "2024-08-23",
+                        "status": {"detailedState": "Postponed", "abstractGameState": "Preview"},
+                        "venue": {"name": "PNC Park"},
+                        "teams": {
+                            "away": {"team": {"id": 113}},
+                            "home": {"team": {"id": 134}},
+                        },
+                    },
+                ],
+            }
+        ]
+    }
+    games = parse_schedule(payload)
+    assert list(games["game_pk"]) == [745461]
+    assert games.iloc[0]["status"] == "Postponed"
+    assert pd.isna(games.iloc[0]["home_score"])
+    assert pd.isna(games.iloc[0]["away_score"])
+    assert int(games.iloc[0]["home_mlb_team_id"]) == 134
+
+
+def test_parse_player_stats_drops_missing_ids_and_sentinels() -> None:
+    payload = {
+        "stats": [
+            {
+                "splits": [
+                    {
+                        "season": "2024",
+                        "player": {"fullName": "No Id"},
+                        "team": {"id": 147},
+                        "stat": {"plateAppearances": 10},
+                    },
+                    {
+                        "season": "2024",
+                        "player": {"id": 592450, "fullName": "Aaron Judge"},
+                        "team": {"id": 147, "name": "Yankees"},
+                        "stat": {
+                            "gamesPlayed": 1,
+                            "plateAppearances": "--",
+                            "hits": True,
+                            "avg": ".311",
+                            "homeRuns": "",
+                        },
+                    },
+                ]
+            }
+        ]
+    }
+    hitting = parse_player_stats(payload, "hitting")
+    assert list(hitting["mlb_player_id"]) == [592450]
+    row = hitting.iloc[0]
+    assert pd.isna(row["pa"])
+    assert pd.isna(row["hits"])
+    assert row["avg"] == pytest.approx(0.311)
+    assert pd.isna(row["hr"])
+
+
+def test_merge_player_seasons_labels_pitcher_batter_and_two_way() -> None:
+    hitting = pd.DataFrame(
+        {
+            "mlb_player_id": [1, 3],
+            "season_year": [2024, 2024],
+            "mlb_team_id": [147, 119],
+            "player_name": ["Bat", "TwoWay"],
+            "pa": [500, 400],
+            "hr": [20, 30],
+        }
+    )
+    pitching = pd.DataFrame(
+        {
+            "mlb_player_id": [2, 3],
+            "season_year": [2024, 2024],
+            "mlb_team_id": [143, 119],
+            "player_name": ["Arm", "TwoWay"],
+            "ip": [180.0, 12.0],
+            "era": [3.20, 2.25],
+            "pitching_so": [200, 16],
+            "pitching_bb": [40, 3],
+        }
+    )
+    merged = _merge_player_seasons([hitting], [pitching]).set_index("mlb_player_id")
+    assert merged.loc[1, "player_type"] == "batter"
+    assert merged.loc[2, "player_type"] == "pitcher"
+    assert merged.loc[3, "player_type"] == "both"
+    assert merged.loc[2, "era"] == pytest.approx(3.20)
+    pitcher_only = _merge_player_seasons([], [pitching])
+    assert set(pitcher_only["player_type"]) == {"pitcher"}
+    batter_only = _merge_player_seasons([hitting], [])
+    assert set(batter_only["player_type"]) == {"batter"}
