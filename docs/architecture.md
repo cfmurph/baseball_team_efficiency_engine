@@ -66,7 +66,9 @@ This is where metric logic becomes standardized and reusable:
 - Public BenchOrStart: Next.js (`apps/web`) over the #106 `/v1` read API
 - Shared TS client (`packages/api-client`) + schema 1.0 presenters (`packages/card-schema`); Expo planned later, not scaffolded
 - Streamlit `dashboard/fantasy_app.py` remains a local fallback until Next parity
+- Thin read-only HTTP API (`services/api`) over published `current/` (`/v1/health`, `/v1/cards`, `/v1/seasons`)
 - Static exports for portfolio/demo use
+- Next.js BenchOrStart (#140) consumes the API; FO Streamlit stays internal
 
 ## Suggested production path
 
@@ -77,6 +79,7 @@ This is where metric logic becomes standardized and reusable:
 - Optional shared-lake publish (`ARTIFACTS_URI`) to `runs/{run_id}/` + `current/` with dashboard remote load + local fallback
 - File-based configuration
 - Dashboard pages call `dashboard.data` named loaders; ARTIFACTS_URI is a loader swap, not a page rewrite
+- Thin read API (`python3 -m services.api`) over the same `current/` contract (#106)
 
 See [shared_artifacts.md](shared_artifacts.md) and [ADR 0001](adr/0001-shared-artifact-layout.md) for the `{league}/{level}/{run_date}` layout (extra files such as a later `fantasy/cards.jsonl` use the same prefix).
 

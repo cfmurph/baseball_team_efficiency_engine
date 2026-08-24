@@ -25,7 +25,8 @@
 - [ ] Dockerize
 - [ ] Add CI/CD
 - [ ] Publish dashboard
-- [ ] Add API layer
+- [x] Thin read API over `current/` (`services/api`, #106)
+- [x] BenchOrStart Next.js over `/v1` (`apps/web`, #140)
 - [x] Schedule refresh jobs
 - [x] Shared artifact storage (`runs/` + `current/`) + dashboard remote load with local fallback
 - [x] MLB Stats API majors ingest → versioned raw → warehouse (#108)

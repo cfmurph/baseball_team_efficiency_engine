@@ -5,7 +5,10 @@ reads the same files. The locked contract is
 [ADR 0001](adr/0001-shared-artifact-contract.md). This page is the operator
 guide (URI, credentials, QA).
 
-There is no HTTP API. Schemes: `s3://`, `r2://`, `gs://`, `file://`.
+The thin read API (`python3 -m services.api`) serves `current/` over HTTP so
+web clients never talk to the lake or vendor keys. Schemes for the lake
+itself stay `s3://`, `r2://`, `gs://`, `file://`. See
+[services/api/openapi.yaml](../services/api/openapi.yaml).
 
 ## Layout
 
