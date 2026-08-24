@@ -17,9 +17,11 @@ from src.baseball_analytics.storage import (
     artifact_source_label,
     classify_artifact_relpath,
     current_object_key,
+    decide_current_promote,
     default_as_of_date,
     default_run_date,
     default_run_id,
+    evaluate_current_promote,
     object_key,
     parse_artifacts_uri,
     partition_key,
@@ -252,6 +254,135 @@ def test_upload_refuses_to_mutate_existing_run(tmp_path: Path) -> None:
         )
     stored = backend.objects["runs/20260823T080012Z/metrics/team_onfield_contract_metrics.csv"]
     assert stored == b"year_id\n2015\n"
+
+
+def _write_metrics_manifest(local: Path, **overrides) -> None:
+    payload = {
+        "as_of_date": "2026-08-23",
+        "active_season": 2026,
+        "season_window": [2024, 2025, 2026],
+        "seasons_present": [2024],
+        "overlay_seasons": [],
+        "overlay_rows": 0,
+        "active_season_present": False,
+        "active_season_source": None,
+        "current_season_missing": True,
+        "current_season_missing_reason": "sdio_unavailable",
+        "sdio_in_season": False,
+    }
+    payload.update(overrides)
+    (local / "metrics_manifest.json").write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_decide_current_promote_fail_closed_when_in_season_but_stale() -> None:
+    assert (
+        decide_current_promote(
+            sdio_in_season=True,
+            active_season=2026,
+            metrics_max_season=2024,
+            current_season_missing=True,
+        )
+        == "fail_closed"
+    )
+
+
+def test_decide_current_promote_skip_soft_when_missing_key() -> None:
+    assert (
+        decide_current_promote(
+            sdio_in_season=False,
+            active_season=2026,
+            metrics_max_season=2024,
+            current_season_missing=True,
+        )
+        == "skip_soft"
+    )
+
+
+def test_upload_refuses_current_promote_when_sdio_in_season_but_stale(
+    tmp_path: Path,
+) -> None:
+    local = _seed_local(tmp_path)
+    _write_metrics_manifest(
+        local,
+        sdio_in_season=True,
+        current_season_missing=True,
+        current_season_missing_reason="sdio_empty_active_season",
+        seasons_present=[2024, 2025],
+    )
+    backend = MemoryBackend()
+    backend.put("current/manifest.json", b'{"prior":true}')
+    backend.put("current/metrics/player_season_metrics.csv", b"prior-current\n")
+
+    with pytest.raises(ArtifactUploadError, match="promote refused"):
+        upload_artifacts(
+            local,
+            _settings(tmp_path, uri="s3://bucket/prefix"),
+            run_id="20260824T080000Z",
+            as_of_date="2026-08-24",
+            backend=backend,
+        )
+
+    assert "runs/20260824T080000Z/manifest.json" in backend.objects
+    assert backend.objects["current/manifest.json"] == b'{"prior":true}'
+    assert backend.objects["current/metrics/player_season_metrics.csv"] == b"prior-current\n"
+    assert not any(
+        key.startswith("current/") and key not in {
+            "current/manifest.json",
+            "current/metrics/player_season_metrics.csv",
+        }
+        for key in backend.objects
+    )
+
+
+def test_upload_promotes_when_active_season_is_present(tmp_path: Path) -> None:
+    local = _seed_local(tmp_path)
+    _write_metrics_manifest(
+        local,
+        sdio_in_season=True,
+        current_season_missing=False,
+        current_season_missing_reason=None,
+        active_season_present=True,
+        active_season_source="sportsdataio",
+        seasons_present=[2024, 2025, 2026],
+        overlay_seasons=[2026],
+        overlay_rows=1,
+    )
+    backend = MemoryBackend()
+    result = upload_artifacts(
+        local,
+        _settings(tmp_path, uri="s3://bucket/prefix"),
+        run_id="20260824T080099Z",
+        as_of_date="2026-08-24",
+        backend=backend,
+    )
+    assert result.current_updated is True
+    assert "current/manifest.json" in backend.objects
+    assert evaluate_current_promote(local)[0] == "promote"
+
+
+def test_upload_skips_current_promote_on_missing_key_without_failing(
+    tmp_path: Path,
+) -> None:
+    local = _seed_local(tmp_path)
+    _write_metrics_manifest(local)
+    backend = MemoryBackend()
+    backend.put("current/manifest.json", b'{"prior":true}')
+    backend.put("current/metrics/player_season_metrics.csv", b"prior-current\n")
+
+    result = upload_artifacts(
+        local,
+        _settings(tmp_path, uri="s3://bucket/prefix"),
+        run_id="20260824T080012Z",
+        as_of_date="2026-08-24",
+        backend=backend,
+    )
+    assert result.current_updated is False
+    assert result.reason == "sdio_unavailable"
+    assert "runs/20260824T080012Z/manifest.json" in backend.objects
+    assert backend.objects["current/manifest.json"] == b'{"prior":true}'
+    assert backend.objects["current/metrics/player_season_metrics.csv"] == b"prior-current\n"
+    assert evaluate_current_promote(local)[0] == "skip_soft"
+
 
 def test_failed_run_write_does_not_update_current(tmp_path: Path) -> None:
     local = _seed_local(tmp_path)

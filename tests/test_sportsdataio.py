@@ -20,6 +20,7 @@ from src.baseball_analytics.sportsdataio import (
     attach_lahman_aliases,
     default_season_window,
     discover_as_of_dates,
+    extract_had_in_season,
     load_sdio_frames,
     local_raw_path,
     parse_games,
@@ -234,7 +235,47 @@ def test_extract_same_date_overwrite_is_idempotent(tmp_path: Path) -> None:
     assert len(landed) == 2
 
 
-@pytest.mark.integration
+def test_extract_had_in_season_from_season_rows_or_game_payload() -> None:
+    in_season = {
+        "as_of_date": AS_OF,
+        "seasons": [2024, 2025, 2026],
+        "skipped_reason": None,
+        "current_season_missing": False,
+        "endpoints": [
+            {"endpoint": "player_season_stats", "ok": True, "season": 2026},
+        ],
+    }
+    games_only = {
+        "as_of_date": AS_OF,
+        "seasons": [2024, 2025, 2026],
+        "skipped_reason": None,
+        "endpoints": [
+            {"endpoint": "player_game_stats", "ok": True, "season": None},
+        ],
+    }
+    missing_key = {
+        "as_of_date": AS_OF,
+        "seasons": [2024, 2025, 2026],
+        "skipped_reason": "missing_api_key",
+        "current_season_missing": True,
+        "endpoints": [],
+    }
+    empty = {
+        "as_of_date": AS_OF,
+        "seasons": [2024, 2025, 2026],
+        "skipped_reason": None,
+        "current_season_missing": True,
+        "endpoints": [
+            {"endpoint": "player_season_stats", "ok": True, "season": 2025},
+        ],
+    }
+    assert extract_had_in_season(in_season, active_season=2026) is True
+    assert extract_had_in_season(games_only, active_season=2026) is True
+    assert extract_had_in_season(missing_key, active_season=2026) is False
+    assert extract_had_in_season(empty, active_season=2026) is False
+    assert extract_had_in_season(None, active_season=2026) is False
+
+
 def test_extract_soft_fails_without_api_key(tmp_path: Path) -> None:
     raw_dir = tmp_path / "raw"
     client = SportsDataIOClient(api_key=None, environ={}, min_interval=0)

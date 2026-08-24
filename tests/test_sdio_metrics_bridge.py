@@ -25,6 +25,7 @@ from src.baseball_analytics.sportsdataio import (
     seasons_from_settings,
     write_raw_payload,
 )
+from src.baseball_analytics.storage import decide_current_promote
 from pipeline.transform.build_warehouse import insert_sdio_spine_tables
 
 pytestmark = pytest.mark.integration
@@ -139,7 +140,17 @@ def test_bridge_overlays_sdio_years_missing_from_lahman() -> None:
     assert coverage.active_season_present is True
     assert coverage.active_season_source == "sportsdataio"
     assert coverage.current_season_missing is False
+    assert coverage.sdio_in_season is True
     assert coverage.overlay_seasons == [2025, 2026]
+    assert (
+        decide_current_promote(
+            sdio_in_season=coverage.sdio_in_season,
+            active_season=coverage.active_season,
+            metrics_max_season=max(coverage.seasons_present),
+            current_season_missing=coverage.current_season_missing,
+        )
+        == "promote"
+    )
 
 
 def test_bridge_uses_game_rollup_when_season_stub_is_thin() -> None:
@@ -173,9 +184,86 @@ def test_soft_fail_missing_sdio_does_not_pretend_current_season(tmp_path: Path) 
     payload = json.loads(dest.read_text(encoding="utf-8"))
     assert dest.name == METRICS_MANIFEST_NAME
     assert payload["current_season_missing"] is True
+    assert payload["sdio_in_season"] is False
     assert payload["active_season"] == 2026
     assert payload["season_window"] == [2024, 2025, 2026]
     assert 2026 not in payload["seasons_present"]
+    assert (
+        decide_current_promote(
+            sdio_in_season=coverage.sdio_in_season,
+            active_season=coverage.active_season,
+            metrics_max_season=max(coverage.seasons_present),
+            current_season_missing=coverage.current_season_missing,
+        )
+        == "skip_soft"
+    )
+
+
+def test_in_season_extract_without_metrics_year_fails_closed_promote() -> None:
+    lahman = _lahman_frame(2024)
+    report = {
+        "as_of_date": AS_OF,
+        "seasons": [2024, 2025, 2026],
+        "skipped_reason": None,
+        "current_season_missing": False,
+        "endpoints": [
+            {"endpoint": "player_season_stats", "ok": True, "season": 2026},
+        ],
+    }
+    combined, coverage = bridge_sdio_player_season_metrics(
+        lahman,
+        None,
+        None,
+        as_of_date=AS_OF,
+        window=[2024, 2025, 2026],
+        extract_report=report,
+    )
+    assert 2026 not in set(combined["year_id"].astype(int))
+    assert coverage.sdio_in_season is True
+    assert coverage.current_season_missing is True
+    assert coverage.active_season == 2026
+    assert max(coverage.seasons_present) < coverage.active_season
+    assert (
+        decide_current_promote(
+            sdio_in_season=coverage.sdio_in_season,
+            active_season=coverage.active_season,
+            metrics_max_season=max(coverage.seasons_present),
+            current_season_missing=coverage.current_season_missing,
+        )
+        == "fail_closed"
+    )
+
+
+def test_missing_key_extract_skips_promote_without_failing() -> None:
+    lahman = _lahman_frame(2023, 2024)
+    report = {
+        "as_of_date": AS_OF,
+        "seasons": [2024, 2025, 2026],
+        "skipped_reason": "missing_api_key",
+        "current_season_missing": True,
+        "endpoints": [],
+    }
+    combined, coverage = bridge_sdio_player_season_metrics(
+        lahman,
+        None,
+        None,
+        as_of_date=AS_OF,
+        window=[2024, 2025, 2026],
+        extract_report=report,
+    )
+    assert 2026 not in set(combined["year_id"].astype(int))
+    assert coverage.sdio_in_season is False
+    assert coverage.current_season_missing is True
+    assert coverage.current_season_missing_reason == "sdio_unavailable"
+    assert (
+        decide_current_promote(
+            sdio_in_season=coverage.sdio_in_season,
+            active_season=coverage.active_season,
+            metrics_max_season=max(coverage.seasons_present),
+            current_season_missing=coverage.current_season_missing,
+        )
+        == "skip_soft"
+    )
 
 
 def test_sdio_present_but_empty_active_season_is_flagged() -> None:
