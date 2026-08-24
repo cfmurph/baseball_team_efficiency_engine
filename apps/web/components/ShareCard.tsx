@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import {
@@ -66,7 +67,15 @@ export function ShareCard({ view, featured = false }: Props) {
         ) : null}
       </div>
       {view.rank_line ? <div className="bos-rank">{view.rank_line}</div> : null}
-      {view.headline ? <h2 className="bos-card-title">{view.headline}</h2> : null}
+      {view.headline ? (
+        <h2 className="bos-card-title">
+          {view.player_id ? (
+            <Link href={`/players/${encodeURIComponent(view.player_id)}`}>{view.headline}</Link>
+          ) : (
+            view.headline
+          )}
+        </h2>
+      ) : null}
       {view.subtitle ? <div className="bos-sub">{view.subtitle}</div> : null}
       {statLine ? <div className="bos-stat">{statLine}</div> : null}
       {reason ? <p className="bos-reason">{reason}</p> : null}

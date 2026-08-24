@@ -60,7 +60,7 @@ models/
 dbt/                            dbt scaffold (staging + mart SQL models)
 dashboard/app.py                Streamlit multi-section FO / GM dashboard
 dashboard/fantasy_app.py        BenchOrStart Streamlit fallback (local / until Next parity)
-apps/web                        Public BenchOrStart (Next.js) — cards, tabs, waitlist
+apps/web                        Public BenchOrStart (Next.js) — cards, players, waitlist
 packages/api-client             Typed /v1 client (stub when NEXT_PUBLIC_API_URL is unset)
 packages/card-schema            Schema 1.0 types + presenters (edge, sit→BENCH)
 fantasy/                        Card loader, stub cards.jsonl, waitlist helper

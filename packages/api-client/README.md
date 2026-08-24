@@ -8,4 +8,4 @@ Typed client for the `#106` `/v1` contract. Used by `apps/web` now; Expo later.
 - `GET /v1/players?season=` → published `player_season_metrics` directory (default window `[Y-2, Y]`)
 - `GET /v1/players/{id}` → one player; `{id}` is the internal `player_id` PK
 
-If `baseUrl` is empty the client returns fixture cards (`fantasy/stub_cards.jsonl`) and a health object that can set `current_season_missing`. It does not invent 2026 rows when the API is live.
+`apps/web` `/players` and `/players/[id]` consume those two routes. If `baseUrl` is empty the client returns fixture cards (`fantasy/stub_cards.jsonl`) and a health object that can set `current_season_missing`. Players stay empty — it does not invent 2026 rows.

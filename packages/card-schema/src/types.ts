@@ -59,6 +59,7 @@ export type ShareCardView = {
   early_model: boolean;
   card_id: string;
   prompt: string;
+  player_id: string;
 };
 
 export type SeasonWindow = {
