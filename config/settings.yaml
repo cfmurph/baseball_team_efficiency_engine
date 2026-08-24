@@ -47,6 +47,18 @@ mlb_stats:
   seasons: []          # empty = year of as_of_date
   schedule_mode: season
 
+# SportsDataIO (Phase 0 / schema v0.1). Key: SPORTSDATAIO_API_KEY env only.
+# Soft-fail extract when the key is missing. Raw: raw/sportsdataio/{endpoint}/{as_of_date}/
+sportsdataio:
+  base_url: https://api.sportsdata.io
+  team_crosswalk: data/crosswalks/mlb_team_map.csv
+  min_request_interval: 0.5
+  max_retries: 3
+  # empty = [Y-2, Y] from as_of_date year (2024–2026 when Y=2026).
+  # SPORTSDATAIO_SEASONS=2024,2025,2026 overrides this list.
+  seasons: []
+  include_season_feeds: false
+
 # Sportradar MLB API v8
 # API key: set SPORTRADAR_API_KEY env var (never commit keys here).
 # Add to Cursor Cloud Agent Secrets at cursor.com/dashboard so it is

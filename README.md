@@ -21,6 +21,7 @@ Raw CSV / Lahman API
     → pipeline/extract/pull_sources.py
     → pipeline/extract/pull_war.py            (Baseball-Reference rWAR)
     → pipeline/extract/pull_mlb_stats.py      (MLB Stats API majors; soft-fail)
+    → pipeline/extract/pull_sportsdataio.py   (SportsDataIO Phase 0; soft-fail without key)
     → pipeline/transform/build_warehouse.py   (DuckDB star schema + validation)
     → pipeline/transform/build_metrics.py     (CSV artifacts per analysis)
     → models/train_win_model.py               (LinearRegression + XGBoost + frontier)
@@ -37,6 +38,7 @@ pipeline/
   extract/pull_sources.py       Download Lahman CSVs
   extract/pull_war.py           Download Baseball-Reference rWAR (optional; approx fallback)
   extract/pull_mlb_stats.py     MLB Stats API majors → versioned raw (soft-fail)
+  extract/pull_sportsdataio.py  SportsDataIO Phase 0 → raw + spine (soft-fail without key)
   transform/build_warehouse.py  Build star schema + WAR + metrics + validation
   transform/build_metrics.py    Export CSVs for team, player, contract analysis
 src/baseball_analytics/
@@ -47,6 +49,8 @@ src/baseball_analytics/
   metrics.py                    All metric functions (Pythag, Gini, WAR efficiency, contract labels)
   war.py                        rWAR overlay + Lahman approx (wOBA / FIP) + BaseRuns
   schema.py                     DuckDB DDL for all fact/dim tables
+  mlb_stats.py                  MLB Stats API client + raw landing
+  sportsdataio.py               SportsDataIO client + Phase 0 spine
   validation.py                 Data quality checks + ValidationReport
 models/
   train_win_model.py            LinearRegression + XGBoost win models + efficiency frontier
@@ -125,6 +129,7 @@ pip install -r requirements.txt
 python3 -m pipeline.extract.pull_sources
 python3 -m pipeline.extract.pull_war
 python3 -m pipeline.extract.pull_mlb_stats
+python3 -m pipeline.extract.pull_sportsdataio
 python3 -m pipeline.transform.build_warehouse
 python3 -m pipeline.transform.build_metrics
 python3 -m models.train_win_model
@@ -141,19 +146,26 @@ Season, team, and league widgets share `st.session_state` keys `season_year`, `s
 ## Nightly refresh
 
 The pipeline steps above are also wrapped by a fail-fast orchestrator
-(`pull_mlb_stats` soft-fails so an API blip does not stop the nightly):
+(`pull_mlb_stats` and `pull_sportsdataio` soft-fail so a missing key or API
+blip does not stop the nightly):
 
 ```bash
 python3 -m pipeline.run_nightly
 # optional: --config-path config/settings.yaml
 ```
 
-That command runs extract → rWAR extract → Stats API extract → warehouse → metrics → win model → clustering in order, logs timing for each step, and **stops on the first non-zero exit** (later steps are named in the error and are not run). Use the same command locally whenever you want a full refresh.
+That command runs extract → rWAR extract → Stats API extract → SportsDataIO
+extract → warehouse → metrics → win model → clustering in order, logs timing
+for each step, and **stops on the first non-zero exit** (later steps are named
+in the error and are not run). Use the same command locally whenever you want
+a full refresh. `SPORTSDATAIO_API_KEY` is optional; without it the SDIO step
+exits 0 and the warehouse skips the spine.
 
 GitHub Actions runs it overnight via `.github/workflows/nightly-refresh.yml`:
 
 - **Schedule:** `0 8 * * *` UTC = **2:00 AM America/Edmonton during MDT** (UTC-6). During MST (UTC-7) that is 1:00 AM local. Actions cron is UTC-only and cannot follow DST.
 - **Manual trigger:** Actions → **Nightly data refresh** → **Run workflow** (`workflow_dispatch`).
+- **SportsDataIO auth proof:** Actions → **SportsDataIO auth probe** → **Run workflow**. This job is separate from nightly: missing key or non-2xx **hard-fails**. Nightly ingest still soft-fails without the secret. Never logs the key. PR CI (`ci.yml`) does not inject the secret.
 - **Outputs:** CSVs, plots, and the DuckDB warehouse stay gitignored. The workflow uploads them as the `nightly-artifacts` run artifact (14-day retention) instead of committing generated files.
 - **Shared storage (optional):** when `ARTIFACTS_URI` is set, the orchestrator uploads `artifacts/` to immutable `runs/{run_id}/` and promotes `current/` only after a full success. The dashboard reads `current/` and falls back to local `artifacts/` if the URI is unset or unreachable. Source badge: `remote` | `local` | `missing`. See [docs/adr/0001-shared-artifact-contract.md](docs/adr/0001-shared-artifact-contract.md) and [docs/shared_artifacts.md](docs/shared_artifacts.md).
 
@@ -209,7 +221,7 @@ python3 -m pytest tests/ -v
 PRs to `master` run `.github/workflows/ci.yml` as three checks: **Unit tests**, **Integration tests**, **E2E tests**. That replaces the old `ci-smoke.yml` job. Smoke coverage is preserved:
 
 - **E2E** — AppTest every sidebar page (empty `artifacts/` is fine) + golden WAR (Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023, `war_source=real`). Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
-- **Integration** — nightly `PIPELINE_STEPS` keeps `pull_war` immediately after `pull_sources` and `pull_mlb_stats` after `pull_war` (soft-fail). Warehouse / storage / fantasy emitter / Stats API ingest use fixtures or `file://` only.
+- **Integration** — nightly `PIPELINE_STEPS` keeps `pull_war` immediately after `pull_sources`, `pull_mlb_stats` after `pull_war` (soft-fail), and `pull_sportsdataio` after Stats API (soft-fail without `SPORTSDATAIO_API_KEY`). Warehouse / storage / fantasy emitter / Stats API / SportsDataIO ingest use fixtures or `file://` only.
 
 ## Data sources
 

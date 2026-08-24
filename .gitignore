@@ -9,6 +9,8 @@ artifacts/*.csv
 artifacts/.remote_cache/
 data/raw/*.csv
 data/raw/*.txt
+data/raw/mlb_stats/
+data/raw/sportsdataio/
 data/staging/*.csv
 data/sr_cache/
 data/waitlist/*.jsonl

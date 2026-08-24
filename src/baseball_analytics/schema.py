@@ -339,4 +339,139 @@ CREATE OR REPLACE TABLE fact_mlb_game (
     away_losses          INTEGER,
     as_of_date           VARCHAR
 );
+
+-- ----------------------------------------------------------------
+-- Phase 0 spine (schema v0.1 LOCKED by Cole 2026-08-23 / #128)
+-- Internal PKs are UUID5; live joins go through external_id_alias.
+-- Do NOT add fantasy_*_stat or scout_*_stat forks.
+-- ----------------------------------------------------------------
+CREATE OR REPLACE TABLE player (
+    player_id        VARCHAR PRIMARY KEY,
+    sdio_player_id   INTEGER,
+    display_name     VARCHAR,
+    first_name       VARCHAR,
+    last_name        VARCHAR,
+    position         VARCHAR,
+    bats             VARCHAR,
+    throws           VARCHAR,
+    team_id          VARCHAR,
+    source           VARCHAR,
+    source_endpoint  VARCHAR,
+    computed_at      VARCHAR,
+    as_of            VARCHAR,
+    run_id           VARCHAR,
+    is_approx        BOOLEAN
+);
+
+CREATE OR REPLACE TABLE team (
+    team_id          VARCHAR PRIMARY KEY,
+    sdio_team_id     INTEGER,
+    sdio_abbr        VARCHAR,
+    city             VARCHAR,
+    team_name        VARCHAR,
+    league           VARCHAR,
+    division         VARCHAR,
+    source           VARCHAR,
+    source_endpoint  VARCHAR,
+    computed_at      VARCHAR,
+    as_of            VARCHAR,
+    run_id           VARCHAR,
+    is_approx        BOOLEAN
+);
+
+CREATE OR REPLACE TABLE game (
+    game_id              VARCHAR PRIMARY KEY,
+    sdio_game_id         INTEGER,
+    game_date            DATE,
+    season               INTEGER,
+    status               VARCHAR,
+    home_team_id         VARCHAR,
+    away_team_id         VARCHAR,
+    home_score           INTEGER,
+    away_score           INTEGER,
+    source               VARCHAR,
+    source_endpoint      VARCHAR,
+    computed_at          VARCHAR,
+    as_of                VARCHAR,
+    run_id               VARCHAR,
+    is_approx            BOOLEAN
+);
+
+CREATE OR REPLACE TABLE external_id_alias (
+    alias_id         VARCHAR PRIMARY KEY,
+    entity_type      VARCHAR,     -- player | team | game
+    internal_id      VARCHAR,
+    system           VARCHAR,     -- sportsdataio | mlb | bbref | fangraphs | lahman
+    external_id      VARCHAR,
+    is_primary       BOOLEAN,
+    source           VARCHAR,
+    source_endpoint  VARCHAR,
+    computed_at      VARCHAR,
+    as_of            VARCHAR,
+    run_id           VARCHAR,
+    is_approx        BOOLEAN,
+    UNIQUE (system, entity_type, external_id)
+);
+
+CREATE OR REPLACE TABLE player_game_stat (
+    player_id        VARCHAR,
+    game_id          VARCHAR,
+    team_id          VARCHAR,
+    game_date        DATE,
+    season           INTEGER,
+    position         VARCHAR,
+    started          INTEGER,
+    pa               DOUBLE,
+    ab               DOUBLE,
+    runs             DOUBLE,
+    hits             DOUBLE,
+    doubles          DOUBLE,
+    triples          DOUBLE,
+    hr               DOUBLE,
+    rbi              DOUBLE,
+    bb               DOUBLE,
+    so               DOUBLE,
+    sb               DOUBLE,
+    hbp              DOUBLE,
+    ip               DOUBLE,
+    er               DOUBLE,
+    era              DOUBLE,
+    whip             DOUBLE,
+    pitching_so      DOUBLE,
+    pitching_bb      DOUBLE,
+    source           VARCHAR,
+    source_endpoint  VARCHAR,
+    computed_at      VARCHAR,
+    as_of            VARCHAR,
+    run_id           VARCHAR,
+    is_approx        BOOLEAN,
+    PRIMARY KEY (player_id, game_id)
+);
+
+CREATE OR REPLACE TABLE player_season_stat (
+    player_id        VARCHAR,
+    season           INTEGER,
+    team_id          VARCHAR,
+    games            INTEGER,
+    pa               DOUBLE,
+    ab               DOUBLE,
+    hits             DOUBLE,
+    hr               DOUBLE,
+    bb               DOUBLE,
+    so               DOUBLE,
+    rbi              DOUBLE,
+    sb               DOUBLE,
+    ip               DOUBLE,
+    era              DOUBLE,
+    whip             DOUBLE,
+    pitching_so      DOUBLE,
+    pitching_bb      DOUBLE,
+    source           VARCHAR,
+    source_endpoint  VARCHAR,
+    computed_at      VARCHAR,
+    as_of            VARCHAR,
+    run_id           VARCHAR,
+    is_approx        BOOLEAN,
+    PRIMARY KEY (player_id, season, team_id)
+);
 """

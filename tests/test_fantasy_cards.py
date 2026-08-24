@@ -714,6 +714,23 @@ def test_stub_and_sample_share_stat_line_never_says_vs_repl() -> None:
         assert "vs repl" not in card_stat_line(card).lower()
 
 @pytest.mark.unit
+def test_rank_fantasy_cards_picks_latest_season_including_2026() -> None:
+    frame = _player_metrics_frame()
+    current = frame.loc[frame["player_id"] == "judgeaa01"].copy()
+    current["season"] = 2026
+    current["player_war"] = 8.1
+    current["war"] = 8.1
+    current["vs_replacement"] = 8.1
+    combined = pd.concat([frame, current], ignore_index=True)
+    cards = rank_fantasy_cards(combined, as_of_date="2026-08-23", top_n=2)
+    assert cards
+    assert {card["season"] for card in cards} == {2026}
+    start = next(card for card in cards if card["recommendation_type"] == "start")
+    assert start["player"]["player_id"] == "judgeaa01"
+    assert start["edge"]["vs_replacement"] == pytest.approx(8.1)
+
+
+@pytest.mark.unit
 def test_share_stat_line_vs_repl_is_normalized_on_face_not_schema() -> None:
     dirty = "+3.4 vs replacement · 91% conf"
     card = {

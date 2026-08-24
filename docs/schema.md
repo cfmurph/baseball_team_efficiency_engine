@@ -61,6 +61,31 @@ Grain: player × season × team (no salary, no WAR)
 ### fact_mlb_game
 Grain: one row per game (`game_pk`) with home/away scores and Lahman team bridges
 
+## SportsDataIO spine (Phase 0 / schema v0.1)
+
+Locked by Cole 2026-08-23. See
+[architecture/phase0-schema-v0.1.md](architecture/phase0-schema-v0.1.md)
+and [sportsdataio.md](sportsdataio.md).
+
+Loaded only when versioned raw exists under `data/raw/sportsdataio/` or
+`{ARTIFACTS_URI}/raw/sportsdataio/`. Empty raw skips the spine. These
+tables do **not** overwrite BR rWAR. There are no `fantasy_*_stat` or
+`scout_*_stat` forks.
+
+### player / team / game
+UUID identity bootstrapped from SportsDataIO ids.
+
+### external_id_alias
+`(system, entity_type, external_id)` → internal UUID.
+Systems: `sportsdataio` | `mlb` | `bbref` | `fangraphs` | `lahman`.
+
+### player_game_stat
+Grain: `(player_id, game_id)` with provenance
+(`source`, `source_endpoint`, `computed_at`, `as_of`, `run_id`, `is_approx`).
+
+### player_season_stat
+Thin season rollup stub. Grain: `(player_id, season, team_id)`.
+
 ## Planned facts
 
 ### fact_game (Retrosheet / Statcast enrichment)

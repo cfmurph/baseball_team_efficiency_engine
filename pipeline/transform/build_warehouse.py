@@ -15,6 +15,7 @@ from src.baseball_analytics.mlb_stats import (
     load_mlb_frames,
     open_optional_backend,
 )
+from src.baseball_analytics.sportsdataio import SdioFrames, load_sdio_frames
 from src.baseball_analytics.schema import WAREHOUSE_DDL
 from src.baseball_analytics.metrics import (
     pythagorean_wins,
@@ -477,6 +478,56 @@ def insert_mlb_stats_tables(con: duckdb.DuckDBPyConnection, frames: MlbFrames) -
     return loaded
 
 
+def load_sdio_spine_frames(settings: dict, people: pd.DataFrame | None = None) -> SdioFrames:
+    """Load SportsDataIO raw (local or ARTIFACTS_URI). Empty frames = skip spine."""
+    raw_dir = Path(settings["raw_dir"])
+    configured = settings.get("sportsdataio") or {}
+    team_map = configured.get("team_crosswalk") or DEFAULT_TEAM_MAP
+    artifact_settings = load_artifact_settings(settings=settings)
+    backend = open_optional_backend(artifact_settings.uri)
+    return load_sdio_frames(
+        raw_dir,
+        people=people,
+        team_map_path=team_map,
+        backend=backend,
+    )
+
+
+def insert_sdio_spine_tables(con: duckdb.DuckDBPyConnection, frames: SdioFrames) -> dict[str, int]:
+    """Insert Phase 0 spine tables. Does not touch Lahman, BR WAR, or Stats API facts."""
+    if frames.empty:
+        log.info("No SportsDataIO raw landed; warehouse skips player_game_stat spine")
+        return {}
+    tables = {
+        "player": frames.players,
+        "team": frames.teams,
+        "game": frames.games,
+        "external_id_alias": frames.aliases,
+        "player_game_stat": frames.player_game_stat,
+        "player_season_stat": frames.player_season_stat,
+    }
+    loaded: dict[str, int] = {}
+    for table_name, df in tables.items():
+        if df is None or df.empty:
+            log.info("Skipping empty SportsDataIO table %s", table_name)
+            continue
+        if table_name.startswith(("fantasy_", "scout_")):
+            raise ValueError(f"Refusing to load forked account table {table_name}")
+        db_cols = [r[1] for r in con.execute(f"PRAGMA table_info('{table_name}')").fetchall()]
+        common = [c for c in df.columns if c in db_cols]
+        if not common:
+            log.warning("No overlapping columns for %s; skipping", table_name)
+            continue
+        view_name = f"_load_{table_name}"
+        con.register(view_name, df[common])
+        col_list = ", ".join(common)
+        con.execute(f"INSERT INTO {table_name} ({col_list}) SELECT {col_list} FROM {view_name}")
+        con.unregister(view_name)
+        loaded[table_name] = len(df)
+        log.info("Loaded %d rows into %s (SportsDataIO)", len(df), table_name)
+    return loaded
+
+
 @app.command()
 def main(config_path: str = "config/settings.yaml") -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -523,6 +574,8 @@ def main(config_path: str = "config/settings.yaml") -> None:
     people_df = read_csv(people_path) if people_path.is_file() else None
     mlb_frames = load_mlb_stats_frames(settings, people=people_df)
     insert_mlb_stats_tables(con, mlb_frames)
+    sdio_frames = load_sdio_spine_frames(settings, people=people_df)
+    insert_sdio_spine_tables(con, sdio_frames)
 
     con.close()
 
