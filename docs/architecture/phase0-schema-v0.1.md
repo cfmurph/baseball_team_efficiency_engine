@@ -140,4 +140,10 @@ This is **not** v0.2. No new forked tables.
    the spine. That path must surface a clear signal (`extract_report`
    `current_season_missing`, `metrics_manifest.json`, and a logged
    warning). It must not silently ship prior-only metrics as if the
-   current season were present.
+   current season were present. Nightly may leave prior `current/` in
+   place on that path.
+7. **Fail-closed promote (#141):** if SportsDataIO landed active-season
+   rows or an in-season payload and published metrics have
+   `max(season) < Y`, do **not** promote `current/`. The run may still
+   land under `runs/{run_id}/`; the promote step fails so the bad run
+   cannot look current. Do not invent season-`Y` rows.
