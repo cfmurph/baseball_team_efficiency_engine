@@ -88,7 +88,7 @@ def test_public_season_does_not_invent_war() -> None:
     assert season is not None
     assert season["war"] is None
     assert season["war_source"] is None
-    assert season["avg"] == pytest.approx(4 / 18)
+    assert season["avg"] == pytest.approx(0.222)
 
 
 def test_group_default_window_drops_years_outside_y_minus_2() -> None:

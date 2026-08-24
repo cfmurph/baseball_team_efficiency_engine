@@ -326,9 +326,9 @@ paths:
                       team: NYY
                       seasons: []
         "404":
-          description: `id` is not a published internal `player_id`.
+          description: "id is not a published internal player_id."
         "422":
-          description: Invalid `season` query.
+          description: "Invalid season query."
 components:
   schemas:
     HealthResponse:

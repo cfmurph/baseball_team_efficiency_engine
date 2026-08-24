@@ -233,7 +233,7 @@ def public_player_season(row: Mapping[str, Any]) -> dict[str, Any] | None:
     ab = _first_number(row, _PLAYER_COUNTING_ALIASES["ab"])
     avg = _as_number(row.get("avg"))
     if avg is None and hits is not None and ab not in (None, 0):
-        avg = hits / ab
+        avg = round(hits / ab, 3)
     season: dict[str, Any] = {
         "season": year,
         "team": _first_text(row, ("team", "team_id")),
