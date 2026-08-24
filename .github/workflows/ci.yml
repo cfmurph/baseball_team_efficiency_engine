@@ -88,8 +88,56 @@ jobs:
       - name: Run e2e tests
         run: python3 -m pytest -m e2e -v
 
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run full suite with coverage
+        run: >
+          python3 -m pytest tests/
+          --cov=src --cov=pipeline --cov=dashboard --cov=services --cov=fantasy
+          --cov-report=term
+          --cov-report=xml:coverage.xml
+          --cov-report=html:htmlcov
+
+      - name: Write coverage summary
+        if: ${{ always() && !cancelled() }}
+        run: |
+          {
+            echo "## Coverage"
+            echo ""
+            echo '```'
+            python3 -m coverage report
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage artifacts
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            htmlcov
+          retention-days: 7
+          if-no-files-found: warn
+
   # Ruleset 21254328 still requires this exact check name from ci-smoke.yml.
-  # Coverage lives in the three pyramid jobs; this is a pass-through alias only.
+  # The old smoke job's checks live in the three pyramid jobs; this is a
+  # pass-through alias only. Do not add the Coverage job to needs.
   smoke_alias:
     name: Dashboard + pipeline + golden WAR
     if: ${{ always() && !cancelled() }}
