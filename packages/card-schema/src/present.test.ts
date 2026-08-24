@@ -172,3 +172,18 @@ test("season banner when missing or stale max year", () => {
     true,
   );
 });
+
+test("prior-year cards still present; banner ships without live 2026 rows", () => {
+  const prior: FantasyCard = { ...steer, season: 2025, recommendation_type: "start" };
+  const views = presentCards([prior]);
+  assert.equal(views.length, 1);
+  assert.equal(views[0].label, "START");
+  const health: Health = {
+    as_of: "2025-09-01",
+    active_season: 2026,
+    current_season_missing: true,
+    season_window: { start: 2024, end: 2026 },
+    seasons_present: [2024, 2025],
+  };
+  assert.equal(shouldShowSeasonBanner(health, [2024, 2025]), true);
+});

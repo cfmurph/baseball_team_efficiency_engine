@@ -146,3 +146,20 @@ def test_docs_name_streamlit_as_fallback() -> None:
     assert "NEXT_PUBLIC_API_URL" in guide
     assert "vs repl" in guide
     assert "early model" in guide
+
+
+def test_product_lock_copy_and_prior_only_ship() -> None:
+    """Cole owns fantasy/copy.py. Live 2026 is #131, not an apps/web ship gate."""
+    ts = COPY_TS.read_text(encoding="utf-8")
+    assert "unless Cole edits" in ts
+    assert "Do not invent" in ts
+    guide = (ROOT / "docs" / "fantasy.md").read_text(encoding="utf-8")
+    assert "unless Cole edits" in guide
+    assert "not a ship gate" in guide
+    assert "#131" in guide
+    web_readme = (ROOT / "apps" / "web" / "README.md").read_text(encoding="utf-8")
+    assert "unless Cole edits" in web_readme
+    assert "#131" in web_readme
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    assert "unless Cole edits" in agents
+    assert "#131" in agents

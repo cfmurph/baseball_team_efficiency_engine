@@ -127,6 +127,32 @@ test("live client hits /v1 without inventing rows", async () => {
   assert.ok(calls.some((url) => url.includes("/v1/players/judgeaa01?season=2026")));
 });
 
+test("prior-year API cards ship as-is; no invented 2026 rows", async () => {
+  const prior = {
+    schema_version: "1.0",
+    card_id: "prior-start-1",
+    recommendation_type: "start",
+    season: 2025,
+    player: { name: "Prior Year" },
+    share: { stat_line: "+2.1 edge · 80% conf" },
+  };
+  const client = createApiClient({
+    baseUrl: "https://api.example.test",
+    fetch: async (input) => {
+      const url = String(input);
+      if (url.endsWith("/v1/cards")) {
+        return new Response(JSON.stringify({ cards: [prior] }));
+      }
+      return new Response("missing", { status: 404 });
+    },
+  });
+  const cards = await client.getCards();
+  assert.equal(cards.source, "api");
+  assert.equal(cards.cards.length, 1);
+  assert.equal(cards.cards[0]?.season, 2025);
+  assert.equal(cards.cards.some((card) => Number(card.season) === 2026), false);
+});
+
 test("stubHealth override stays explicit", () => {
   assert.equal(stubHealth().current_season_missing, false);
   assert.equal(

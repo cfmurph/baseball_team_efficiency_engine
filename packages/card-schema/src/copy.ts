@@ -1,4 +1,4 @@
-/** Exact BenchOrStart marketing copy. Keep in lockstep with `fantasy/copy.py`. */
+/** Exact BenchOrStart marketing copy. Use `fantasy/copy.py` as-is unless Cole edits it. Do not invent strings here. */
 
 export const PRODUCT_NAME = "BenchOrStart";
 export const PROMPT_LINE = "Bench or start?";

@@ -60,7 +60,7 @@ Recommendation labels (schema v1.0): `start` → START, `sit` → BENCH, `pickup
 
 If `NEXT_PUBLIC_API_URL` is unset, the client uses the same four fixtures as `fantasy/stub_cards.jsonl` plus a health object that can set `current_season_missing` (`STUB_CURRENT_SEASON_MISSING=true` at runtime, or `NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING=true` at build). When the API is up, set the env URL — no other client change.
 
-The web UI reuses the #137 BenchOrStart banner (`PRIOR_SEASON_BANNER` in `fantasy/copy.py`: “These picks are not the current season yet.”) when `/v1/health` says `current_season_missing` **or** max `seasons_present` is below `active_season`. Fixture stubs do not raise that banner (same as Streamlit `live_feed=False`). It does **not** invent 2026 rows. #136 Contract Watch missing-salary filtering stays FO Streamlit only — not ported here.
+The web UI reuses the #137 BenchOrStart banner (`PRIOR_SEASON_BANNER` in `fantasy/copy.py`: “These picks are not the current season yet.”) when `/v1/health` says `current_season_missing` **or** max `seasons_present` is below `active_season`. Fixture stubs do not raise that banner (same as Streamlit `live_feed=False`). Prior-year cards still render — live 2026 rows are **not a ship gate** for `apps/web`. That stays on #131 keyed publish. Do **not** invent 2026 rows. #136 Contract Watch missing-salary filtering stays FO Streamlit only — not ported here.
 
 ## QA notes
 
@@ -68,7 +68,7 @@ The web UI reuses the #137 BenchOrStart banner (`PRIOR_SEASON_BANNER` in `fantas
 - **Waitlist.** Email-only. Next route `POST /api/waitlist` validates, optionally POSTs `FANTASY_WAITLIST_WEBHOOK`, appends `data/waitlist/signups.jsonl` when the disk allows, otherwise no-op with the success state. Streamlit fallback uses `fantasy/waitlist.py`.
 - **No `vs repl`.** Face copy, Copy text, and Download image say **edge**. Schema field `edge.vs_replacement` is unchanged.
 - **Approx badge.** `war_source=approx` or `is_approx` shows the **early model** badge and hides confidence.
-- **Copy lock.** `packages/card-schema` strings must match `fantasy/copy.py` (Invite only, sit→BENCH, tabs, footer, #137 prior-season banner).
+- **Copy lock.** Use `fantasy/copy.py` as-is unless Cole edits it. `packages/card-schema` must match that file. Do not invent marketing copy.
 - **No Contract Watch.** Missing-salary 2026 overlay rows (#136) stay on FO Streamlit. `apps/web` is cards / waitlist / share only.
 
 ## Waitlist hook (marketing)
@@ -90,4 +90,4 @@ Point `FANTASY_WAITLIST_WEBHOOK` at Zapier, Make, Buttondown, Mailchimp, or any 
 
 ## Copy lock
 
-Headline, subhead, CTA, microcopy, success, and footer strings live in `fantasy/copy.py` and `packages/card-schema` and must stay exact until marketing revises them. Soft-launch chrome (`Invite only`, `Copy text`, `Download image`) is also in those modules.
+Headline, subhead, CTA, microcopy, success, footer, and soft-launch chrome live in `fantasy/copy.py`. Mirror them in `packages/card-schema`. Cole owns edits to that file — do not invent new marketing copy here.
