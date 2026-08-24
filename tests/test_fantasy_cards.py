@@ -733,24 +733,33 @@ def test_rank_fantasy_cards_picks_latest_season_including_2026() -> None:
 @pytest.mark.unit
 def test_share_stat_line_vs_repl_is_normalized_on_face_not_schema() -> None:
     dirty = "+3.4 vs replacement · 91% conf"
+    dirty_reason = "Aaron Judge is +3.4 vs replacement — lock this OF in."
     card = {
         "recommendation_type": "start",
         "player": {"name": "Aaron Judge", "position": "OF", "team": "NYY"},
         "edge": {"vs_replacement": 3.4, "war_source": "bbref", "is_approx": False},
         "share": {"stat_line": dirty},
-        "reason": "Lock him in.",
+        "reason": dirty_reason,
         "as_of_date": "2026-08-23",
     }
     assert card["share"]["stat_line"] == dirty
+    assert card["reason"] == dirty_reason
     view = present_card(card)
     assert view.stat_line == "+3.4 edge · 91% conf"
+    assert view.reason == "Aaron Judge is +3.4 edge — lock this OF in."
     assert "vs repl" not in view.stat_line.lower()
+    assert "vs repl" not in view.reason.lower()
     blurb = share_blurb(view)
     html = share_card_html(view)
     assert "vs repl" not in blurb.lower()
     assert "vs replacement" not in html.lower()
-    assert "edge" in blurb
+    assert "Aaron Judge is +3.4 edge" in blurb
+    assert "Aaron Judge is +3.4 edge" in html
     assert card["share"]["stat_line"] == dirty
+    assert card["reason"] == dirty_reason
     assert normalize_stat_line("vs repl") == "edge"
     assert normalize_stat_line("vs replacement") == "edge"
     assert normalize_stat_line("vs replx") == ""
+    leftover = view._replace(reason=dirty_reason)
+    assert "vs repl" not in share_blurb(leftover).lower()
+    assert "vs replacement" not in share_card_html(leftover).lower()

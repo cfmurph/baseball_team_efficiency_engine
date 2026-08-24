@@ -4,6 +4,7 @@ import test from "node:test";
 import { EARLY_MODEL_BADGE, PROMPT_LINE } from "./copy.ts";
 import {
   cardHeadline,
+  cardReason,
   cardShareFilename,
   cardStatLine,
   cardsForLabel,
@@ -103,6 +104,36 @@ test("tabs filter by recommendation label", () => {
 test("share filename slugs the player", () => {
   const view = presentCard(steer);
   assert.equal(cardShareFilename(view), "benchorstart-spencer-steer-pickup.png");
+});
+
+test("reason vs replacement is rewritten on face and copy, not the payload", () => {
+  const dirty = "Aaron Judge is +3.4 vs replacement — lock this OF in.";
+  const payload: FantasyCard = {
+    ...steer,
+    recommendation_type: "start",
+    player: { name: "Aaron Judge", position: "OF", team: "NYY" },
+    edge: {
+      vs_replacement: 3.4,
+      war_source: "bbref",
+      is_approx: false,
+      confidence: 0.91,
+    },
+    reason: dirty,
+    share: { stat_line: "+3.4 edge · 91% conf" },
+  };
+  assert.equal(payload.reason, dirty);
+  assert.equal(cardReason(payload), "Aaron Judge is +3.4 edge — lock this OF in.");
+  const view = presentCard(payload);
+  assert.equal(view.stat_line, "+3.4 edge · 91% conf");
+  assert.equal(view.reason, "Aaron Judge is +3.4 edge — lock this OF in.");
+  assert.equal(view.reason.toLowerCase().includes("vs repl"), false);
+  const blurb = shareBlurb({
+    ...view,
+    reason: dirty,
+  });
+  assert.equal(blurb.toLowerCase().includes("vs repl"), false);
+  assert.match(blurb, /Aaron Judge is \+3\.4 edge/);
+  assert.equal(payload.reason, dirty);
 });
 
 test("season banner when missing or stale max year", () => {
