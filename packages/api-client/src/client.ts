@@ -87,20 +87,29 @@ function parseHealth(payload: unknown): Health {
   };
 }
 
+function yearsFromUnknown(value: unknown): number[] {
+  return Array.isArray(value) ? value.map(Number).filter(Number.isFinite) : [];
+}
+
 function parseSeasons(payload: unknown): SeasonsResponse {
   if (Array.isArray(payload)) {
-    const seasons = payload.map(Number).filter(Number.isFinite);
+    const seasons = yearsFromUnknown(payload);
     return {
       seasons,
       active_season: seasons.length ? Math.max(...seasons) : DEFAULT_ACTIVE_SEASON,
     };
   }
   const raw = asRecord(payload);
-  const list = Array.isArray(raw.seasons) ? raw.seasons : [];
-  const seasons = list.map(Number).filter(Number.isFinite);
+  // #144 returns seasons_present (honest years) + season_window ([Y-2, Y]).
+  // Keep `seasons` as a compat alias so older fixtures still parse.
+  const named = yearsFromUnknown(raw.seasons);
+  const present = yearsFromUnknown(raw.seasons_present);
+  const seasons = named.length ? named : present;
+  const windowYears = yearsFromUnknown(raw.season_window);
+  const resolved = seasons.length ? seasons : windowYears;
   return {
-    seasons,
-    active_season: Number(raw.active_season) || (seasons.length ? Math.max(...seasons) : DEFAULT_ACTIVE_SEASON),
+    seasons: resolved,
+    active_season: Number(raw.active_season) || (resolved.length ? Math.max(...resolved) : DEFAULT_ACTIVE_SEASON),
   };
 }
 

@@ -58,7 +58,15 @@ test("live client hits /v1 without inventing rows", async () => {
         return new Response(JSON.stringify({ cards: [] }));
       }
       if (url.endsWith("/v1/seasons")) {
-        return new Response(JSON.stringify({ seasons: [2024, 2025], active_season: 2026 }));
+        return new Response(
+          JSON.stringify({
+            as_of: "2025-09-01",
+            active_season: 2026,
+            season_window: [2024, 2025, 2026],
+            seasons_present: [2024, 2025],
+            current_season_missing: true,
+          }),
+        );
       }
       return new Response("missing", { status: 404 });
     },
