@@ -1,0 +1,9 @@
+# `@bos/api-client`
+
+Typed client for the `#106` `/v1` contract. Used by `apps/web` now; Expo later.
+
+- `GET /v1/health` → `{ as_of, active_season, current_season_missing, season_window }`
+- `GET /v1/cards?season=&rec=` → schema 1.0 cards
+- `GET /v1/seasons` → default `[Y-2, Y]` (2024–2026 when Y=2026)
+
+If `baseUrl` is empty the client returns fixture cards (`fantasy/stub_cards.jsonl`) and a health object that can set `current_season_missing`. It does not invent 2026 rows when the API is live.

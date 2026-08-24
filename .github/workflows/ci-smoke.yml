@@ -38,4 +38,25 @@ jobs:
           tests/test_run_nightly.py
           tests/test_golden_war.py
           tests/test_sportsdataio.py
+          tests/test_web_copy_lock.py
           -v
+
+  web:
+    name: BenchOrStart Next.js
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install and test web
+        run: |
+          npm install
+          npm test
+          npm run build

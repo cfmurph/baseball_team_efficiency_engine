@@ -159,7 +159,7 @@ vars above from repository secrets. It still uploads a 14-day
 
 The sidebar **Source** line shows `remote`, `local`, or `missing`.
 
-BenchOrStart (`dashboard/fantasy_app.py`) reads locked `current/fantasy/cards.jsonl` (schema 1.0), then `runs/{run_id}/fantasy/cards.jsonl` for dated runs. `as_of_date` is on the record and lake manifest. `fantasy_cards_*.json` is ignored. Missing card files show an empty state plus stubs. Player CSVs use the same #105 loaders as the FO dashboard. See [fantasy.md](fantasy.md).
+BenchOrStart Next.js (`apps/web`) reads cards through `#106` `GET /v1/cards` (schema 1.0). The Streamlit fallback (`dashboard/fantasy_app.py`) still reads locked `current/fantasy/cards.jsonl`, then `runs/{run_id}/fantasy/cards.jsonl` for dated runs. `as_of_date` is on the record and lake manifest. `fantasy_cards_*.json` is ignored. Missing card files show an empty state plus stubs. Player CSVs use the same #105 loaders as the FO dashboard. See [fantasy.md](fantasy.md).
 
 ## QA: how to verify with `ARTIFACTS_URI=file://`
 

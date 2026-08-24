@@ -27,7 +27,8 @@ Raw CSV / Lahman API
     → models/train_win_model.py               (LinearRegression + XGBoost + frontier)
     → models/cluster_teams.py                 (KMeans team archetypes)
     → dashboard/app.py                        (Streamlit 8-section FO / GM UI)
-    → dashboard/fantasy_app.py                (BenchOrStart waitlist + share cards)
+    → apps/web                                (public BenchOrStart Next.js)
+    → dashboard/fantasy_app.py                (BenchOrStart Streamlit fallback)
 ```
 
 ## Repo layout
@@ -57,7 +58,10 @@ models/
   cluster_teams.py              KMeans team archetype clustering
 dbt/                            dbt scaffold (staging + mart SQL models)
 dashboard/app.py                Streamlit multi-section FO / GM dashboard
-dashboard/fantasy_app.py        BenchOrStart waitlist + share-card shell
+dashboard/fantasy_app.py        BenchOrStart Streamlit fallback (local / until Next parity)
+apps/web                        Public BenchOrStart (Next.js) — cards, tabs, waitlist
+packages/api-client             Typed /v1 client (stub when NEXT_PUBLIC_API_URL is unset)
+packages/card-schema            Schema 1.0 types + presenters (edge, sit→BENCH)
 fantasy/                        Card loader, stub cards.jsonl, waitlist helper
 docs/                           Architecture, ADRs, schema, metrics framework, shared artifacts, roadmap
 tests/                          Unit tests covering metrics, WAR, validation, artifact storage

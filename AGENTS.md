@@ -24,7 +24,8 @@ The system Python is 3.12; `python3.12-venv` must be installed at the system lev
 | Run tests | `python3 -m pytest tests/ -v` |
 | Run full pipeline | See "Pipeline" section below |
 | Start FO dashboard | `streamlit run dashboard/app.py --server.port 8501 --server.headless true` |
-| Start BenchOrStart | `streamlit run dashboard/fantasy_app.py --server.port 8502 --server.headless true` |
+| Start BenchOrStart (Next.js) | `npm install && npm run dev` (http://localhost:3000) |
+| Start BenchOrStart (Streamlit fallback) | `streamlit run dashboard/fantasy_app.py --server.port 8502 --server.headless true` |
 
 ### Pipeline
 
