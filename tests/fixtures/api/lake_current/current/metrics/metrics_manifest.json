@@ -1,0 +1,12 @@
+{
+  "as_of_date": "2026-08-23",
+  "active_season": 2026,
+  "season_window": [2024, 2025, 2026],
+  "seasons_present": [2024, 2025, 2026],
+  "overlay_seasons": [2025, 2026],
+  "overlay_rows": 2,
+  "active_season_present": true,
+  "active_season_source": "sportsdataio",
+  "current_season_missing": false,
+  "current_season_missing_reason": null
+}

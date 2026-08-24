@@ -1,0 +1,12 @@
+{
+  "as_of_date": "2026-08-23",
+  "active_season": 2026,
+  "season_window": [2024, 2025, 2026],
+  "seasons_present": [2023, 2024],
+  "overlay_seasons": [],
+  "overlay_rows": 0,
+  "active_season_present": false,
+  "active_season_source": null,
+  "current_season_missing": true,
+  "current_season_missing_reason": "sdio_unavailable"
+}
