@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
@@ -760,6 +761,6 @@ def test_share_stat_line_vs_repl_is_normalized_on_face_not_schema() -> None:
     assert normalize_stat_line("vs repl") == "edge"
     assert normalize_stat_line("vs replacement") == "edge"
     assert normalize_stat_line("vs replx") == ""
-    leftover = view._replace(reason=dirty_reason)
+    leftover = replace(view, reason=dirty_reason)
     assert "vs repl" not in share_blurb(leftover).lower()
     assert "vs replacement" not in share_card_html(leftover).lower()
