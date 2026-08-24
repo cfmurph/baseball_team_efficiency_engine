@@ -28,6 +28,7 @@ Raw CSV / Lahman API
     → models/cluster_teams.py                 (KMeans team archetypes)
     → dashboard/app.py                        (Streamlit 8-section FO / GM UI)
     → dashboard/fantasy_app.py                (BenchOrStart waitlist + share cards)
+    → services/api                            (thin read API over current/)
 ```
 
 ## Repo layout
@@ -60,6 +61,7 @@ dashboard/app.py                Streamlit multi-section FO / GM dashboard
 dashboard/fantasy_app.py        BenchOrStart waitlist + share-card shell
 fantasy/                        Card loader, stub cards.jsonl, waitlist helper
 docs/                           Architecture, ADRs, schema, metrics framework, shared artifacts, roadmap
+services/api                    Thin read-only HTTP API over published current/ (#106)
 tests/                          Unit tests covering metrics, WAR, validation, artifact storage
 artifacts/                      Output CSVs and plots (gitignored, generated at runtime)
 ```
@@ -137,11 +139,35 @@ python3 -m models.cluster_teams
 
 # Dashboard (run from the repo root)
 streamlit run dashboard/app.py --server.port 8501 --server.headless true
+
+# Thin read API over published current/ (fixture or local artifacts/)
+python3 -m services.api
+curl 'http://127.0.0.1:8000/v1/cards?season=2026&rec=start'
 ```
 
 The dashboard is Streamlit + Plotly only. Pages load CSVs through named helpers in `dashboard/data.py` (`load_team_metrics()`, `load_player_season_metrics()`, …) — never raw `Path("artifacts")`. When `ARTIFACTS_URI` is set the loaders use `resolve_artifact()` (`current/`, then a one-release `latest/` compat bridge, then local `artifacts/`). Sidebar **Source** shows `remote` | `local` | `missing`. See [docs/adr/0001-shared-artifact-contract.md](docs/adr/0001-shared-artifact-contract.md) and [docs/shared_artifacts.md](docs/shared_artifacts.md).
 
 Season, team, and league widgets share `st.session_state` keys `season_year`, `selected_team`, and `selected_league` (documented in `dashboard/state.py`) so a pick on Overview carries to Team Deep Dive.
+
+## Thin read API
+
+`services/api` is a FastAPI read-only surface over the same `current/` contract. Next.js (#140) should call this API and never open the lake or read `SPORTSDATAIO_API_KEY`. OpenAPI: [services/api/openapi.yaml](services/api/openapi.yaml).
+
+```bash
+# against local artifacts/ (or ARTIFACTS_URI)
+python3 -m services.api
+# GET /v1/health  /v1/seasons  /v1/cards?season=&rec=
+curl 'http://127.0.0.1:8000/v1/cards?season=2026&rec=start'
+```
+
+Point at the committed fixture lake (no pipeline, no API key):
+
+```bash
+export ARTIFACTS_URI=file://$PWD/tests/fixtures/api/lake_current
+python3 -m services.api
+```
+
+CORS allowlist: `API_CORS_ORIGINS` (comma-separated; defaults to localhost:3000). Optional `API_CORS_ORIGIN_REGEX` for Vercel preview hosts. Soft-fail is visible: `current_season_missing` is true and `/v1/cards?season=2026` is empty when the active season was not published — the API does not invent 2026 rows.
 
 ## Nightly refresh
 
@@ -217,12 +243,13 @@ Unit tests covering: metrics helpers, approximate WAR, Baseball-Reference rWAR o
 CI smokes on PRs to `master` (`.github/workflows/ci-smoke.yml`):
 
 ```bash
-python3 -m pytest tests/test_dashboard_apptest.py tests/test_run_nightly.py tests/test_golden_war.py tests/test_sportsdataio.py -v
+python3 -m pytest tests/test_dashboard_apptest.py tests/test_run_nightly.py tests/test_golden_war.py tests/test_sportsdataio.py tests/test_api.py -v
 ```
 
 - **AppTest** — every sidebar page boots without exception (empty `artifacts/` is fine).
 - **Nightly contract** — `pull_war` stays in `PIPELINE_STEPS` immediately after `pull_sources`. `pull_mlb_stats` follows `pull_war` (soft-fail). `pull_sportsdataio` follows Stats API (soft-fail without `SPORTSDATAIO_API_KEY`).
 - **Golden WAR** — Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023 stay `war_source=real` against committed fixtures. Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
+- **Read API** — `/v1/health`, `/v1/cards`, `/v1/seasons` against fixture `current/` (schema 1.0, no invented 2026, no live network / API key).
 
 ## Data sources
 

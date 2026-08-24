@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "as_of_date": "2026-08-23",
+  "created_at": "2026-08-23T08:00:00Z",
+  "git_sha": "fixture",
+  "run_id": "fixture-current",
+  "pipeline_steps": [
+    "pull_sources",
+    "pull_war",
+    "pull_mlb_stats",
+    "pull_sportsdataio",
+    "build_warehouse",
+    "build_metrics"
+  ],
+  "war_source_summary": {"bbref": 1, "approx": 1, "mixed": 0},
+  "files": [
+    "metrics/metrics_manifest.json",
+    "metrics/player_season_metrics.csv",
+    "fantasy/cards.jsonl"
+  ]
+}
