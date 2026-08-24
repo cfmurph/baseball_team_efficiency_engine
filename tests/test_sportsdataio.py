@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import duckdb
 import pandas as pd
@@ -11,7 +12,6 @@ import pytest
 from pipeline.extract import pull_sportsdataio as pull_mod
 from pipeline.transform.build_warehouse import insert_sdio_spine_tables
 from src.baseball_analytics.schema import WAREHOUSE_DDL
-from unittest.mock import MagicMock
 
 from src.baseball_analytics.sportsdataio import (
     API_KEY_ENV,
