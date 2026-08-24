@@ -1,0 +1,28 @@
+/** Exact BenchOrStart marketing copy. Keep in lockstep with `fantasy/copy.py`. */
+
+export const PRODUCT_NAME = "BenchOrStart";
+export const PROMPT_LINE = "Bench or start?";
+export const HEADLINE = "Know who to start and who to grab before lock.";
+export const SUBHEAD =
+  "Weekly start/sit and waiver picks you can drop in your league chat.";
+export const CTA = "Get early access";
+export const MICROCOPY = "No spam. Draft-season updates only.";
+export const SUCCESS = "You're on the list. We'll ping you before soft launch.";
+export const FOOTER = "Built on real player value — not vibes.";
+export const EARLY_MODEL_BADGE = "early model";
+export const EMAIL_ERROR = "Enter a valid email.";
+export const STUB_CAPTION = "Sample cards until the weekly feed is live.";
+export const INVITE_CHIP = "Invite only";
+export const COPY_TEXT = "Copy text";
+export const DOWNLOAD_IMAGE = "Download image";
+export const COPIED = "Copied";
+export const EMPTY_TAB = "No cards in this bucket yet.";
+export const TAB_ALL = "All";
+export const TAB_LABELS = ["START", "BENCH", "PICK UP", "STREAM"] as const;
+export const EMPTY_TITLE = "This week's card isn't up yet.";
+export const EMPTY_BODY =
+  "Weekly pickup, bench, and stream picks land here once the feed is published. Join the list below.";
+
+/** Soft-fail chrome for #131 / #106 — not marketing-locked. */
+export const CURRENT_SEASON_BANNER =
+  "Current-season cards aren't published yet. Showing the latest available feed — we do not invent this year's rows.";
