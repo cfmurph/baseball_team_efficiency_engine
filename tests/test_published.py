@@ -145,7 +145,7 @@ def test_filter_cards_rejects_unknown_rec_and_does_not_invent() -> None:
     with pytest.raises(ValueError, match="start|sit|pickup|stream"):
         filter_cards(cards, rec="bench")
     assert filter_cards(cards, season=2026) == [cards[2]]
-    assert filter_cards(cards, rec="sit") == [cards[2]]
+    assert filter_cards(cards, rec="sit") == [cards[1], cards[2]]
     assert filter_cards(cards, season=2025) == []
 
 
