@@ -298,6 +298,52 @@ def test_decide_current_promote_skip_soft_when_missing_key() -> None:
     )
 
 
+def test_decide_current_promote_promotes_when_max_equals_active() -> None:
+    assert (
+        decide_current_promote(
+            sdio_in_season=True,
+            active_season=2026,
+            metrics_max_season=2026,
+            current_season_missing=False,
+        )
+        == "promote"
+    )
+
+
+def test_decide_current_promote_fail_closed_when_max_season_unknown() -> None:
+    assert (
+        decide_current_promote(
+            sdio_in_season=True,
+            active_season=2026,
+            metrics_max_season=None,
+            current_season_missing=True,
+        )
+        == "fail_closed"
+    )
+
+
+def test_evaluate_current_promote_uses_csv_when_seasons_present_unparseable(
+    tmp_path: Path,
+) -> None:
+    local = tmp_path / "artifacts"
+    local.mkdir()
+    _write_metrics_manifest(
+        local,
+        sdio_in_season=True,
+        current_season_missing=True,
+        current_season_missing_reason="sdio_empty_active_season",
+        seasons_present=["x", "", None],
+    )
+    (local / "player_season_metrics.csv").write_text(
+        "player_id,season\njudgeaa01,2024\n",
+        encoding="utf-8",
+    )
+    decision, reason = evaluate_current_promote(local)
+    assert decision == "fail_closed"
+    assert "max(season)=2024" in reason
+    assert "2026" in reason
+
+
 def test_upload_refuses_current_promote_when_sdio_in_season_but_stale(
     tmp_path: Path,
 ) -> None:

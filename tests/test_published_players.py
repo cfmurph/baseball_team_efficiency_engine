@@ -5,6 +5,7 @@ import pytest
 
 from src.baseball_analytics.published import (
     group_public_players,
+    player_season_year,
     public_player_season,
     resolve_published_player,
 )
@@ -115,3 +116,62 @@ def test_resolve_known_player_empty_seasons_when_year_missing() -> None:
     assert resolved["player_id"] == "judgeaa01"
     assert resolved["name"] == "Aaron Judge"
     assert resolved["seasons"] == []
+
+
+def test_public_season_returns_none_without_a_year() -> None:
+    assert public_player_season({"player_id": "x01", "pa": "20"}) is None
+    assert public_player_season({**JUDGE_2026, "season": "", "year_id": ""}) is None
+
+
+def test_player_season_year_accepts_float_strings_and_year_id() -> None:
+    assert player_season_year({"season": "2026.0"}) == 2026
+    assert player_season_year({"year_id": "2024"}) == 2024
+    assert player_season_year({"season_key": 2025}) == 2025
+    assert player_season_year({"season": "not-a-year"}) is None
+    assert player_season_year({}) is None
+
+
+def test_public_season_drops_nan_rates_and_does_not_invent_avg_on_zero_ab() -> None:
+    season = public_player_season(
+        {
+            "player_id": "x01",
+            "player_name": "No Avg",
+            "season": "2026",
+            "hits": "4",
+            "ab": "0",
+            "era": "nan",
+            "obp": "not-a-number",
+        }
+    )
+    assert season is not None
+    assert season["avg"] is None
+    assert season["era"] is None
+    assert season["obp"] is None
+    assert season["hits"] == 4
+    assert season["ab"] == 0
+
+
+def test_group_skips_private_only_and_blank_player_ids() -> None:
+    players = group_public_players(
+        [
+            {"salary": "1", "vs_replacement": "2.0", "edge": "x"},
+            {**JUDGE_2026, "player_id": "  "},
+            JUDGE_2026,
+        ]
+    )
+    assert [item["player_id"] for item in players] == ["judgeaa01"]
+
+
+def test_group_refreshes_identity_from_the_latest_season() -> None:
+    older = {**JUDGE_2024, "player_name": "", "team": "NYY", "position": "DH"}
+    newer = {**JUDGE_2026, "player_name": "Aaron Judge", "team": "NYY", "position": "OF"}
+    players = group_public_players([older, newer])
+    assert len(players) == 1
+    assert players[0]["name"] == "Aaron Judge"
+    assert players[0]["position"] == "OF"
+    assert [row["season"] for row in players[0]["seasons"]] == [2026, 2024]
+
+
+def test_resolve_blank_player_id_is_none() -> None:
+    assert resolve_published_player([JUDGE_2026], "") is None
+    assert resolve_published_player([JUDGE_2026], "   ") is None
