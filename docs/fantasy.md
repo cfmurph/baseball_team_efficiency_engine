@@ -67,7 +67,8 @@ The web UI shows a not-current-year banner when `current_season_missing` is true
 ## QA notes
 
 - **Cards from API or stub.** Unset `NEXT_PUBLIC_API_URL` → four stubs (Steer / Suárez / Judge / Soler) and the sample caption. Set the URL → `/v1/cards` only; empty API payloads stay empty (no silent 2026 invention).
-- **Players directory.** `/players` + `/players/[id]`. Card names on `/` deep-link via `player.player_id`. Silent 50 PA / 20 IP floor. No compare chrome.
+- **Players directory.** `/players` + `/players/[id]`. Card names on `/` deep-link via `player.player_id`. Silent 50 PA / 20 IP floor.
+- **Compare.** `/compare?mode=players&season=&ids=` — 2–4 players, search slots + stats table. Player page **Add to compare** deep-links into that URL using the same `player_id`. Teams nav is visible but disabled.
 - **Waitlist.** Email-only. Next route `POST /api/waitlist` validates, optionally POSTs `FANTASY_WAITLIST_WEBHOOK`, appends `data/waitlist/signups.jsonl` when the disk allows, otherwise no-op with the success state. Streamlit fallback uses `fantasy/waitlist.py`.
 - **No `vs repl`.** Face copy, Copy text, and Download image say **edge**. Schema field `edge.vs_replacement` is unchanged.
 - **Approx badge.** `war_source=approx` or `is_approx` shows the **early model** badge and hides confidence.

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import {
@@ -20,6 +21,7 @@ import {
 import { CURRENT_SEASON_BANNER, EARLY_MODEL_BADGE, FOOTER, labelTone } from "@bos/card-schema";
 
 import { SiteHeader } from "@/components/SiteHeader";
+import { buildComparePath, compareHrefForPlayer } from "@/lib/compare";
 import type { PlayerPageData } from "@/lib/load";
 
 function lineForSeason<T extends { season: number }>(rows: T[], season: number): T | null {
@@ -34,6 +36,26 @@ function countingAndRates(side: PlayerSide, hitting: HittingSeason | null, pitch
     return { counting: hittingCountingLine(hitting), rates: hittingRatesLine(hitting), approx: isApproxWar(hitting.war_source) };
   }
   return { counting: "", rates: "", approx: false };
+}
+
+function AddToCompare({ playerId, season }: { playerId: string; season: number }) {
+  const router = useRouter();
+  const href = buildComparePath({ season, ids: [playerId] });
+  return (
+    <Link
+      className="bos-ghost bos-add-compare"
+      href={href}
+      onClick={(event) => {
+        const next = compareHrefForPlayer(playerId, season);
+        if (next !== href) {
+          event.preventDefault();
+          router.push(next);
+        }
+      }}
+    >
+      Add to compare
+    </Link>
+  );
 }
 
 export function PlayerProfile({
@@ -110,6 +132,9 @@ export function PlayerProfile({
         </h1>
         <p>
           {detail.player.team} · {detail.player.position}
+        </p>
+        <p className="bos-identity-actions">
+          <AddToCompare playerId={detail.player.player_id} season={season} />
         </p>
       </header>
 

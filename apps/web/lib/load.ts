@@ -16,6 +16,8 @@ import {
   type ShareCardView,
 } from "@bos/card-schema";
 
+import { parseCompareQuery, type CompareQuery, type CompareSearchInput } from "./compare.ts";
+
 export type FeedSource = "api" | "stub";
 
 export type HomeData = {
@@ -180,4 +182,59 @@ export async function loadPlayerData(id: string): Promise<PlayerPageData> {
       showSeasonBanner: true,
     };
   }
+}
+
+export type ComparePageData = {
+  query: CompareQuery;
+  details: Array<PlayerDetail | null>;
+  bySeason: Record<number, PlayerListItem[]>;
+  seasons: number[];
+  defaultSeason: number;
+  health: Health;
+  showSeasonBanner: boolean;
+  showingStubs: boolean;
+};
+
+export async function loadCompareData(raw: CompareSearchInput = {}): Promise<ComparePageData> {
+  const directory = await loadPlayersData();
+  const query = parseCompareQuery(raw, directory.defaultSeason, directory.seasons);
+  if (!query.ids.length) {
+    return {
+      query,
+      details: [],
+      bySeason: directory.bySeason,
+      seasons: directory.seasons,
+      defaultSeason: directory.defaultSeason,
+      health: directory.health,
+      showSeasonBanner: directory.showSeasonBanner,
+      showingStubs: directory.showingStubs,
+    };
+  }
+
+  const client = createApiClient({
+    baseUrl: publicApiUrl(),
+    stubCurrentSeasonMissing: envFlag("NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING"),
+  });
+  const source = client.source === "stub" ? "stub" : "api";
+  const details = await Promise.all(
+    query.ids.map(async (id) => {
+      try {
+        const response = await client.getPlayer(id);
+        return response.player ? parsePlayerDetail(response, source) : null;
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return {
+    query,
+    details,
+    bySeason: directory.bySeason,
+    seasons: directory.seasons,
+    defaultSeason: directory.defaultSeason,
+    health: directory.health,
+    showSeasonBanner: directory.showSeasonBanner,
+    showingStubs: directory.showingStubs,
+  };
 }

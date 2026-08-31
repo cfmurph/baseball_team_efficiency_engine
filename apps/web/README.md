@@ -2,7 +2,7 @@
 
 Public Next.js client for BenchOrStart. Consumes the thin `#106` / `#152` read API (`GET /v1/health`, `/v1/cards`, `/v1/seasons`, `/v1/players`, `/v1/players/{id}`). `/` is cards. `/players` hits live players routes when `NEXT_PUBLIC_API_URL` is set. Unset URL keeps fixture cards and an empty players miss — no invented 2026 rows.
 
-Routes: `/` cards home, `/players` directory, `/players/[id]` player page (`id` = schema 1.0 `player.player_id`). No `/compare` in this wave.
+Routes: `/` cards home, `/players` directory, `/players/[id]` player page (`id` = schema 1.0 `player.player_id`), `/compare` player compare (`ids` = the same `player_id`). Teams nav is visible but disabled.
 
 The Streamlit shell at `dashboard/fantasy_app.py` stays as a local fallback. The front-office GM app (`dashboard/app.py`) is out of scope.
 
