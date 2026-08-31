@@ -171,8 +171,10 @@ test("compareHrefForPlayer appends onto stored ids", () => {
     compareHrefForPlayer("pitcher-1", 2024, api),
     "/compare?mode=players&season=2025&ids=hitter-1,pitcher-1",
   );
+  assert.equal(compareHrefForPlayer("third", 2025, api).includes("third"), true);
+  assert.equal(compareHrefForPlayer("fourth", 2025, api).includes("fourth"), true);
   const stored = readStoredCompare(api);
-  assert.deepEqual(stored?.ids, ["hitter-1", "pitcher-1"]);
+  assert.deepEqual(stored?.ids, ["hitter-1", "pitcher-1", "third", "fourth"]);
   assert.equal(compareHrefForPlayer("extra-5", 2025, api).includes("extra-5"), false);
 });
 
