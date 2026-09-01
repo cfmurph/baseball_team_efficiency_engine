@@ -8,7 +8,10 @@ from streamlit.testing.v1 import AppTest
 
 import ast
 
-from dashboard.helpers import NAV_PAGES, nav_labels
+import pandas as pd
+
+from dashboard.helpers import NAV_PAGES, PRIOR_SEASON_TABLE_NOTE, nav_labels
+from dashboard.state import SEASON_YEAR
 from dashboard import ui as ui_mod
 
 ROOT = Path(__file__).resolve().parents[1]

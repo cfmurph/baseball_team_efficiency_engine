@@ -71,6 +71,11 @@ def test_phase0_schema_v01_is_locked() -> None:
     assert raw["clarifications"]["issue"] == 131
     assert raw["clarifications"]["default_season_window"] == "[Y-2, Y]"
     assert raw["clarifications"]["live_path_for_in_season"] == "sportsdataio"
+    assert raw["clarifications"]["team_grain_issue"] == 138
+    assert raw["clarifications"]["fo_team_overlay"] == "team_onfield_contract_metrics"
+    assert "Clarifying addendum (#138" in md
+    assert "team_onfield_contract_metrics.csv" in md
+    assert "team_current_season_missing" in md
     assert raw["soft_fail"]["must_not_pretend_current_season"] is True
 
 

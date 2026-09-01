@@ -16,10 +16,25 @@
     "Strikeouts": 171,
     "RunsBattedIn": 144,
     "StolenBases": 10,
+    "Runs": 122,
+    "Doubles": 36,
+    "Triples": 1,
     "InningsPitchedDecimal": 0,
     "EarnedRunAverage": null,
     "WalksHitsPerInningsPitched": null,
+    "PitchingEarnedRuns": 0,
     "PitchingStrikeouts": 0,
-    "PitchingWalks": 0
+    "PitchingWalks": 0,
+    "PitchingHits": 0,
+    "PitchingHomeRuns": 0,
+    "GamesStarted": 0,
+    "Wins": 0,
+    "Losses": 0,
+    "Saves": 0,
+    "PutOuts": 361,
+    "Assists": 8,
+    "Errors": 4,
+    "DoublePlays": 1,
+    "PassedBalls": 0
   }
 ]

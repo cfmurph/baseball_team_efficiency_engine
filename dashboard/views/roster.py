@@ -5,9 +5,13 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from dashboard.data import load_player_season_metrics, load_sr_player_metrics
+from dashboard.data import load_metrics_manifest, load_player_season_metrics, load_sr_player_metrics
 from dashboard.helpers import (
     CONTRACT_COLORS,
+    is_prior_only_publish,
+    max_season_from_frame,
+    resolve_active_year,
+    seasons_from_manifest,
     scale_money_columns,
     teams_from_frame,
     years_from_frame,
@@ -20,6 +24,7 @@ from dashboard.ui import (
     page_header as _page_header,
     panel_head,
     player_column_config,
+    prior_season_note as _prior_season_note,
     salary_note as _salary_note,
     show_table as _show_table,
 )
@@ -70,6 +75,16 @@ def page_player_explorer() -> None:
         sort_by = st.selectbox("Sort by", sort_col_opts, key="pe_sort")
 
     _salary_note(year)
+    manifest = load_metrics_manifest()
+    _prior_season_note(
+        show=is_prior_only_publish(
+            current_season_missing=(manifest or {}).get("current_season_missing"),
+            selected_season=None if year is None else int(year),
+            max_season=max_season_from_frame(players),
+            seasons_present=seasons_from_manifest(manifest),
+            active_year=resolve_active_year(manifest=manifest),
+        )
+    )
     filt = players[players["year_id"] == year].copy() if year is not None else players.copy()
     if team != "All Teams" and "team_name" in filt.columns:
         filt = filt[filt["team_name"] == team]

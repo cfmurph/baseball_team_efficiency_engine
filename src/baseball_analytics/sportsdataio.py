@@ -60,6 +60,13 @@ ENDPOINT_GAMES = "games"
 ENDPOINT_PLAYER_GAME_STATS = "player_game_stats"
 ENDPOINT_PLAYER_SEASON_STATS = "player_season_stats"
 ENDPOINT_EXTRACT_REPORT = "extract_report"
+NIGHTLY_EXTRACT_REPORT_NAME = "extract_report.json"
+
+STATUS_HTTP_200 = "200"
+STATUS_HTTP_401 = "401"
+STATUS_EMPTY = "empty"
+STATUS_SOFT_FAIL = "soft-fail"
+HTTP_STATUS_LABELS = (STATUS_HTTP_200, STATUS_HTTP_401, STATUS_EMPTY, STATUS_SOFT_FAIL)
 
 DATE_ENDPOINTS = (ENDPOINT_GAMES_BY_DATE, ENDPOINT_PLAYER_GAME_STATS)
 SEASON_ENDPOINTS = (ENDPOINT_GAMES, ENDPOINT_PLAYER_SEASON_STATS)
@@ -102,6 +109,16 @@ class EndpointResult:
     error: str | None = None
     season: int | None = None
     as_of_date: str | None = None
+    http_status: int | None = None
+    status: str = STATUS_SOFT_FAIL
+
+    @property
+    def http_path(self) -> str:
+        if self.endpoint == ENDPOINT_PLAYER_SEASON_STATS and self.season is not None:
+            return f"PlayerSeasonStats/{int(self.season)}"
+        if self.endpoint == ENDPOINT_GAMES and self.season is not None:
+            return f"Games/{int(self.season)}"
+        return self.endpoint
 
 
 @dataclass
@@ -131,6 +148,7 @@ class ExtractReport:
             "endpoints": [
                 {
                     "endpoint": item.endpoint,
+                    "http_path": item.http_path,
                     "ok": item.ok,
                     "relative_key": item.relative_key,
                     "local_path": item.local_path,
@@ -138,6 +156,8 @@ class ExtractReport:
                     "error": item.error,
                     "season": item.season,
                     "as_of_date": item.as_of_date,
+                    "http_status": item.http_status,
+                    "status": item.status,
                 }
                 for item in self.endpoints
             ],
@@ -354,7 +374,8 @@ class SportsDataIOClient:
                 continue
             if response.status_code in {401, 403}:
                 raise SportsDataIOError(
-                    f"HTTP {response.status_code} from SportsDataIO (key rejected or unauthorized)",
+                    f"HTTP {response.status_code} from SportsDataIO {path} "
+                    "(key rejected or unauthorized)",
                     status_code=response.status_code,
                     url=path,
                 )
@@ -397,6 +418,7 @@ def pull_phase0_feeds(
     backend: ArtifactBackend | None = None,
     include_season_feeds: bool = False,
     pull_dates: Sequence[str] | None = None,
+    artifacts_dir: str | Path | None = None,
 ) -> ExtractReport:
     """Fetch Phase 0 SDIO feeds and land versioned raw JSON.
 
@@ -410,8 +432,9 @@ def pull_phase0_feeds(
         report.soft_fail = True
         report.error = f"missing_{API_KEY_ENV}"
         report.skipped_reason = "missing_api_key"
+        record_skipped_window_statuses(report)
         mark_extract_season_coverage(report)
-        _write_report(report, raw_dir, as_of_date, backend)
+        _write_report(report, raw_dir, as_of_date, backend, artifacts_dir=artifacts_dir)
         log.warning("SportsDataIO extract skipped: %s unset", API_KEY_ENV)
         return report
 
@@ -499,7 +522,7 @@ def pull_phase0_feeds(
             )
     report.ok = all(item.ok for item in report.endpoints)
     mark_extract_season_coverage(report)
-    _write_report(report, raw_dir, as_of_date, backend)
+    _write_report(report, raw_dir, as_of_date, backend, artifacts_dir=artifacts_dir)
     return report
 
 
@@ -623,6 +646,17 @@ def parse_player_game_stats(payload: Any) -> pd.DataFrame:
                 "whip": _num(stat.get("WalksHitsPerInningsPitched")),
                 "pitching_so": _num(stat.get("PitchingStrikeouts")),
                 "pitching_bb": _num(stat.get("PitchingWalks")),
+                "pitching_hits": _num(stat.get("PitchingHits")),
+                "pitching_hr": _num(stat.get("PitchingHomeRuns")),
+                "games_started": _int(stat.get("GamesStarted")),
+                "wins": _num(stat.get("Wins")),
+                "losses": _num(stat.get("Losses")),
+                "saves": _num(stat.get("Saves")),
+                "putouts": _num(stat.get("PutOuts") if stat.get("PutOuts") is not None else stat.get("Putouts")),
+                "assists": _num(stat.get("Assists")),
+                "errors": _num(stat.get("Errors")),
+                "double_plays": _num(stat.get("DoublePlays")),
+                "passed_balls": _num(stat.get("PassedBalls")),
             }
         )
     if not rows:
@@ -652,11 +686,26 @@ def parse_player_season_stats(payload: Any) -> pd.DataFrame:
                 "so": _num(stat.get("Strikeouts")),
                 "rbi": _num(stat.get("RunsBattedIn")),
                 "sb": _num(stat.get("StolenBases")),
+                "runs": _num(stat.get("Runs")),
+                "doubles": _num(stat.get("Doubles")),
+                "triples": _num(stat.get("Triples")),
                 "ip": _num(stat.get("InningsPitchedDecimal")),
+                "er": _num(stat.get("PitchingEarnedRuns")),
                 "era": _num(stat.get("EarnedRunAverage")),
                 "whip": _num(stat.get("WalksHitsPerInningsPitched")),
                 "pitching_so": _num(stat.get("PitchingStrikeouts")),
                 "pitching_bb": _num(stat.get("PitchingWalks")),
+                "pitching_hits": _num(stat.get("PitchingHits")),
+                "pitching_hr": _num(stat.get("PitchingHomeRuns")),
+                "games_started": _int(stat.get("GamesStarted")),
+                "wins": _num(stat.get("Wins")),
+                "losses": _num(stat.get("Losses")),
+                "saves": _num(stat.get("Saves")),
+                "putouts": _num(stat.get("PutOuts") if stat.get("PutOuts") is not None else stat.get("Putouts")),
+                "assists": _num(stat.get("Assists")),
+                "errors": _num(stat.get("Errors")),
+                "double_plays": _num(stat.get("DoublePlays")),
+                "passed_balls": _num(stat.get("PassedBalls")),
             }
         )
     return _drop_null_id(pd.DataFrame(rows), "sdio_player_id")
@@ -1067,20 +1116,100 @@ def open_optional_backend(
     return open_backend(uri, environ=environ)
 
 
+def classify_endpoint_status(
+    *,
+    payload: Any | None = None,
+    error: Exception | None = None,
+) -> tuple[str, int | None]:
+    """Map a pull result to ``200`` / ``401`` / ``empty`` / ``soft-fail``.
+
+    Status comes from the HTTP attempt (or a missing-key skip), never from
+    leftover warehouse ``player_season_stat`` rows.
+    """
+    if error is not None:
+        code = getattr(error, "status_code", None)
+        if isinstance(code, int) and code == 401:
+            return STATUS_HTTP_401, 401
+        return STATUS_SOFT_FAIL, code if isinstance(code, int) else None
+    if _payload_is_empty(payload):
+        return STATUS_EMPTY, 200
+    return STATUS_HTTP_200, 200
+
+
+def record_skipped_window_statuses(report: ExtractReport) -> ExtractReport:
+    """Emit one PlayerSeasonStats/{season} soft-fail row per planned year."""
+    window = list(report.seasons) or default_season_window(report.as_of_date)
+    report.seasons = window
+    existing = {
+        (item.endpoint, item.season)
+        for item in report.endpoints
+        if item.endpoint == ENDPOINT_PLAYER_SEASON_STATS and item.season is not None
+    }
+    for year in window:
+        if (ENDPOINT_PLAYER_SEASON_STATS, year) in existing:
+            continue
+        item = EndpointResult(
+            endpoint=ENDPOINT_PLAYER_SEASON_STATS,
+            ok=False,
+            error=report.error,
+            season=year,
+            as_of_date=report.as_of_date,
+            http_status=None,
+            status=STATUS_SOFT_FAIL,
+        )
+        report.endpoints.append(item)
+        _log_endpoint_http_status(item)
+    return report
+
+
+def stage_extract_report(
+    payload: Mapping[str, Any],
+    artifacts_dir: str | Path,
+) -> Path:
+    """Copy extract_report.json into the nightly ``artifacts/`` tree."""
+    dest = Path(artifacts_dir) / NIGHTLY_EXTRACT_REPORT_NAME
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return dest
+
+
+def _payload_is_empty(payload: Any) -> bool:
+    return not _as_records(payload)
+
+
+def _log_endpoint_http_status(item: EndpointResult) -> None:
+    label = item.status if item.status in HTTP_STATUS_LABELS else STATUS_SOFT_FAIL
+    line = f"SportsDataIO {item.http_path} HTTP {label}"
+    if item.season is not None and item.endpoint == ENDPOINT_PLAYER_SEASON_STATS:
+        line = f"SportsDataIO PlayerSeasonStats/{int(item.season)} HTTP {label}"
+    if item.ok:
+        log.info(line)
+        return
+    extra = f" ({item.error})" if item.error else ""
+    log.warning("%s%s", line, extra)
+
+
 def _write_report(
     report: ExtractReport,
     raw_dir: str | Path,
     as_of_date: str,
     backend: ArtifactBackend | None,
+    artifacts_dir: str | Path | None = None,
 ) -> None:
+    payload = report.to_dict()
     write_raw_payload(
-        report.to_dict(),
+        payload,
         endpoint=ENDPOINT_EXTRACT_REPORT,
         as_of_date=as_of_date,
-        filename="extract_report.json",
+        filename=NIGHTLY_EXTRACT_REPORT_NAME,
         raw_dir=raw_dir,
         backend=backend,
     )
+    if artifacts_dir is not None:
+        stage_extract_report(payload, artifacts_dir)
 
 
 def _pull_one(
@@ -1096,6 +1225,7 @@ def _pull_one(
 ) -> EndpointResult:
     try:
         payload = fetch()
+        status, http_status = classify_endpoint_status(payload=payload)
         dest, key = write_raw_payload(
             payload,
             endpoint=endpoint,
@@ -1104,7 +1234,7 @@ def _pull_one(
             raw_dir=raw_dir,
             backend=backend,
         )
-        return EndpointResult(
+        item = EndpointResult(
             endpoint=endpoint,
             ok=True,
             relative_key=key,
@@ -1112,16 +1242,22 @@ def _pull_one(
             bytes_written=dest.stat().st_size,
             season=season,
             as_of_date=date or as_of_date,
+            http_status=http_status,
+            status=status,
         )
     except Exception as exc:  # soft-fail a single endpoint
-        log.warning("SportsDataIO %s failed softly: %s", endpoint, exc)
-        return EndpointResult(
+        status, http_status = classify_endpoint_status(error=exc)
+        item = EndpointResult(
             endpoint=endpoint,
             ok=False,
             error=str(exc),
             season=season,
             as_of_date=date or as_of_date,
+            http_status=http_status,
+            status=status,
         )
+    _log_endpoint_http_status(item)
+    return item
 
 
 def _build_aliases(
@@ -1364,17 +1500,29 @@ def _discover_seasons(
     report = read_raw_payload(
         endpoint=ENDPOINT_EXTRACT_REPORT,
         as_of_date=as_of_date,
-        filename="extract_report.json",
+        filename=NIGHTLY_EXTRACT_REPORT_NAME,
         raw_dir=raw_dir,
         backend=backend,
     )
+    blocked: set[int] = set()
     if isinstance(report, Mapping):
-        for year in report.get("seasons") or []:
-            years.add(int(year))
         for item in report.get("endpoints") or []:
-            if item.get("season"):
-                years.add(int(item["season"]))
-    return sorted(years) or [int(as_of_date[:4])]
+            year = item.get("season")
+            if not year:
+                continue
+            year = int(year)
+            status = str(item.get("status") or "")
+            failed_http = status in {STATUS_HTTP_401, STATUS_SOFT_FAIL} or item.get("ok") is False
+            if failed_http:
+                blocked.add(year)
+            elif item.get("ok") and status in {STATUS_HTTP_200, STATUS_EMPTY, ""}:
+                years.add(year)
+    years -= blocked
+    if years:
+        return sorted(years)
+    if blocked:
+        return []
+    return [int(as_of_date[:4])]
 
 
 def _read_parsed(

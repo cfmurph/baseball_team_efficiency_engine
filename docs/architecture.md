@@ -21,8 +21,9 @@ Turn a simple historical baseball CSV merge into an analytics platform that can 
   `{ARTIFACTS_URI}/raw/sportsdataio/{endpoint}/{as_of_date}/` — default
   seasons `[Y-2, Y]` from `as_of_date`; soft-fail without
   `SPORTSDATAIO_API_KEY`; warehouse skips the spine if empty; metrics
-  overlay those years onto `player_season_metrics` so `current/` can
-  include the active season
+  overlay those years onto `player_season_metrics` and
+  `team_onfield_contract_metrics` so `current/` can include the active
+  season on both fantasy cards and FO league desks
 - Maintain one file per source
 - Preserve raw column names for traceability
 
@@ -62,8 +63,10 @@ This is where metric logic becomes standardized and reusable:
 - Future: dead-money and surplus-value models
 
 ### 5. Presentation layer
-- Streamlit dashboard for season, team, and trend exploration
-- Separate BenchOrStart Streamlit shell (`dashboard/fantasy_app.py`) for waitlist + share cards
+- Streamlit dashboard for season, team, and trend exploration (FO / GM — `dashboard/app.py`)
+- Public BenchOrStart: Next.js (`apps/web`) over the #106 `/v1` read API
+- Shared TS client (`packages/api-client`) + schema 1.0 presenters (`packages/card-schema`); Expo planned later, not scaffolded
+- Streamlit `dashboard/fantasy_app.py` remains a local fallback until Next parity
 - Thin read-only HTTP API (`services/api`) over published `current/` (`/v1/health`, `/v1/cards`, `/v1/seasons`)
 - Static exports for portfolio/demo use
 - Next.js BenchOrStart (#140) consumes the API; FO Streamlit stays internal

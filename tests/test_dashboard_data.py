@@ -7,7 +7,7 @@ import ast
 from pathlib import Path
 
 from src.baseball_analytics.config import ArtifactSettings
-from dashboard.data import ARTIFACT_NAMES, resolve_file
+from dashboard.data import ARTIFACT_NAMES, METRICS_MANIFEST_NAME, resolve_file, resolve_metrics_manifest
 from dashboard.state import SEASON_YEAR, SELECTED_LEAGUE, SELECTED_TEAM, SHARED_STATE_KEYS
 
 @pytest.mark.unit
@@ -51,10 +51,13 @@ def test_data_module_has_named_loaders() -> None:
         "load_window_phases",
         "load_frontier_data",
         "load_win_model_metrics",
+        "load_metrics_manifest",
     ):
         assert f"def {name}(" in source
     assert "resolve_artifact" in source
     assert ARTIFACT_NAMES["metrics"] == "team_onfield_contract_metrics.csv"
+    assert ARTIFACT_NAMES["metrics_manifest"] == METRICS_MANIFEST_NAME
+    assert METRICS_MANIFEST_NAME == "metrics_manifest.json"
 
 @pytest.mark.integration
 def test_resolve_file_uses_local_fallback(tmp_path: Path) -> None:
@@ -72,6 +75,12 @@ def test_resolve_file_uses_local_fallback(tmp_path: Path) -> None:
     path = resolve_file("metrics", settings)
     assert path == local / "team_onfield_contract_metrics.csv"
     assert resolve_file("players", settings) is None
+    (local / METRICS_MANIFEST_NAME).write_text(
+        '{"current_season_missing": true, "active_season": 2026, "seasons_present": [2024]}\n'
+    )
+    assert resolve_file("metrics_manifest", settings) == local / METRICS_MANIFEST_NAME
+    manifest_path = resolve_metrics_manifest(settings)
+    assert manifest_path == local / METRICS_MANIFEST_NAME
 
 @pytest.mark.integration
 def test_resolve_file_prefers_current_over_legacy_latest(tmp_path: Path) -> None:

@@ -88,6 +88,26 @@ jobs:
       - name: Run e2e tests
         run: python3 -m pytest -m e2e -v
 
+  web:
+    name: BenchOrStart Next.js
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install and test web
+        run: |
+          npm install
+          npm test
+          npm run build
+
   # Ruleset 21254328 still requires this exact check name from ci-smoke.yml.
   # Coverage lives in the three pyramid jobs; this is a pass-through alias only.
   smoke_alias:

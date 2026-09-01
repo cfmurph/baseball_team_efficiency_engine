@@ -10,6 +10,10 @@ info:
     Soft-fail is visible: when `current_season_missing` is true the default
     window still includes the active year (2024–2026 when Y=2026) but the
     API does **not** invent 2026 cards or metric rows.
+
+    Player grain is published `player_season_metrics` (the SDIO/Lahman
+    overlay form). The API does not query the warehouse or lake and does
+    not pull SportsDataIO. URL `{id}` is the internal `player_id` PK.
   license:
     name: Repository
 servers:
@@ -135,6 +139,196 @@ paths:
                       stat_line: "+3.4 edge · 91% conf"
         "422":
           description: Invalid `season` or `rec` query.
+  /v1/players:
+    get:
+      tags: [v1]
+      summary: Published player directory
+      operationId: getPlayers
+      description: |
+        Reads published `current/metrics/player_season_metrics.csv`.
+        Default window is `[Y-2, Y]` (2024–2026 when Y=2026), same as
+        `/v1/seasons`. Omit `season` to use that window. `share.stat_line`
+        and `vs repl` stay on cards only. No DFS, betting, weather,
+        box-score, or invented payroll. Published `war` is passed through
+        when present; the API never writes WAR onto an SDIO spine.
+
+        When the active year is missing, `GET /v1/players?season=2026`
+        is an empty list with the same honesty fields as `/v1/health`.
+      parameters:
+        - name: season
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1871
+            maximum: 2100
+          description: |
+            MLB championship season year. Omit to default to `[Y-2, Y]`.
+      responses:
+        "200":
+          description: Player list. Empty `players` is a miss, not a stub.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayersResponse"
+              examples:
+                currentPresent:
+                  value:
+                    as_of: "2026-08-23"
+                    active_season: 2026
+                    current_season_missing: false
+                    season_window: [2024, 2025, 2026]
+                    source: local
+                    seasons_present: [2024, 2025, 2026]
+                    current_season_missing_reason: null
+                    season: null
+                    players:
+                      - player_id: judgeaa01
+                        name: Aaron Judge
+                        position: OF
+                        team: NYY
+                        seasons:
+                          - season: 2026
+                            team: NYY
+                            team_name: Yankees
+                            position: OF
+                            player_type: batter
+                            stat_source: sportsdataio
+                            war_source: real
+                            war: 6.1
+                            games: 120
+                            pa: 500
+                            ab: 400
+                            hits: 140
+                            hr: 40
+                            bb: 90
+                            so: 130
+                            rbi: 100
+                            sb: 8
+                            ip: null
+                            pitching_so: null
+                            pitching_bb: null
+                            avg: 0.35
+                            obp: null
+                            slg: null
+                            ops: null
+                            woba: 0.42
+                            era: null
+                            whip: null
+                            fip: null
+                currentMissing:
+                  value:
+                    as_of: "2026-08-23"
+                    active_season: 2026
+                    current_season_missing: true
+                    season_window: [2024, 2025, 2026]
+                    source: local
+                    seasons_present: [2024]
+                    current_season_missing_reason: sdio_unavailable
+                    season: 2026
+                    players: []
+        "422":
+          description: Invalid `season` query.
+  /v1/players/{id}:
+    get:
+      tags: [v1]
+      summary: One published player
+      operationId: getPlayer
+      description: |
+        Resolves `{id}` as the internal `player_id` primary key on
+        published `player_season_metrics`. Default window `[Y-2, Y]`.
+        A known player with no row for the requested year returns 200
+        and an empty `seasons` list (never invents 2026). Unknown PK
+        is 404. This surface does not call SportsDataIO, so it does not
+        emit vendor 401s.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: Internal `player_id` PK.
+        - name: season
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1871
+            maximum: 2100
+          description: MLB championship season year. Omit to default to `[Y-2, Y]`.
+      responses:
+        "200":
+          description: Player identity plus published seasons in the window.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayerResponse"
+              examples:
+                found:
+                  value:
+                    as_of: "2026-08-23"
+                    active_season: 2026
+                    current_season_missing: false
+                    season_window: [2024, 2025, 2026]
+                    source: local
+                    seasons_present: [2024, 2025, 2026]
+                    current_season_missing_reason: null
+                    season: null
+                    player:
+                      player_id: judgeaa01
+                      name: Aaron Judge
+                      position: OF
+                      team: NYY
+                      seasons:
+                        - season: 2026
+                          team: NYY
+                          team_name: Yankees
+                          position: OF
+                          player_type: batter
+                          stat_source: sportsdataio
+                          war_source: real
+                          war: 6.1
+                          games: 120
+                          pa: 500
+                          ab: 400
+                          hits: 140
+                          hr: 40
+                          bb: 90
+                          so: 130
+                          rbi: 100
+                          sb: 8
+                          ip: null
+                          pitching_so: null
+                          pitching_bb: null
+                          avg: 0.35
+                          obp: null
+                          slg: null
+                          ops: null
+                          woba: 0.42
+                          era: null
+                          whip: null
+                          fip: null
+                missingSeason:
+                  value:
+                    as_of: "2026-08-23"
+                    active_season: 2026
+                    current_season_missing: true
+                    season_window: [2024, 2025, 2026]
+                    source: local
+                    seasons_present: [2024]
+                    current_season_missing_reason: sdio_unavailable
+                    season: 2026
+                    player:
+                      player_id: judgeaa01
+                      name: Aaron Judge
+                      position: OF
+                      team: NYY
+                      seasons: []
+        "404":
+          description: "id is not a published internal player_id."
+        "422":
+          description: "Invalid season query."
 components:
   schemas:
     HealthResponse:
@@ -220,6 +414,286 @@ components:
             type: object
             additionalProperties: true
             description: Verbatim schema 1.0 JSONL record
+    PlayerSeason:
+      type: object
+      additionalProperties: false
+      required:
+        - season
+      properties:
+        season:
+          type: integer
+        team:
+          type: string
+          nullable: true
+        team_name:
+          type: string
+          nullable: true
+        position:
+          type: string
+          nullable: true
+        player_type:
+          type: string
+          nullable: true
+        stat_source:
+          type: string
+          nullable: true
+        war_source:
+          type: string
+          nullable: true
+        war:
+          type: number
+          nullable: true
+          description: Published player_war only. Never computed here.
+        games:
+          type: number
+          nullable: true
+        pa:
+          type: number
+          nullable: true
+        ab:
+          type: number
+          nullable: true
+        hits:
+          type: number
+          nullable: true
+        hr:
+          type: number
+          nullable: true
+        bb:
+          type: number
+          nullable: true
+        so:
+          type: number
+          nullable: true
+        rbi:
+          type: number
+          nullable: true
+        sb:
+          type: number
+          nullable: true
+        runs:
+          type: number
+          nullable: true
+        doubles:
+          type: number
+          nullable: true
+        triples:
+          type: number
+          nullable: true
+        ip:
+          type: number
+          nullable: true
+        gs:
+          type: number
+          nullable: true
+        w:
+          type: number
+          nullable: true
+        l:
+          type: number
+          nullable: true
+        sv:
+          type: number
+          nullable: true
+        er:
+          type: number
+          nullable: true
+        pitching_so:
+          type: number
+          nullable: true
+        pitching_bb:
+          type: number
+          nullable: true
+        avg:
+          type: number
+          nullable: true
+        obp:
+          type: number
+          nullable: true
+        slg:
+          type: number
+          nullable: true
+        ops:
+          type: number
+          nullable: true
+        woba:
+          type: number
+          nullable: true
+        era:
+          type: number
+          nullable: true
+        whip:
+          type: number
+          nullable: true
+        fip:
+          type: number
+          nullable: true
+        putouts:
+          type: number
+          nullable: true
+        assists:
+          type: number
+          nullable: true
+        errors:
+          type: number
+          nullable: true
+        double_plays:
+          type: number
+          nullable: true
+        passed_balls:
+          type: number
+          nullable: true
+        fielding_g:
+          type: number
+          nullable: true
+        fielding_gs:
+          type: number
+          nullable: true
+        fielding_inn:
+          type: number
+          nullable: true
+        fielding_pos:
+          type: string
+          nullable: true
+        fpct:
+          type: number
+          nullable: true
+        fielding:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldingLine"
+    FieldingLine:
+      type: object
+      additionalProperties: false
+      properties:
+        pos:
+          type: string
+          nullable: true
+        g:
+          type: number
+          nullable: true
+        gs:
+          type: number
+          nullable: true
+        inn:
+          type: number
+          nullable: true
+        po:
+          type: number
+          nullable: true
+        a:
+          type: number
+          nullable: true
+        e:
+          type: number
+          nullable: true
+        dp:
+          type: number
+          nullable: true
+        pb:
+          type: number
+          nullable: true
+        fpct:
+          type: number
+          nullable: true
+    PlayerRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - player_id
+        - seasons
+      properties:
+        player_id:
+          type: string
+        name:
+          type: string
+          nullable: true
+        position:
+          type: string
+          nullable: true
+        team:
+          type: string
+          nullable: true
+        seasons:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlayerSeason"
+    PlayersResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - as_of
+        - active_season
+        - current_season_missing
+        - season_window
+        - source
+        - players
+      properties:
+        as_of:
+          type: string
+        active_season:
+          type: integer
+        current_season_missing:
+          type: boolean
+        season_window:
+          type: array
+          items:
+            type: integer
+        source:
+          type: string
+          enum: [remote, local, missing]
+        seasons_present:
+          type: array
+          items:
+            type: integer
+        current_season_missing_reason:
+          type: string
+          nullable: true
+        season:
+          type: integer
+          nullable: true
+        players:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlayerRecord"
+    PlayerResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - as_of
+        - active_season
+        - current_season_missing
+        - season_window
+        - source
+        - player
+      properties:
+        as_of:
+          type: string
+        active_season:
+          type: integer
+        current_season_missing:
+          type: boolean
+        season_window:
+          type: array
+          items:
+            type: integer
+        source:
+          type: string
+          enum: [remote, local, missing]
+        seasons_present:
+          type: array
+          items:
+            type: integer
+        current_season_missing_reason:
+          type: string
+          nullable: true
+        season:
+          type: integer
+          nullable: true
+        player:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/PlayerRecord"
 tags:
   - name: v1
     description: Locked launch endpoints (#106)

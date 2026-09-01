@@ -8,27 +8,40 @@ from unittest.mock import Mock
 
 import pandas as pd
 
+from datetime import date
+
 from dashboard.helpers import (
+    PRIOR_SEASON_TABLE_NOTE,
     add_payroll_millions,
     apply_efficiency_labels,
     artifact_status,
+    blank_unknown_salary,
+    clamp_season_for_page,
+    data_slider_max,
     empty_state_copy,
+    filter_contract_watch_rows,
     filter_season,
     format_money_millions,
     format_ratio,
     format_signed_int,
     format_war,
+    is_prior_only_publish,
+    max_season_from_cards,
+    max_season_from_frame,
     metric_label,
     nav_labels,
     nav_page,
     overview_kpi_payload,
     overview_leaders,
     rank_by_efficiency,
+    resolve_active_year,
     salary_coverage_note,
     scale_money_columns,
+    seasons_from_manifest,
     slider_bounds,
     teams_from_frame,
     top_n_by,
+    year_span_from_frame,
     year_span_label,
     years_from_frame,
 )
@@ -246,6 +259,117 @@ def test_salary_coverage_note() -> None:
     assert note is not None
     assert "2016" in note
     assert salary_coverage_note(None) is None
+
+
+def test_filter_contract_watch_keeps_missing_and_zero_salary() -> None:
+    players = pd.DataFrame(
+        {
+            "name_full": ["Overlay 2026", "Zero Cap", "Paid Veteran"],
+            "year_id": [2026, 2026, 2016],
+            "team_name": ["Padres", "Padres", "Padres"],
+            "salary": [float("nan"), 0, 8_000_000],
+            "surplus_value": [float("nan"), 0, 1_000_000],
+        }
+    )
+    kept = filter_contract_watch_rows(players, year=2026, team="Padres")
+    assert list(kept["name_full"]) == ["Overlay 2026", "Zero Cap"]
+    assert kept["salary"].isna().iloc[0]
+    assert kept["salary"].iloc[1] == 0
+
+    searched = filter_contract_watch_rows(players, name_search="overlay")
+    assert list(searched["name_full"]) == ["Overlay 2026"]
+
+
+def test_blank_unknown_salary_leaves_paid_rows() -> None:
+    df = pd.DataFrame({"salary": [float("nan"), 0, 2.5], "name_full": ["A", "B", "C"]})
+    blanked = blank_unknown_salary(df)
+    assert pd.isna(blanked["salary"].iloc[0])
+    assert pd.isna(blanked["salary"].iloc[1])
+    assert blanked["salary"].iloc[2] == 2.5
+    assert list(blanked["name_full"]) == ["A", "B", "C"]
+
+
+def test_prior_only_banner_condition() -> None:
+    assert is_prior_only_publish(
+        current_season_missing=True,
+        max_season=2024,
+        active_year=2026,
+    )
+    assert is_prior_only_publish(
+        current_season_missing=False,
+        max_season=2024,
+        active_year=2026,
+    )
+    assert is_prior_only_publish(
+        current_season_missing=False,
+        selected_season=2024,
+        max_season=2026,
+        active_year=2026,
+    )
+    assert not is_prior_only_publish(
+        current_season_missing=False,
+        selected_season=2026,
+        max_season=2026,
+        active_year=2026,
+    )
+    assert not is_prior_only_publish(
+        current_season_missing=True,
+        max_season=2024,
+        active_year=2026,
+        live_feed=False,
+    )
+    assert not is_prior_only_publish(
+        current_season_missing=False,
+        max_season=None,
+        active_year=2026,
+    )
+    assert is_prior_only_publish(
+        current_season_missing=False,
+        max_season=2026,
+        seasons_present=[2023, 2024],
+        active_year=2026,
+    )
+    assert not is_prior_only_publish(
+        current_season_missing=False,
+        seasons_present=[2024, 2025, 2026],
+        active_year=2026,
+    )
+    assert PRIOR_SEASON_TABLE_NOTE == "This table is not the current season yet."
+    assert seasons_from_manifest({"seasons_present": [2026, 2024, "x"]}) == [2024, 2026]
+    assert seasons_from_manifest(None) == []
+
+
+def test_data_slider_max_uses_published_years_only() -> None:
+    assert data_slider_max([], 2026) == 2026
+    assert data_slider_max([1990, 2016], 2026) == 2016
+    assert year_span_from_frame(pd.DataFrame({"year_id": [2010, 2016]})) == (2010, 2016)
+    assert year_span_from_frame(pd.DataFrame()) is None
+
+
+def test_clamp_season_for_page_does_not_write_player_only_year() -> None:
+    display, write_shared = clamp_season_for_page(2026, [1990, 2015, 2016])
+    assert display == 2016
+    assert write_shared is False
+    display, write_shared = clamp_season_for_page(2015, [1990, 2015, 2016])
+    assert display == 2015
+    assert write_shared is True
+    assert clamp_season_for_page(2026, []) == (None, False)
+
+
+def test_resolve_active_year_prefers_manifest_then_as_of() -> None:
+    assert resolve_active_year(manifest={"active_season": 2026}, today=date(2024, 1, 1)) == 2026
+    assert resolve_active_year(manifest={"as_of_date": "2026-08-23"}, today=date(2024, 1, 1)) == 2026
+    assert resolve_active_year(as_of="2025-07-01", today=date(2024, 1, 1)) == 2025
+    assert resolve_active_year(today=date(2026, 8, 24)) == 2026
+
+
+def test_max_season_from_cards_and_frame() -> None:
+    assert max_season_from_cards([{"season": 2024}, {"season": 2025}]) == 2025
+    assert max_season_from_cards([{"as_of_date": "2026-08-23"}]) is None
+    assert max_season_from_cards([]) is None
+    df = pd.DataFrame({"year_id": [2016, 2024, 2024]})
+    assert max_season_from_frame(df) == 2024
+    assert max_season_from_frame(pd.DataFrame()) is None
 
 
 def test_artifact_status_and_empty_copy(tmp_path: Path) -> None:

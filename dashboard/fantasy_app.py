@@ -24,6 +24,13 @@ if str(_ROOT) not in sys.path:
 
 import streamlit as st
 from src.baseball_analytics.config import load_artifact_settings
+from dashboard.data import load_metrics_manifest
+from dashboard.helpers import (
+    is_prior_only_publish,
+    max_season_from_cards,
+    resolve_active_year,
+    seasons_from_manifest,
+)
 
 from fantasy.card_image import render_share_card_png
 from fantasy.cards import (
@@ -48,6 +55,7 @@ from fantasy.copy import (
     EMPTY_TAB,
     EMPTY_TITLE,
     FOOTER,
+    PRIOR_SEASON_BANNER,
     HEADLINE,
     INVITE_CHIP,
     MICROCOPY,
@@ -393,6 +401,17 @@ cards, source = _load_cards()
 live_cards = [] if source == SOURCE_MISSING else cards
 views = present_cards(live_cards)
 showing_stubs = False
+if views:
+    manifest = load_metrics_manifest()
+    as_of = next((card.get("as_of_date") for card in live_cards if card.get("as_of_date")), None)
+    if is_prior_only_publish(
+        current_season_missing=(manifest or {}).get("current_season_missing"),
+        max_season=max_season_from_cards(live_cards),
+        seasons_present=seasons_from_manifest(manifest),
+        active_year=resolve_active_year(as_of=as_of, manifest=manifest),
+        live_feed=True,
+    ):
+        st.info(PRIOR_SEASON_BANNER)
 if not views:
     st.markdown(
         f"""
