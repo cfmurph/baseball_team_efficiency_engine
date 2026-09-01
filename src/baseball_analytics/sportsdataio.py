@@ -605,6 +605,83 @@ def parse_games(payload: Any) -> pd.DataFrame:
     return _drop_null_id(pd.DataFrame(rows), "sdio_game_id")
 
 
+def _player_stat_counting(stat: Mapping[str, Any]) -> dict[str, Any]:
+    """Pass through landed SDIO counting. Never copies DFS / betting keys."""
+    return {
+        "games": _int(stat.get("Games")),
+        "pa": _num(stat.get("PlateAppearances")),
+        "ab": _num(stat.get("AtBats")),
+        "runs": _num(stat.get("Runs")),
+        "hits": _num(stat.get("Hits")),
+        "doubles": _num(stat.get("Doubles")),
+        "triples": _num(stat.get("Triples")),
+        "hr": _num(stat.get("HomeRuns")),
+        "rbi": _num(stat.get("RunsBattedIn")),
+        "bb": _num(stat.get("Walks")),
+        "so": _num(stat.get("Strikeouts")),
+        "sb": _num(stat.get("StolenBases")),
+        "hbp": _num(stat.get("HitByPitch")),
+        "cs": _num(stat.get("CaughtStealing")),
+        "sh": _num(stat.get("Sacrifices")),
+        "sf": _num(stat.get("SacrificeFlies")),
+        "gidp": _num(stat.get("GroundIntoDoublePlay")),
+        "ibb": _num(stat.get("IntentionalWalks")),
+        "lob": _num(stat.get("LeftOnBase")),
+        "roe": _num(stat.get("ReachedOnError")),
+        "gsh": _num(stat.get("GrandSlams")),
+        "singles": _num(stat.get("Singles")),
+        "tb": _num(stat.get("TotalBases")),
+        "go": _num(stat.get("GroundOuts")),
+        "ao": _num(stat.get("FlyOuts")),
+        "avg": _num(stat.get("BattingAverage")),
+        "obp": _num(stat.get("OnBasePercentage")),
+        "slg": _num(stat.get("SluggingPercentage")),
+        "ops": _num(stat.get("OnBasePlusSlugging")),
+        "iso": _num(stat.get("IsolatedPower")),
+        "babip": _num(stat.get("BattingAverageOnBallsInPlay")),
+        "woba": _num(stat.get("WeightedOnBasePercentage")),
+        "fip": _num(stat.get("FieldingIndependentPitching")),
+        "ip": _num(stat.get("InningsPitchedDecimal")),
+        "er": _num(stat.get("PitchingEarnedRuns")),
+        "era": _num(stat.get("EarnedRunAverage")),
+        "whip": _num(stat.get("WalksHitsPerInningsPitched")),
+        "pitching_so": _num(stat.get("PitchingStrikeouts")),
+        "pitching_bb": _num(stat.get("PitchingWalks")),
+        "pitching_hits": _num(stat.get("PitchingHits")),
+        "pitching_hr": _num(stat.get("PitchingHomeRuns")),
+        "pitching_r": _num(stat.get("PitchingRuns")),
+        "games_started": _int(stat.get("GamesStarted")),
+        "wins": _num(stat.get("Wins")),
+        "losses": _num(stat.get("Losses")),
+        "saves": _num(stat.get("Saves")),
+        "cg": _num(stat.get("PitchingCompleteGames")),
+        "sho": _num(stat.get("PitchingShutOuts")),
+        "hld": _num(stat.get("PitchingHolds")),
+        "bs": _num(stat.get("PitchingBlownSaves")),
+        "qs": _num(stat.get("PitchingQualityStarts")),
+        "gf": _num(stat.get("GamesFinished") if stat.get("GamesFinished") is not None else stat.get("PitchingGamesFinished")),
+        "bk": _num(stat.get("PitchingBalks") if stat.get("PitchingBalks") is not None else stat.get("Balks")),
+        "wp": _num(stat.get("PitchingWildPitches") if stat.get("PitchingWildPitches") is not None else stat.get("WildPitches")),
+        "np": _num(stat.get("PitchesThrown")),
+        "pk": _num(stat.get("PitchingPickoffs") if stat.get("PitchingPickoffs") is not None else stat.get("Pickoffs")),
+        "ir": _num(stat.get("InheritedRunners")),
+        "bf": _num(stat.get("PitchingPlateAppearances") if stat.get("PitchingPlateAppearances") is not None else stat.get("BattersFaced")),
+        "pitching_go": _num(stat.get("PitchingGroundOuts")),
+        "pitching_ao": _num(stat.get("PitchingFlyOuts")),
+        "pitching_hbp": _num(stat.get("PitchingHitByPitch")),
+        "pitching_ibb": _num(stat.get("PitchingIntentionalWalks")),
+        "putouts": _num(stat.get("PutOuts") if stat.get("PutOuts") is not None else stat.get("Putouts")),
+        "assists": _num(stat.get("Assists")),
+        "errors": _num(stat.get("Errors")),
+        "double_plays": _num(stat.get("DoublePlays")),
+        "passed_balls": _num(stat.get("PassedBalls")),
+        "ofa": _num(stat.get("OutfieldAssists")),
+        "fielding_cs": _num(stat.get("CatcherCaughtStealing") if stat.get("CatcherCaughtStealing") is not None else stat.get("StolenBasesCaught")),
+        "fielding_sb": _num(stat.get("CatcherStolenBasesAllowed") if stat.get("CatcherStolenBasesAllowed") is not None else stat.get("StolenBasesAllowed")),
+        "tp": _num(stat.get("TriplePlays")),
+    }
+
+
 def parse_player_game_stats(payload: Any) -> pd.DataFrame:
     rows = []
     for stat in _as_records(payload):
@@ -613,52 +690,18 @@ def parse_player_game_stats(payload: Any) -> pd.DataFrame:
         if player_id is None or game_id is None:
             continue
         day = stat.get("Day") or stat.get("DateTime") or ""
-        rows.append(
-            {
-                "sdio_player_id": player_id,
-                "sdio_game_id": game_id,
-                "sdio_team_id": _int(stat.get("TeamID")),
-                "display_name": stat.get("Name"),
-                "position": stat.get("Position"),
-                "game_date": str(day)[:10] or None,
-                "season": _int(stat.get("Season")),
-                "started": _int(stat.get("Started")),
-                "games": _int(stat.get("Games")),
-                "pa": _num(stat.get("PlateAppearances")),
-                "ab": _num(stat.get("AtBats")),
-                "runs": _num(stat.get("Runs")),
-                "hits": _num(stat.get("Hits")),
-                "doubles": _num(stat.get("Doubles")),
-                "triples": _num(stat.get("Triples")),
-                "hr": _num(stat.get("HomeRuns")),
-                "rbi": _num(stat.get("RunsBattedIn")),
-                "bb": _num(stat.get("Walks")),
-                "so": _num(stat.get("Strikeouts")),
-                "sb": _num(stat.get("StolenBases")),
-                "hbp": _num(stat.get("HitByPitch")),
-                "avg": _num(stat.get("BattingAverage")),
-                "obp": _num(stat.get("OnBasePercentage")),
-                "slg": _num(stat.get("SluggingPercentage")),
-                "ops": _num(stat.get("OnBasePlusSlugging")),
-                "ip": _num(stat.get("InningsPitchedDecimal")),
-                "er": _num(stat.get("PitchingEarnedRuns")),
-                "era": _num(stat.get("EarnedRunAverage")),
-                "whip": _num(stat.get("WalksHitsPerInningsPitched")),
-                "pitching_so": _num(stat.get("PitchingStrikeouts")),
-                "pitching_bb": _num(stat.get("PitchingWalks")),
-                "pitching_hits": _num(stat.get("PitchingHits")),
-                "pitching_hr": _num(stat.get("PitchingHomeRuns")),
-                "games_started": _int(stat.get("GamesStarted")),
-                "wins": _num(stat.get("Wins")),
-                "losses": _num(stat.get("Losses")),
-                "saves": _num(stat.get("Saves")),
-                "putouts": _num(stat.get("PutOuts") if stat.get("PutOuts") is not None else stat.get("Putouts")),
-                "assists": _num(stat.get("Assists")),
-                "errors": _num(stat.get("Errors")),
-                "double_plays": _num(stat.get("DoublePlays")),
-                "passed_balls": _num(stat.get("PassedBalls")),
-            }
-        )
+        row = {
+            "sdio_player_id": player_id,
+            "sdio_game_id": game_id,
+            "sdio_team_id": _int(stat.get("TeamID")),
+            "display_name": stat.get("Name"),
+            "position": stat.get("Position"),
+            "game_date": str(day)[:10] or None,
+            "season": _int(stat.get("Season")),
+            "started": _int(stat.get("Started")),
+        }
+        row.update(_player_stat_counting(stat))
+        rows.append(row)
     if not rows:
         return pd.DataFrame()
     return pd.DataFrame(rows)
@@ -670,44 +713,15 @@ def parse_player_season_stats(payload: Any) -> pd.DataFrame:
         player_id = _int(stat.get("PlayerID"))
         if player_id is None:
             continue
-        rows.append(
-            {
-                "sdio_player_id": player_id,
-                "sdio_team_id": _int(stat.get("TeamID")),
-                "display_name": stat.get("Name"),
-                "position": stat.get("Position"),
-                "season": _int(stat.get("Season")),
-                "games": _int(stat.get("Games")),
-                "pa": _num(stat.get("PlateAppearances")),
-                "ab": _num(stat.get("AtBats")),
-                "hits": _num(stat.get("Hits")),
-                "hr": _num(stat.get("HomeRuns")),
-                "bb": _num(stat.get("Walks")),
-                "so": _num(stat.get("Strikeouts")),
-                "rbi": _num(stat.get("RunsBattedIn")),
-                "sb": _num(stat.get("StolenBases")),
-                "runs": _num(stat.get("Runs")),
-                "doubles": _num(stat.get("Doubles")),
-                "triples": _num(stat.get("Triples")),
-                "ip": _num(stat.get("InningsPitchedDecimal")),
-                "er": _num(stat.get("PitchingEarnedRuns")),
-                "era": _num(stat.get("EarnedRunAverage")),
-                "whip": _num(stat.get("WalksHitsPerInningsPitched")),
-                "pitching_so": _num(stat.get("PitchingStrikeouts")),
-                "pitching_bb": _num(stat.get("PitchingWalks")),
-                "pitching_hits": _num(stat.get("PitchingHits")),
-                "pitching_hr": _num(stat.get("PitchingHomeRuns")),
-                "games_started": _int(stat.get("GamesStarted")),
-                "wins": _num(stat.get("Wins")),
-                "losses": _num(stat.get("Losses")),
-                "saves": _num(stat.get("Saves")),
-                "putouts": _num(stat.get("PutOuts") if stat.get("PutOuts") is not None else stat.get("Putouts")),
-                "assists": _num(stat.get("Assists")),
-                "errors": _num(stat.get("Errors")),
-                "double_plays": _num(stat.get("DoublePlays")),
-                "passed_balls": _num(stat.get("PassedBalls")),
-            }
-        )
+        row = {
+            "sdio_player_id": player_id,
+            "sdio_team_id": _int(stat.get("TeamID")),
+            "display_name": stat.get("Name"),
+            "position": stat.get("Position"),
+            "season": _int(stat.get("Season")),
+        }
+        row.update(_player_stat_counting(stat))
+        rows.append(row)
     return _drop_null_id(pd.DataFrame(rows), "sdio_player_id")
 
 

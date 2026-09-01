@@ -698,6 +698,15 @@ a {
   text-transform: uppercase;
 }
 
+.bos-subhead {
+  margin: 0.85rem 0 0.45rem;
+  color: var(--dim);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .bos-nav-link.is-off {
   color: var(--dim);
   opacity: 0.45;
