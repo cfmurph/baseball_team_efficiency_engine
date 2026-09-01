@@ -42,6 +42,26 @@ export type HittingSeason = {
   woba: number | null;
   war: number | null;
   war_source: string;
+  singles?: number | null;
+  xbh?: number | null;
+  tb?: number | null;
+  cs?: number | null;
+  sb_pct?: number | null;
+  hbp?: number | null;
+  sh?: number | null;
+  sf?: number | null;
+  gidp?: number | null;
+  ibb?: number | null;
+  lob?: number | null;
+  roe?: number | null;
+  gsh?: number | null;
+  go?: number | null;
+  ao?: number | null;
+  go_ao?: number | null;
+  iso?: number | null;
+  babip?: number | null;
+  k_pct?: number | null;
+  bb_pct?: number | null;
 };
 
 export type PitchingSeason = {
@@ -60,6 +80,36 @@ export type PitchingSeason = {
   fip: number | null;
   war: number | null;
   war_source: string;
+  h?: number | null;
+  hr?: number | null;
+  r?: number | null;
+  uer?: number | null;
+  cg?: number | null;
+  sho?: number | null;
+  hld?: number | null;
+  bs?: number | null;
+  svo?: number | null;
+  sv_pct?: number | null;
+  qs?: number | null;
+  gf?: number | null;
+  bk?: number | null;
+  wp?: number | null;
+  np?: number | null;
+  pk?: number | null;
+  ir?: number | null;
+  bf?: number | null;
+  go?: number | null;
+  ao?: number | null;
+  go_ao?: number | null;
+  wpct?: number | null;
+  k9?: number | null;
+  bb9?: number | null;
+  h9?: number | null;
+  hr9?: number | null;
+  k_bb?: number | null;
+  k_pct?: number | null;
+  bb_pct?: number | null;
+  i_gs?: number | null;
 };
 
 export type FieldingSeason = {
@@ -74,6 +124,13 @@ export type FieldingSeason = {
   dp: number | null;
   pb: number | null;
   fpct: number | null;
+  ofa?: number | null;
+  cs?: number | null;
+  sb?: number | null;
+  tp?: number | null;
+  tc?: number | null;
+  rf?: number | null;
+  cs_pct?: number | null;
 };
 
 /** #152 published season row on GET /v1/players and /v1/players/{id}. */
@@ -125,6 +182,63 @@ export type PlayerSeason = {
   fielding_pos?: string | null;
   fpct?: number | null;
   fielding?: FieldingSeason[] | Array<Record<string, unknown>>;
+  cs?: number | null;
+  hbp?: number | null;
+  sh?: number | null;
+  sf?: number | null;
+  gidp?: number | null;
+  ibb?: number | null;
+  lob?: number | null;
+  roe?: number | null;
+  gsh?: number | null;
+  singles?: number | null;
+  tb?: number | null;
+  xbh?: number | null;
+  go?: number | null;
+  ao?: number | null;
+  ofa?: number | null;
+  fielding_cs?: number | null;
+  fielding_sb?: number | null;
+  tp?: number | null;
+  tc?: number | null;
+  rf?: number | null;
+  pitching_hits?: number | null;
+  pitching_hr?: number | null;
+  pitching_r?: number | null;
+  cg?: number | null;
+  sho?: number | null;
+  hld?: number | null;
+  bs?: number | null;
+  svo?: number | null;
+  qs?: number | null;
+  gf?: number | null;
+  bk?: number | null;
+  wp?: number | null;
+  np?: number | null;
+  pk?: number | null;
+  ir?: number | null;
+  uer?: number | null;
+  bf?: number | null;
+  pitching_go?: number | null;
+  pitching_ao?: number | null;
+  iso?: number | null;
+  babip?: number | null;
+  sb_pct?: number | null;
+  go_ao?: number | null;
+  k_pct?: number | null;
+  bb_pct?: number | null;
+  wpct?: number | null;
+  sv_pct?: number | null;
+  pitching_go_ao?: number | null;
+  k9?: number | null;
+  bb9?: number | null;
+  h9?: number | null;
+  hr9?: number | null;
+  k_bb?: number | null;
+  pitching_k_pct?: number | null;
+  pitching_bb_pct?: number | null;
+  i_gs?: number | null;
+  cs_pct?: number | null;
 };
 
 export type PlayerRecord = {
@@ -311,6 +425,186 @@ export function formatFpct(value: number | null | undefined): string {
   return formatAvg(value);
 }
 
+export function formatPct(value: number | null | undefined): string {
+  if (value === undefined || value === null || !Number.isFinite(value)) {
+    return "—";
+  }
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+export function formatPerNine(value: number | null | undefined): string {
+  if (value === undefined || value === null || !Number.isFinite(value)) {
+    return "—";
+  }
+  return value.toFixed(2);
+}
+
+export function formatRatio(value: number | null | undefined): string {
+  return formatPerNine(value);
+}
+
+function allPresent(...values: Array<number | null | undefined>): boolean {
+  return values.every((value) => value !== undefined && value !== null && Number.isFinite(value));
+}
+
+export function deriveSingles(
+  hits: number | null | undefined,
+  doubles: number | null | undefined,
+  triples: number | null | undefined,
+  hr: number | null | undefined,
+): number | null {
+  if (!allPresent(hits, doubles, triples, hr)) {
+    return null;
+  }
+  return Math.max(0, (hits as number) - (doubles as number) - (triples as number) - (hr as number));
+}
+
+export function deriveXbh(
+  doubles: number | null | undefined,
+  triples: number | null | undefined,
+  hr: number | null | undefined,
+): number | null {
+  if (!allPresent(doubles, triples, hr)) {
+    return null;
+  }
+  return (doubles as number) + (triples as number) + (hr as number);
+}
+
+export function deriveTb(
+  hits: number | null | undefined,
+  doubles: number | null | undefined,
+  triples: number | null | undefined,
+  hr: number | null | undefined,
+): number | null {
+  if (!allPresent(hits, doubles, triples, hr)) {
+    return null;
+  }
+  return (hits as number) + (doubles as number) + 2 * (triples as number) + 3 * (hr as number);
+}
+
+export function deriveSbPct(
+  sb: number | null | undefined,
+  cs: number | null | undefined,
+): number | null {
+  if (!allPresent(sb, cs)) {
+    return null;
+  }
+  const denom = (sb as number) + (cs as number);
+  return denom > 0 ? (sb as number) / denom : null;
+}
+
+export function deriveTc(
+  po: number | null | undefined,
+  a: number | null | undefined,
+  e: number | null | undefined,
+): number | null {
+  if (!allPresent(po, a, e)) {
+    return null;
+  }
+  return (po as number) + (a as number) + (e as number);
+}
+
+export function deriveRf(
+  po: number | null | undefined,
+  a: number | null | undefined,
+  inn: number | null | undefined,
+): number | null {
+  if (!allPresent(po, a, inn) || (inn as number) <= 0) {
+    return null;
+  }
+  return (9 * ((po as number) + (a as number))) / (inn as number);
+}
+
+function deriveGoAo(
+  go: number | null | undefined,
+  ao: number | null | undefined,
+): number | null {
+  if (!allPresent(go, ao) || (ao as number) <= 0) {
+    return null;
+  }
+  return (go as number) / (ao as number);
+}
+
+function deriveRate(count: number | null | undefined, opportunities: number | null | undefined): number | null {
+  if (!allPresent(count, opportunities) || (opportunities as number) <= 0) {
+    return null;
+  }
+  return (count as number) / (opportunities as number);
+}
+
+function derivePerNine(count: number | null | undefined, ip: number | null | undefined): number | null {
+  if (!allPresent(count, ip) || (ip as number) <= 0) {
+    return null;
+  }
+  return ((count as number) * 9) / (ip as number);
+}
+
+export function withHittingIdentities(row: HittingSeason): HittingSeason {
+  const singles = row.singles ?? deriveSingles(row.h, row.doubles, row.triples, row.hr);
+  const xbh = row.xbh ?? deriveXbh(row.doubles, row.triples, row.hr);
+  const tb = row.tb ?? deriveTb(row.h, row.doubles, row.triples, row.hr);
+  const sbPct = row.sb_pct ?? deriveSbPct(row.sb, row.cs);
+  const goAo = row.go_ao ?? deriveGoAo(row.go, row.ao);
+  const iso = row.iso ?? (allPresent(row.slg, row.avg) ? (row.slg as number) - (row.avg as number) : null);
+  const babip = row.babip ?? (
+    allPresent(row.h, row.hr, row.ab, row.so, row.sf)
+      ? (() => {
+        const denom = (row.ab as number) - (row.so as number) - (row.hr as number) + (row.sf as number);
+        return denom > 0 ? ((row.h as number) - (row.hr as number)) / denom : null;
+      })()
+      : null
+  );
+  return {
+    ...row,
+    singles,
+    xbh,
+    tb,
+    sb_pct: sbPct,
+    go_ao: goAo,
+    iso,
+    babip,
+    k_pct: row.k_pct ?? deriveRate(row.so, row.pa),
+    bb_pct: row.bb_pct ?? deriveRate(row.bb, row.pa),
+  };
+}
+
+export function withPitchingIdentities(row: PitchingSeason): PitchingSeason {
+  const svo = row.svo ?? (allPresent(row.sv, row.bs) ? (row.sv as number) + (row.bs as number) : null);
+  const wpct = row.wpct ?? (
+    allPresent(row.w, row.l) && ((row.w as number) + (row.l as number)) > 0
+      ? (row.w as number) / ((row.w as number) + (row.l as number))
+      : null
+  );
+  return {
+    ...row,
+    svo,
+    wpct,
+    sv_pct: row.sv_pct ?? deriveRate(row.sv, svo),
+    uer: row.uer ?? (allPresent(row.r, row.er) ? Math.max(0, (row.r as number) - (row.er as number)) : null),
+    go_ao: row.go_ao ?? deriveGoAo(row.go, row.ao),
+    k9: row.k9 ?? derivePerNine(row.so, row.ip),
+    bb9: row.bb9 ?? derivePerNine(row.bb, row.ip),
+    h9: row.h9 ?? derivePerNine(row.h, row.ip),
+    hr9: row.hr9 ?? derivePerNine(row.hr, row.ip),
+    k_bb: row.k_bb ?? (allPresent(row.so, row.bb) && (row.bb as number) > 0 ? (row.so as number) / (row.bb as number) : null),
+    k_pct: row.k_pct ?? deriveRate(row.so, row.bf),
+    bb_pct: row.bb_pct ?? deriveRate(row.bb, row.bf),
+    i_gs: row.i_gs ?? (allPresent(row.ip, row.gs) && (row.gs as number) > 0 ? (row.ip as number) / (row.gs as number) : null),
+  };
+}
+
+export function withFieldingIdentities(row: FieldingSeason): FieldingSeason {
+  const ofPos = new Set(["OF", "LF", "CF", "RF"]);
+  const ofa = row.ofa ?? (row.a !== null && ofPos.has(row.pos.toUpperCase()) ? row.a : null);
+  return {
+    ...row,
+    ofa,
+    tc: row.tc ?? deriveTc(row.po, row.a, row.e),
+    rf: row.rf ?? deriveRf(row.po, row.a, row.inn),
+    cs_pct: row.cs_pct ?? deriveSbPct(row.cs, row.sb),
+  };
+}
+
 export function fieldingSignal(row: Pick<FieldingSeason, "pos" | "po" | "a" | "e" | "fpct"> | null | undefined): string {
   if (!row) {
     return "";
@@ -476,7 +770,7 @@ function parseHittingSeason(value: unknown): HittingSeason | null {
   if (season === null) {
     return null;
   }
-  return {
+  return withHittingIdentities({
     season,
     g: num(raw.g ?? raw.games),
     pa: num(raw.pa),
@@ -497,7 +791,27 @@ function parseHittingSeason(value: unknown): HittingSeason | null {
     woba: num(raw.woba),
     war: num(raw.war),
     war_source: text(raw.war_source),
-  };
+    singles: num(raw.singles ?? raw["1b"]),
+    xbh: num(raw.xbh),
+    tb: num(raw.tb),
+    cs: num(raw.cs),
+    sb_pct: num(raw.sb_pct),
+    hbp: num(raw.hbp),
+    sh: num(raw.sh),
+    sf: num(raw.sf),
+    gidp: num(raw.gidp),
+    ibb: num(raw.ibb),
+    lob: num(raw.lob),
+    roe: num(raw.roe),
+    gsh: num(raw.gsh),
+    go: num(raw.go),
+    ao: num(raw.ao),
+    go_ao: num(raw.go_ao),
+    iso: num(raw.iso),
+    babip: num(raw.babip),
+    k_pct: num(raw.k_pct),
+    bb_pct: num(raw.bb_pct),
+  });
 }
 
 function parsePitchingSeason(value: unknown): PitchingSeason | null {
@@ -506,7 +820,7 @@ function parsePitchingSeason(value: unknown): PitchingSeason | null {
   if (season === null) {
     return null;
   }
-  return {
+  return withPitchingIdentities({
     season,
     g: num(raw.g ?? raw.games),
     gs: num(raw.gs),
@@ -522,7 +836,37 @@ function parsePitchingSeason(value: unknown): PitchingSeason | null {
     fip: num(raw.fip),
     war: num(raw.war),
     war_source: text(raw.war_source),
-  };
+    h: num(raw.h ?? raw.pitching_hits),
+    hr: num(raw.hr ?? raw.pitching_hr),
+    r: num(raw.r ?? raw.pitching_r),
+    uer: num(raw.uer),
+    cg: num(raw.cg),
+    sho: num(raw.sho),
+    hld: num(raw.hld),
+    bs: num(raw.bs),
+    svo: num(raw.svo),
+    sv_pct: num(raw.sv_pct),
+    qs: num(raw.qs),
+    gf: num(raw.gf),
+    bk: num(raw.bk),
+    wp: num(raw.wp),
+    np: num(raw.np),
+    pk: num(raw.pk),
+    ir: num(raw.ir),
+    bf: num(raw.bf),
+    go: num(raw.go ?? raw.pitching_go),
+    ao: num(raw.ao ?? raw.pitching_ao),
+    go_ao: num(raw.go_ao ?? raw.pitching_go_ao),
+    wpct: num(raw.wpct),
+    k9: num(raw.k9),
+    bb9: num(raw.bb9),
+    h9: num(raw.h9),
+    hr9: num(raw.hr9),
+    k_bb: num(raw.k_bb),
+    k_pct: num(raw.k_pct ?? raw.pitching_k_pct),
+    bb_pct: num(raw.bb_pct ?? raw.pitching_bb_pct),
+    i_gs: num(raw.i_gs),
+  });
 }
 
 function parseFieldingSeason(value: unknown, fallbackSeason?: number): FieldingSeason | null {
@@ -531,7 +875,7 @@ function parseFieldingSeason(value: unknown, fallbackSeason?: number): FieldingS
   if (season === null) {
     return null;
   }
-  const line: FieldingSeason = {
+  const line: FieldingSeason = withFieldingIdentities({
     season,
     pos: text(raw.pos || raw.position || raw.fielding_pos),
     g: num(raw.g ?? raw.fielding_g),
@@ -543,8 +887,18 @@ function parseFieldingSeason(value: unknown, fallbackSeason?: number): FieldingS
     dp: num(raw.dp ?? raw.double_plays),
     pb: num(raw.pb ?? raw.passed_balls),
     fpct: num(raw.fpct),
-  };
-  const counts = [line.g, line.gs, line.inn, line.po, line.a, line.e, line.dp, line.pb, line.fpct];
+    ofa: num(raw.ofa),
+    cs: num(raw.cs ?? raw.fielding_cs),
+    sb: num(raw.sb ?? raw.fielding_sb),
+    tp: num(raw.tp),
+    tc: num(raw.tc),
+    rf: num(raw.rf),
+    cs_pct: num(raw.cs_pct),
+  });
+  const counts = [
+    line.g, line.gs, line.inn, line.po, line.a, line.e, line.dp, line.pb, line.fpct,
+    line.ofa ?? null, line.cs ?? null, line.tp ?? null, line.tc ?? null,
+  ];
   if (!line.pos && counts.every((value) => value === null)) {
     return null;
   }
@@ -587,6 +941,13 @@ function parseFieldingBlob(raw: Record<string, unknown>, season: number): Fieldi
       dp: raw.double_plays ?? raw.dp,
       pb: raw.passed_balls ?? raw.pb,
       fpct: raw.fpct,
+      ofa: raw.ofa,
+      cs: raw.fielding_cs,
+      sb: raw.fielding_sb,
+      tp: raw.tp,
+      tc: raw.tc,
+      rf: raw.rf,
+      cs_pct: raw.cs_pct,
     },
     season,
   );

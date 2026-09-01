@@ -75,6 +75,13 @@ class FieldingLine(BaseModel):
     dp: int | float | None = None
     pb: int | float | None = None
     fpct: int | float | None = None
+    ofa: int | float | None = None
+    cs: int | float | None = None
+    sb: int | float | None = None
+    tp: int | float | None = None
+    tc: int | float | None = None
+    rf: int | float | None = None
+    cs_pct: int | float | None = None
 
 
 class PlayerSeason(BaseModel):
@@ -126,6 +133,65 @@ class PlayerSeason(BaseModel):
     fielding_inn: int | float | None = None
     fielding_pos: str | None = None
     fpct: int | float | None = None
+    cs: int | float | None = None
+    hbp: int | float | None = None
+    sh: int | float | None = None
+    sf: int | float | None = None
+    gidp: int | float | None = None
+    ibb: int | float | None = None
+    lob: int | float | None = None
+    roe: int | float | None = None
+    gsh: int | float | None = None
+    singles: int | float | None = None
+    tb: int | float | None = None
+    xbh: int | float | None = None
+    go: int | float | None = None
+    ao: int | float | None = None
+    ofa: int | float | None = None
+    fielding_cs: int | float | None = None
+    fielding_sb: int | float | None = None
+    tp: int | float | None = None
+    tc: int | float | None = None
+    rf: int | float | None = None
+    pitching_hits: int | float | None = None
+    pitching_hr: int | float | None = None
+    pitching_r: int | float | None = None
+    cg: int | float | None = None
+    sho: int | float | None = None
+    hld: int | float | None = None
+    bs: int | float | None = None
+    svo: int | float | None = None
+    qs: int | float | None = None
+    gf: int | float | None = None
+    bk: int | float | None = None
+    wp: int | float | None = None
+    np: int | float | None = None
+    pk: int | float | None = None
+    ir: int | float | None = None
+    uer: int | float | None = None
+    bf: int | float | None = None
+    pitching_go: int | float | None = None
+    pitching_ao: int | float | None = None
+    pitching_hbp: int | float | None = None
+    pitching_ibb: int | float | None = None
+    iso: int | float | None = None
+    babip: int | float | None = None
+    sb_pct: int | float | None = None
+    go_ao: int | float | None = None
+    k_pct: int | float | None = None
+    bb_pct: int | float | None = None
+    wpct: int | float | None = None
+    sv_pct: int | float | None = None
+    pitching_go_ao: int | float | None = None
+    k9: int | float | None = None
+    bb9: int | float | None = None
+    h9: int | float | None = None
+    hr9: int | float | None = None
+    k_bb: int | float | None = None
+    pitching_k_pct: int | float | None = None
+    pitching_bb_pct: int | float | None = None
+    i_gs: int | float | None = None
+    cs_pct: int | float | None = None
     fielding: list[FieldingLine] = Field(default_factory=list)
 
 

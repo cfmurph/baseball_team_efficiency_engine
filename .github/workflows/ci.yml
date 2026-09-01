@@ -109,7 +109,8 @@ jobs:
           npm run build
 
   # Ruleset 21254328 still requires this exact check name from ci-smoke.yml.
-  # Coverage lives in the three pyramid jobs; this is a pass-through alias only.
+  # The old smoke job's checks live in the three pyramid jobs; this is a
+  # pass-through alias only. Do not add the Coverage job to needs.
   smoke_alias:
     name: Dashboard + pipeline + golden WAR
     if: ${{ always() && !cancelled() }}

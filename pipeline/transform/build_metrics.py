@@ -222,16 +222,54 @@ SELECT
     SUM(s.errors)                             AS errors,
     SUM(s.double_plays)                       AS double_plays,
     SUM(s.passed_balls)                       AS passed_balls,
-    CAST(NULL AS DOUBLE)                      AS woba,
+    SUM(s.cs)                                 AS cs,
+    SUM(s.hbp)                                AS hbp,
+    SUM(s.sh)                                 AS sh,
+    SUM(s.sf)                                 AS sf,
+    SUM(s.gidp)                               AS gidp,
+    SUM(s.ibb)                                AS ibb,
+    SUM(s.lob)                                AS lob,
+    SUM(s.roe)                                AS roe,
+    SUM(s.gsh)                                AS gsh,
+    SUM(s.singles)                            AS singles,
+    SUM(s.tb)                                 AS tb,
+    SUM(s.go)                                 AS go,
+    SUM(s.ao)                                 AS ao,
+    SUM(s.ofa)                                AS ofa,
+    SUM(s.fielding_cs)                        AS fielding_cs,
+    SUM(s.fielding_sb)                        AS fielding_sb,
+    SUM(s.tp)                                 AS tp,
+    FIRST(s.woba ORDER BY COALESCE(s.pa, 0) + COALESCE(s.ip, 0) DESC) AS woba,
     CAST(NULL AS DOUBLE)                      AS batting_war,
     SUM(s.ip)                                 AS ip,
-    CAST(NULL AS DOUBLE)                      AS fip,
+    FIRST(s.fip ORDER BY COALESCE(s.ip, 0) DESC) AS fip,
+    FIRST(s.iso ORDER BY COALESCE(s.pa, 0) DESC) AS iso,
+    FIRST(s.babip ORDER BY COALESCE(s.pa, 0) DESC) AS babip,
     SUM(CASE WHEN s.ip > 0 AND s.era IS NOT NULL THEN s.era * s.ip END)
         / NULLIF(SUM(CASE WHEN s.ip > 0 AND s.era IS NOT NULL THEN s.ip ELSE 0 END), 0) AS era,
     SUM(CASE WHEN s.ip > 0 AND s.whip IS NOT NULL THEN s.whip * s.ip END)
         / NULLIF(SUM(CASE WHEN s.ip > 0 AND s.whip IS NOT NULL THEN s.ip ELSE 0 END), 0) AS whip,
     SUM(s.pitching_so)                        AS pitching_so,
     SUM(s.pitching_bb)                        AS pitching_bb,
+    SUM(s.pitching_hits)                      AS pitching_hits,
+    SUM(s.pitching_hr)                        AS pitching_hr,
+    SUM(s.pitching_r)                         AS pitching_r,
+    SUM(s.cg)                                 AS cg,
+    SUM(s.sho)                                AS sho,
+    SUM(s.hld)                                AS hld,
+    SUM(s.bs)                                 AS bs,
+    SUM(s.qs)                                 AS qs,
+    SUM(s.gf)                                 AS gf,
+    SUM(s.bk)                                 AS bk,
+    SUM(s.wp)                                 AS wp,
+    SUM(s.np)                                 AS np,
+    SUM(s.pk)                                 AS pk,
+    SUM(s.ir)                                 AS ir,
+    SUM(s.bf)                                 AS bf,
+    SUM(s.pitching_go)                        AS pitching_go,
+    SUM(s.pitching_ao)                        AS pitching_ao,
+    SUM(s.pitching_hbp)                       AS pitching_hbp,
+    SUM(s.pitching_ibb)                       AS pitching_ibb,
     CAST(NULL AS DOUBLE)                      AS pitching_war,
     CAST(NULL AS DOUBLE)                      AS player_war,
     'approx'                                  AS war_source,
@@ -294,16 +332,54 @@ SELECT
     SUM(g.errors)                             AS errors,
     SUM(g.double_plays)                       AS double_plays,
     SUM(g.passed_balls)                       AS passed_balls,
-    CAST(NULL AS DOUBLE)                      AS woba,
+    SUM(g.cs)                                 AS cs,
+    SUM(g.hbp)                                AS hbp,
+    SUM(g.sh)                                 AS sh,
+    SUM(g.sf)                                 AS sf,
+    SUM(g.gidp)                               AS gidp,
+    SUM(g.ibb)                                AS ibb,
+    SUM(g.lob)                                AS lob,
+    SUM(g.roe)                                AS roe,
+    SUM(g.gsh)                                AS gsh,
+    SUM(g.singles)                            AS singles,
+    SUM(g.tb)                                 AS tb,
+    SUM(g.go)                                 AS go,
+    SUM(g.ao)                                 AS ao,
+    SUM(g.ofa)                                AS ofa,
+    SUM(g.fielding_cs)                        AS fielding_cs,
+    SUM(g.fielding_sb)                        AS fielding_sb,
+    SUM(g.tp)                                 AS tp,
+    FIRST(g.woba ORDER BY COALESCE(g.pa, 0) + COALESCE(g.ip, 0) DESC) AS woba,
     CAST(NULL AS DOUBLE)                      AS batting_war,
     SUM(g.ip)                                 AS ip,
-    CAST(NULL AS DOUBLE)                      AS fip,
+    FIRST(g.fip ORDER BY COALESCE(g.ip, 0) DESC) AS fip,
+    FIRST(g.iso ORDER BY COALESCE(g.pa, 0) DESC) AS iso,
+    FIRST(g.babip ORDER BY COALESCE(g.pa, 0) DESC) AS babip,
     SUM(CASE WHEN g.ip > 0 AND g.era IS NOT NULL THEN g.era * g.ip END)
         / NULLIF(SUM(CASE WHEN g.ip > 0 AND g.era IS NOT NULL THEN g.ip ELSE 0 END), 0) AS era,
     SUM(CASE WHEN g.ip > 0 AND g.whip IS NOT NULL THEN g.whip * g.ip END)
         / NULLIF(SUM(CASE WHEN g.ip > 0 AND g.whip IS NOT NULL THEN g.ip ELSE 0 END), 0) AS whip,
     SUM(g.pitching_so)                        AS pitching_so,
     SUM(g.pitching_bb)                        AS pitching_bb,
+    SUM(g.pitching_hits)                      AS pitching_hits,
+    SUM(g.pitching_hr)                        AS pitching_hr,
+    SUM(g.pitching_r)                         AS pitching_r,
+    SUM(g.cg)                                 AS cg,
+    SUM(g.sho)                                AS sho,
+    SUM(g.hld)                                AS hld,
+    SUM(g.bs)                                 AS bs,
+    SUM(g.qs)                                 AS qs,
+    SUM(g.gf)                                 AS gf,
+    SUM(g.bk)                                 AS bk,
+    SUM(g.wp)                                 AS wp,
+    SUM(g.np)                                 AS np,
+    SUM(g.pk)                                 AS pk,
+    SUM(g.ir)                                 AS ir,
+    SUM(g.bf)                                 AS bf,
+    SUM(g.pitching_go)                        AS pitching_go,
+    SUM(g.pitching_ao)                        AS pitching_ao,
+    SUM(g.pitching_hbp)                       AS pitching_hbp,
+    SUM(g.pitching_ibb)                       AS pitching_ibb,
     CAST(NULL AS DOUBLE)                      AS pitching_war,
     CAST(NULL AS DOUBLE)                      AS player_war,
     'approx'                                  AS war_source,
@@ -620,8 +696,14 @@ _LAHMAN_COUNTING_MAP = (
     ("hr", ("HR", "hr")),
     ("rbi", ("RBI", "rbi")),
     ("sb", ("SB", "sb")),
+    ("cs", ("CS", "cs")),
     ("bb", ("BB", "bb")),
     ("so", ("SO", "so")),
+    ("ibb", ("IBB", "ibb")),
+    ("hbp", ("HBP", "hbp")),
+    ("sh", ("SH", "sh")),
+    ("sf", ("SF", "sf")),
+    ("gidp", ("GIDP", "gidp")),
     ("pa", ("PA", "pa")),
 )
 
@@ -636,7 +718,46 @@ _LAHMAN_PITCHING_MAP = (
     ("era", ("ERA", "era")),
     ("pitching_so", ("SO", "so")),
     ("pitching_bb", ("BB", "bb")),
+    ("pitching_hits", ("H", "h")),
+    ("pitching_hr", ("HR", "hr")),
+    ("pitching_r", ("R", "r")),
+    ("cg", ("CG", "cg")),
+    ("sho", ("SHO", "sho")),
+    ("gf", ("GF", "gf")),
+    ("bk", ("BK", "bk")),
+    ("wp", ("WP", "wp")),
+    ("bf", ("BFP", "bfp", "bf")),
+    ("pitching_ibb", ("IBB", "ibb")),
+    ("pitching_hbp", ("HBP", "hbp")),
 )
+
+_LAHMAN_BATTING_FILL = [
+    "games", "ab", "runs", "hits", "doubles", "triples", "hr", "rbi", "sb",
+    "cs", "bb", "so", "ibb", "hbp", "sh", "sf", "gidp", "pa",
+    "avg", "obp", "slg", "ops",
+]
+
+_LAHMAN_PITCHING_FILL = [
+    "games", "gs", "w", "l", "sv", "er", "ip", "era",
+    "pitching_so", "pitching_bb", "pitching_hits", "pitching_hr", "pitching_r",
+    "cg", "sho", "gf", "bk", "wp", "bf", "pitching_ibb", "pitching_hbp",
+]
+
+_LAHMAN_FIELDING_FILL = [
+    "putouts",
+    "assists",
+    "errors",
+    "double_plays",
+    "passed_balls",
+    "fpct",
+    "fielding_g",
+    "fielding_gs",
+    "fielding_inn",
+    "fielding_pos",
+    "fielding_json",
+    "fielding_cs",
+    "fielding_sb",
+]
 
 
 def _optional_csv(path: Path) -> pd.DataFrame | None:
@@ -699,6 +820,10 @@ def fielding_line_from_counts(
     double_plays: object = None,
     passed_balls: object = None,
     fpct: object = None,
+    ofa: object = None,
+    fielding_cs: object = None,
+    fielding_sb: object = None,
+    tp: object = None,
 ) -> dict[str, object] | None:
     line = {
         "pos": str(pos).strip() if pos not in (None, "") and not (isinstance(pos, float) and pd.isna(pos)) else None,
@@ -711,8 +836,12 @@ def fielding_line_from_counts(
         "dp": _json_number(double_plays),
         "pb": _json_number(passed_balls),
         "fpct": _json_number(fpct),
+        "ofa": _json_number(ofa),
+        "cs": _json_number(fielding_cs),
+        "sb": _json_number(fielding_sb),
+        "tp": _json_number(tp),
     }
-    counts = [line[key] for key in ("g", "gs", "inn", "po", "a", "e", "dp", "pb", "fpct")]
+    counts = [line[key] for key in ("g", "gs", "inn", "po", "a", "e", "dp", "pb", "fpct", "ofa", "cs", "sb", "tp")]
     if line["pos"] is None and all(value is None for value in counts):
         return None
     if line["fpct"] is None:
@@ -849,6 +978,8 @@ def _aggregate_lahman_fielding(fielding: pd.DataFrame) -> tuple[pd.DataFrame, pd
     work["errors"] = _numeric_series(work, ("E", "e", "errors"))
     work["double_plays"] = _numeric_series(work, ("DP", "dp", "double_plays"))
     work["passed_balls"] = _numeric_series(work, ("PB", "pb", "passed_balls"))
+    work["fielding_cs"] = _numeric_series(work, ("CS", "cs", "fielding_cs"))
+    work["fielding_sb"] = _numeric_series(work, ("SB", "sb", "fielding_sb"))
     group_keys = ["_player_id", "_year_id", "pos"] if pos_col else ["_player_id", "_year_id"]
     lines = work.groupby(group_keys, as_index=False).agg(
         g=("g", "sum"),
@@ -859,6 +990,8 @@ def _aggregate_lahman_fielding(fielding: pd.DataFrame) -> tuple[pd.DataFrame, pd
         errors=("errors", "sum"),
         double_plays=("double_plays", "sum"),
         passed_balls=("passed_balls", "sum"),
+        fielding_cs=("fielding_cs", "sum"),
+        fielding_sb=("fielding_sb", "sum"),
     )
     # DH is not a fielding position in Lahman; drop empty/unknown rows.
     if "pos" in lines.columns:
@@ -873,6 +1006,8 @@ def _aggregate_lahman_fielding(fielding: pd.DataFrame) -> tuple[pd.DataFrame, pd
         errors=("errors", "sum"),
         double_plays=("double_plays", "sum"),
         passed_balls=("passed_balls", "sum"),
+        fielding_cs=("fielding_cs", "sum"),
+        fielding_sb=("fielding_sb", "sum"),
     )
     if not lines.empty and "pos" in lines.columns:
         primary = (
@@ -900,6 +1035,8 @@ def _aggregate_lahman_fielding(fielding: pd.DataFrame) -> tuple[pd.DataFrame, pd
                     errors=row.errors,
                     double_plays=row.double_plays,
                     passed_balls=row.passed_balls,
+                    fielding_cs=getattr(row, "fielding_cs", None),
+                    fielding_sb=getattr(row, "fielding_sb", None),
                 )
                 if line:
                     packed.append(line)
@@ -979,37 +1116,13 @@ def attach_published_individual_lines(
         return out
     if batting is not None and not batting.empty:
         bat = _aggregate_lahman_batting(batting)
-        out = _coalesce_columns(
-            out,
-            bat,
-            ["games", "ab", "runs", "hits", "doubles", "triples", "hr", "rbi", "sb", "bb", "so", "pa", "avg", "obp", "slg", "ops"],
-        )
+        out = _coalesce_columns(out, bat, _LAHMAN_BATTING_FILL)
     if pitching is not None and not pitching.empty:
         pit = _aggregate_lahman_pitching(pitching)
-        out = _coalesce_columns(
-            out,
-            pit,
-            ["games", "gs", "w", "l", "sv", "er", "ip", "era", "pitching_so", "pitching_bb"],
-        )
+        out = _coalesce_columns(out, pit, _LAHMAN_PITCHING_FILL)
     if fielding is not None and not fielding.empty:
         totals, _lines = _aggregate_lahman_fielding(fielding)
-        out = _coalesce_columns(
-            out,
-            totals,
-            [
-                "putouts",
-                "assists",
-                "errors",
-                "double_plays",
-                "passed_balls",
-                "fpct",
-                "fielding_g",
-                "fielding_gs",
-                "fielding_inn",
-                "fielding_pos",
-                "fielding_json",
-            ],
-        )
+        out = _coalesce_columns(out, totals, _LAHMAN_FIELDING_FILL)
     return finalize_fielding_publish(out)
 
 
@@ -1041,6 +1154,10 @@ def finalize_fielding_publish(player_df: pd.DataFrame) -> pd.DataFrame:
             double_plays=data.get("double_plays"),
             passed_balls=data.get("passed_balls"),
             fpct=data.get("fpct"),
+            ofa=data.get("ofa"),
+            fielding_cs=data.get("fielding_cs"),
+            fielding_sb=data.get("fielding_sb"),
+            tp=data.get("tp"),
         )
         # A listed position with no fielding counting is not a fielding line.
         if line and all(line.get(key) is None for key in ("g", "gs", "inn", "po", "a", "e", "dp", "pb")):

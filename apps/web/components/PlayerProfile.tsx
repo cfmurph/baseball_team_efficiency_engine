@@ -18,11 +18,15 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { buildComparePath, compareHrefForPlayer } from "@/lib/compare";
 import {
   EMPTY_FIELDING_COPY,
+  fieldingAdvancedCells,
   fieldingCells,
   fieldingForSeason,
+  fieldingHeaderCells,
   hasFieldingLine,
+  hittingAdvancedCells,
   hittingCells,
   hittingGameColumns,
+  pitchingAdvancedCells,
   pitchingCells,
   pitchingGameColumns,
 } from "@/lib/playerPage";
@@ -225,11 +229,23 @@ export function PlayerProfile({
           <section className="bos-block">
             <h2>Pitching</h2>
             <StatTable cells={pitchingCells(pitching)} />
+            {pitchingAdvancedCells(pitching).length ? (
+              <>
+                <h3 className="bos-subhead">Advanced</h3>
+                <StatTable cells={pitchingAdvancedCells(pitching)} />
+              </>
+            ) : null}
           </section>
         ) : hitting ? (
           <section className="bos-block">
             <h2>Batting</h2>
             <StatTable cells={hittingCells(hitting)} />
+            {hittingAdvancedCells(hitting).length ? (
+              <>
+                <h3 className="bos-subhead">Advanced</h3>
+                <StatTable cells={hittingAdvancedCells(hitting)} />
+              </>
+            ) : null}
           </section>
         ) : null
       ) : (
@@ -242,33 +258,45 @@ export function PlayerProfile({
       <section className="bos-block">
         <h2>Fielding</h2>
         {hasFieldingLine(fielding) ? (
-          <div className="bos-table-wrap">
-            <table className="bos-table bos-table-compact">
-              <thead>
-                <tr>
-                  {fieldingCells(fielding[0]).map((cell) => (
-                    <th key={cell.key} className={cell.key === "pos" ? undefined : "bos-num"}>
-                      {cell.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {fielding.map((row) => {
-                  const cells = fieldingCells(row);
-                  return (
-                    <tr key={`${row.season}-${row.pos}`}>
-                      {cells.map((cell) => (
-                        <td key={cell.key} className={cell.key === "pos" ? undefined : "bos-num"}>
-                          {cell.value}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="bos-table-wrap">
+              <table className="bos-table bos-table-compact">
+                <thead>
+                  <tr>
+                    {fieldingHeaderCells(fielding).map((cell) => (
+                      <th key={cell.key} className={cell.key === "pos" ? undefined : "bos-num"}>
+                        {cell.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {fielding.map((row) => {
+                    const headers = fieldingHeaderCells(fielding);
+                    const byKey = new Map(fieldingCells(row).map((cell) => [cell.key, cell]));
+                    return (
+                      <tr key={`${row.season}-${row.pos}`}>
+                        {headers.map((header) => {
+                          const cell = byKey.get(header.key);
+                          return (
+                            <td key={header.key} className={header.key === "pos" ? undefined : "bos-num"}>
+                              {cell?.value ?? "—"}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {fieldingAdvancedCells(fielding[0]).length ? (
+              <>
+                <h3 className="bos-subhead">Advanced</h3>
+                <StatTable cells={fieldingAdvancedCells(fielding[0])} />
+              </>
+            ) : null}
+          </>
         ) : (
           <p className="bos-caption" role="status">
             {EMPTY_FIELDING_COPY}
