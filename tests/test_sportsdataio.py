@@ -168,6 +168,9 @@ def test_parse_games_and_player_game_stats() -> None:
     assert int(season.iloc[0]["putouts"]) == 361
     assert int(season.iloc[0]["assists"]) == 8
     assert int(season.iloc[0]["errors"]) == 4
+    assert int(season.iloc[0]["cs"]) == 4
+    assert int(season.iloc[0]["hbp"]) == 9
+    assert int(season.iloc[0]["sf"]) == 6
 
 
 @pytest.mark.unit

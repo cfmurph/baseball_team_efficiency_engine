@@ -302,8 +302,22 @@ def test_players_directory_from_fixture_current(tmp_path: Path) -> None:
     assert season_2026["war"] == pytest.approx(6.1)
     assert season_2026["putouts"] == 248
     assert season_2026["fpct"] == pytest.approx(0.988)
+    assert season_2026["cs"] == 3
+    assert season_2026["hbp"] == 8
+    assert season_2026["singles"] == 77
+    assert season_2026["xbh"] == 63
+    assert season_2026["tb"] == 284
+    assert season_2026["tc"] == 258
     assert season_2026["fielding"][0]["pos"] == "RF"
     assert season_2026["fielding"][0]["po"] == 248
+    assert season_2026["fielding"][0]["tc"] == 258
+    suarez = next(player for player in body["players"] if player["player_id"] == "suarera02")
+    pitch = suarez["seasons"][0]
+    assert pitch["pitching_hits"] == 120
+    assert pitch["cg"] == 2
+    assert pitch["qs"] == 18
+    assert pitch["bf"] == 610
+    assert pitch["wpct"] == pytest.approx(0.6)
     soler = next(player for player in body["players"] if player["player_id"] == "solerjo01")
     assert soler["seasons"][0]["fielding"] == []
     assert soler["seasons"][0]["putouts"] is None
