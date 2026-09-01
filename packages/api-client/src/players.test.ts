@@ -6,6 +6,12 @@ import {
   MIN_IP,
   MIN_PA,
   defaultDirectorySeason,
+  deriveRf,
+  deriveSbPct,
+  deriveSingles,
+  deriveTb,
+  deriveTc,
+  deriveXbh,
   formatAvg,
   formatOps,
   hittingCountingLine,
@@ -208,6 +214,21 @@ test("parses fielding lines when present and omits them when absent", () => {
     },
   });
   assert.deepEqual(emptyFielding?.fielding, []);
+});
+
+test("derived identities need every input and stay off otherwise", () => {
+  assert.equal(deriveSingles(140, 22, 1, 40), 77);
+  assert.equal(deriveXbh(22, 1, 40), 63);
+  assert.equal(deriveTb(140, 22, 1, 40), 284);
+  assert.equal(deriveTc(248, 7, 3), 258);
+  assert.ok(Math.abs((deriveSbPct(8, 3) ?? 0) - 8 / 11) < 1e-9);
+  assert.ok(Math.abs((deriveRf(248, 7, 980) ?? 0) - (9 * 255) / 980) < 1e-9);
+  assert.equal(deriveSingles(140, 22, null, 40), null);
+  assert.equal(deriveXbh(22, null, 40), null);
+  assert.equal(deriveTb(140, null, 1, 40), null);
+  assert.equal(deriveSbPct(8, null), null);
+  assert.equal(deriveTc(248, 7, null), null);
+  assert.equal(deriveRf(248, 7, null), null);
 });
 
 test("banner only when the selected year is the missing current season", () => {
