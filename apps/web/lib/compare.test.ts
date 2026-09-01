@@ -10,6 +10,7 @@ import {
   bestIndexes,
   buildComparePath,
   buildCompareRows,
+  clampSeason,
   columnFromDetail,
   compareHrefForPlayer,
   filterSlotCandidates,
@@ -109,6 +110,8 @@ test("parses shareable compare URL, caps at four, and defaults to players", () =
   assert.equal(query.season, 2025);
   assert.deepEqual(query.ids, ["one", "two", "three", "four"]);
   assert.equal(query.ids.length, COMPARE_MAX);
+  assert.equal(clampSeason(2026, [2024, 2025], 2026), 2025);
+  assert.equal(clampSeason(2025, [2024, 2025, 2026], 2026), 2025);
 });
 
 test("buildComparePath round-trips ids and season without minting ids", () => {

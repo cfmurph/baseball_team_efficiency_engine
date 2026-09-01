@@ -113,7 +113,10 @@ export function clampSeason(year: number, years: number[], fallback: number): nu
   if (years.includes(year)) {
     return year;
   }
-  return fallback;
+  if (years.includes(fallback)) {
+    return fallback;
+  }
+  return years.length ? years[years.length - 1] : fallback;
 }
 
 export function parseCompareQuery(

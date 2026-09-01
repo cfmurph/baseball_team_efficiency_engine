@@ -111,7 +111,7 @@ function PlayerSlot({
         <input
           type="search"
           role="combobox"
-          aria-expanded={open && matches.length > 0}
+          aria-expanded={open}
           aria-controls={`bos-slot-list-${index}`}
           aria-autocomplete="list"
           value={query}
@@ -126,26 +126,32 @@ function PlayerSlot({
           }}
         />
       </label>
-      {open && matches.length > 0 ? (
+      {open ? (
         <ul className="bos-slot-list" role="listbox" id={`bos-slot-list-${index}`}>
-          {matches.map((row) => (
-            <li key={row.player_id} role="option">
-              <button
-                type="button"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => {
-                  onAdd(row.player_id);
-                  setQuery("");
-                  setOpen(false);
-                }}
-              >
-                <span>{row.name}</span>
-                <span className="bos-slot-meta">
-                  {row.position} · {row.team}
-                </span>
-              </button>
+          {matches.length === 0 ? (
+            <li className="bos-slot-empty" role="presentation">
+              {query.trim() ? "No matching players" : "No players in this season"}
             </li>
-          ))}
+          ) : (
+            matches.map((row) => (
+              <li key={row.player_id} role="option">
+                <button
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    onAdd(row.player_id);
+                    setQuery("");
+                    setOpen(false);
+                  }}
+                >
+                  <span>{row.name}</span>
+                  <span className="bos-slot-meta">
+                    {row.position} · {row.team}
+                  </span>
+                </button>
+              </li>
+            ))
+          )}
         </ul>
       ) : null}
     </div>
