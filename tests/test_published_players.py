@@ -118,6 +118,12 @@ def test_public_season_passes_fielding_and_omits_when_absent() -> None:
         "runs": "85",
         "doubles": "22",
         "triples": "1",
+        "hr": "40",
+        "sb": "8",
+        "cs": "3",
+        "hbp": "8",
+        "sf": "5",
+        "fielding_inn": "980",
     }
     season = public_player_season(with_fielding)
     assert season is not None
@@ -125,15 +131,29 @@ def test_public_season_passes_fielding_and_omits_when_absent() -> None:
     assert season["doubles"] == 22
     assert season["putouts"] == 248
     assert season["fpct"] == pytest.approx(0.988)
+    assert season["cs"] == 3
+    assert season["hbp"] == 8
+    assert season["singles"] == 77
+    assert season["xbh"] == 63
+    assert season["tb"] == 284
+    assert season["sb_pct"] == pytest.approx(8 / 11)
+    assert season["tc"] == 258
     assert season["fielding"][0]["pos"] == "RF"
     assert season["fielding"][0]["po"] == 248
+    assert season["fielding"][0]["tc"] == 258
     assert "dfs_salary" not in season
+    assert "drs" not in season
+    assert "uzr" not in season
+    assert "oaa" not in season
 
     empty = public_player_season(JUDGE_2026)
     assert empty is not None
     assert empty["fielding"] == []
     assert empty["putouts"] is None
     assert empty["fpct"] is None
+    assert empty.get("singles") is None
+    assert empty.get("xbh") is None
+    assert empty.get("tc") is None
 
 
 def test_public_season_does_not_treat_batting_games_as_fielding() -> None:

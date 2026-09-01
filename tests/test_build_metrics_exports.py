@@ -139,8 +139,13 @@ def test_attach_published_lines_fills_lahman_counting_and_fielding() -> None:
             "HR": [58],
             "RBI": [144],
             "SB": [10],
+            "CS": [4],
             "BB": [130],
             "SO": [170],
+            "HBP": [9],
+            "SF": [6],
+            "GIDP": [12],
+            "IBB": [15],
         }
     )
     fielding = pd.DataFrame(
@@ -161,6 +166,9 @@ def test_attach_published_lines_fills_lahman_counting_and_fielding() -> None:
     judge = out.loc[out["player_id"] == "judgeaa01"].iloc[0]
     assert judge["runs"] == 122
     assert judge["doubles"] == 36
+    assert judge["cs"] == 4
+    assert judge["hbp"] == 9
+    assert judge["sf"] == 6
     assert judge["putouts"] == 361
     assert judge["fpct"] == pytest.approx(0.989)
     assert "RF" in str(judge["fielding_json"])

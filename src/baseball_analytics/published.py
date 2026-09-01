@@ -12,6 +12,10 @@ import json
 from typing import Any
 
 from src.baseball_analytics.config import ArtifactSettings, load_artifact_settings
+from src.baseball_analytics.player_line import (
+    apply_fielding_identities,
+    apply_player_line_identities,
+)
 from src.baseball_analytics.fantasy import (
     FANTASY_CARDS_RELPATH,
     FANTASY_SCHEMA_VERSION,
@@ -182,8 +186,77 @@ _PLAYER_COUNTING_ALIASES = {
     "fielding_g": ("fielding_g",),
     "fielding_gs": ("fielding_gs",),
     "fielding_inn": ("fielding_inn", "inn"),
+    "cs": ("cs", "caught_stealing"),
+    "hbp": ("hbp", "hit_by_pitch"),
+    "sh": ("sh", "sac", "sacrifices"),
+    "sf": ("sf", "sacrifice_flies"),
+    "gidp": ("gidp", "gdp"),
+    "ibb": ("ibb",),
+    "lob": ("lob",),
+    "roe": ("roe",),
+    "gsh": ("gsh", "grand_slams"),
+    "singles": ("singles", "x1b", "1b"),
+    "tb": ("tb", "total_bases"),
+    "xbh": ("xbh",),
+    "go": ("go", "ground_outs"),
+    "ao": ("ao", "fly_outs"),
+    "ofa": ("ofa", "outfield_assists"),
+    "fielding_cs": ("fielding_cs",),
+    "fielding_sb": ("fielding_sb",),
+    "tp": ("tp", "triple_plays"),
+    "tc": ("tc", "total_chances"),
+    "rf": ("rf", "range_factor"),
+    "pitching_hits": ("pitching_hits",),
+    "pitching_hr": ("pitching_hr",),
+    "pitching_r": ("pitching_r", "pitching_runs"),
+    "cg": ("cg", "complete_games"),
+    "sho": ("sho", "shutouts"),
+    "hld": ("hld", "holds"),
+    "bs": ("bs", "blown_saves"),
+    "svo": ("svo", "save_opportunities"),
+    "qs": ("qs", "quality_starts"),
+    "gf": ("gf", "games_finished"),
+    "bk": ("bk", "balks"),
+    "wp": ("wp", "wild_pitches"),
+    "np": ("np", "pitches_thrown"),
+    "pk": ("pk", "pickoffs"),
+    "ir": ("ir", "inherited_runners"),
+    "uer": ("uer", "unearned_runs"),
+    "bf": ("bf", "batters_faced", "bfp"),
+    "pitching_go": ("pitching_go",),
+    "pitching_ao": ("pitching_ao",),
+    "pitching_hbp": ("pitching_hbp",),
+    "pitching_ibb": ("pitching_ibb",),
 }
-_PLAYER_RATE_KEYS = ("avg", "obp", "slg", "ops", "woba", "era", "whip", "fip", "fpct")
+_PLAYER_RATE_KEYS = (
+    "avg",
+    "obp",
+    "slg",
+    "ops",
+    "woba",
+    "era",
+    "whip",
+    "fip",
+    "fpct",
+    "iso",
+    "babip",
+    "sb_pct",
+    "go_ao",
+    "k_pct",
+    "bb_pct",
+    "wpct",
+    "sv_pct",
+    "pitching_go_ao",
+    "k9",
+    "bb9",
+    "h9",
+    "hr9",
+    "k_bb",
+    "pitching_k_pct",
+    "pitching_bb_pct",
+    "i_gs",
+    "cs_pct",
+)
 
 
 def load_player_season_rows(
@@ -276,6 +349,7 @@ def public_player_season(row: Mapping[str, Any]) -> dict[str, Any] | None:
             )
         )
     season["fielding_pos"] = _first_text(row, ("fielding_pos",))
+    apply_player_line_identities(season)
     season["fielding"] = public_fielding_lines(row)
     return season
 
@@ -304,14 +378,25 @@ def _fielding_line_from_mapping(raw: Mapping[str, Any]) -> dict[str, Any] | None
         "dp": _json_number(_first_number(raw, ("dp", "double_plays"))),
         "pb": _json_number(_first_number(raw, ("pb", "passed_balls"))),
         "fpct": _json_number(_as_number(raw.get("fpct"))),
+        "ofa": _json_number(_first_number(raw, ("ofa", "outfield_assists"))),
+        "cs": _json_number(_first_number(raw, ("cs", "fielding_cs"))),
+        "sb": _json_number(_first_number(raw, ("sb", "fielding_sb"))),
+        "tp": _json_number(_first_number(raw, ("tp", "triple_plays"))),
+        "tc": _json_number(_first_number(raw, ("tc", "total_chances"))),
+        "rf": _json_number(_first_number(raw, ("rf", "range_factor"))),
+        "cs_pct": _json_number(_as_number(raw.get("cs_pct"))),
     }
-    counts = [line[key] for key in ("g", "gs", "inn", "po", "a", "e", "dp", "pb", "fpct")]
+    counts = [
+        line[key]
+        for key in ("g", "gs", "inn", "po", "a", "e", "dp", "pb", "fpct", "ofa", "cs", "sb", "tp", "tc", "rf")
+    ]
     if line["pos"] is None and all(value is None for value in counts):
         return None
     if all(value is None for value in counts):
         return None
     if line["fpct"] is None:
         line["fpct"] = _json_number(_fielding_fpct(line["po"], line["a"], line["e"]))
+    apply_fielding_identities(line)
     return line
 
 
@@ -344,6 +429,10 @@ def public_fielding_lines(row: Mapping[str, Any]) -> list[dict[str, Any]]:
             "dp": row.get("double_plays") if row.get("double_plays") not in (None, "") else row.get("dp"),
             "pb": row.get("passed_balls") if row.get("passed_balls") not in (None, "") else row.get("pb"),
             "fpct": row.get("fpct"),
+            "ofa": row.get("ofa"),
+            "cs": row.get("fielding_cs"),
+            "sb": row.get("fielding_sb"),
+            "tp": row.get("tp"),
         }
     )
     return [single] if single is not None else []
