@@ -7,6 +7,7 @@ import pytest
 from pipeline.transform import build_metrics
 from pipeline.transform.build_metrics import (
     PHASE0_PLAYER_FIELDS,
+    attach_published_individual_lines,
     enrich_player_season_phase0,
 )
 
@@ -113,3 +114,56 @@ def test_table_has_rows_handles_present_empty_and_missing_tables() -> None:
         assert build_metrics._table_has_rows(con, "missing_table") is False
     finally:
         con.close()
+
+
+def test_attach_published_lines_fills_lahman_counting_and_fielding() -> None:
+    players = pd.DataFrame(
+        {
+            "player_id": ["judgeaa01", "solerjo01"],
+            "year_id": [2025, 2026],
+            "season": [2025, 2026],
+            "pa": [680, 210],
+            "player_war": [10.8, 0.2],
+        }
+    )
+    batting = pd.DataFrame(
+        {
+            "playerID": ["judgeaa01"],
+            "yearID": [2025],
+            "G": [158],
+            "AB": [580],
+            "R": [122],
+            "H": [180],
+            "X2B": [36],
+            "X3B": [1],
+            "HR": [58],
+            "RBI": [144],
+            "SB": [10],
+            "BB": [130],
+            "SO": [170],
+        }
+    )
+    fielding = pd.DataFrame(
+        {
+            "playerID": ["judgeaa01"],
+            "yearID": [2025],
+            "POS": ["RF"],
+            "G": [150],
+            "GS": [148],
+            "InnOuts": [3915],
+            "PO": [361],
+            "A": [8],
+            "E": [4],
+            "DP": [1],
+        }
+    )
+    out = attach_published_individual_lines(players, batting=batting, fielding=fielding)
+    judge = out.loc[out["player_id"] == "judgeaa01"].iloc[0]
+    assert judge["runs"] == 122
+    assert judge["doubles"] == 36
+    assert judge["putouts"] == 361
+    assert judge["fpct"] == pytest.approx(0.989)
+    assert "RF" in str(judge["fielding_json"])
+    soler = out.loc[out["player_id"] == "solerjo01"].iloc[0]
+    assert pd.isna(soler.get("putouts")) or soler.get("putouts") in (None, "")
+    assert soler.get("fielding_json") in (None, "") or pd.isna(soler.get("fielding_json"))

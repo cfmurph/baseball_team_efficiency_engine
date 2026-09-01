@@ -24,9 +24,12 @@ export {
   RECENT_GAME_LIMIT,
   cardChipFromCards,
   defaultDirectorySeason,
+  directoryLine,
+  fieldingSignal,
   formatAvg,
   formatCount,
   formatEra,
+  formatFpct,
   formatIp,
   formatOps,
   formatWar,
@@ -47,6 +50,7 @@ export {
   selectedYearMissing,
 } from "./players.ts";
 export type {
+  FieldingSeason,
   HittingGame,
   HittingSeason,
   PlayerCardChip,

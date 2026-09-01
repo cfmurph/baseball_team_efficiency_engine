@@ -163,11 +163,27 @@ _PLAYER_COUNTING_ALIASES = {
     "so": ("so",),
     "rbi": ("rbi",),
     "sb": ("sb",),
+    "runs": ("runs", "r"),
+    "doubles": ("doubles", "2b", "x2b"),
+    "triples": ("triples", "3b", "x3b"),
     "ip": ("ip",),
+    "gs": ("gs", "games_started"),
+    "w": ("w", "wins"),
+    "l": ("l", "losses"),
+    "sv": ("sv", "saves"),
+    "er": ("er", "earned_runs"),
     "pitching_so": ("pitching_so",),
     "pitching_bb": ("pitching_bb",),
+    "putouts": ("putouts", "po"),
+    "assists": ("assists", "a"),
+    "errors": ("errors", "e"),
+    "double_plays": ("double_plays", "dp"),
+    "passed_balls": ("passed_balls", "pb"),
+    "fielding_g": ("fielding_g",),
+    "fielding_gs": ("fielding_gs",),
+    "fielding_inn": ("fielding_inn", "inn"),
 }
-_PLAYER_RATE_KEYS = ("avg", "obp", "slg", "ops", "woba", "era", "whip", "fip")
+_PLAYER_RATE_KEYS = ("avg", "obp", "slg", "ops", "woba", "era", "whip", "fip", "fpct")
 
 
 def load_player_season_rows(
@@ -251,7 +267,86 @@ def public_player_season(row: Mapping[str, Any]) -> dict[str, Any] | None:
         if key == "avg":
             continue
         season[key] = _json_number(_as_number(row.get(key)))
+    if season.get("fpct") is None:
+        season["fpct"] = _json_number(
+            _fielding_fpct(
+                season.get("putouts"),
+                season.get("assists"),
+                season.get("errors"),
+            )
+        )
+    season["fielding_pos"] = _first_text(row, ("fielding_pos",))
+    season["fielding"] = public_fielding_lines(row)
     return season
+
+
+def _fielding_fpct(putouts: object, assists: object, errors: object) -> float | None:
+    po = _as_number(putouts)
+    a = _as_number(assists)
+    e = _as_number(errors)
+    if po is None and a is None and e is None:
+        return None
+    denom = (po or 0.0) + (a or 0.0) + (e or 0.0)
+    if denom <= 0:
+        return None
+    return round(((po or 0.0) + (a or 0.0)) / denom, 3)
+
+
+def _fielding_line_from_mapping(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    line = {
+        "pos": _first_text(raw, ("pos", "position", "fielding_pos")),
+        "g": _json_number(_first_number(raw, ("g", "games", "fielding_g"))),
+        "gs": _json_number(_first_number(raw, ("gs", "games_started", "fielding_gs"))),
+        "inn": _json_number(_first_number(raw, ("inn", "innings", "fielding_inn"))),
+        "po": _json_number(_first_number(raw, ("po", "putouts"))),
+        "a": _json_number(_first_number(raw, ("a", "assists"))),
+        "e": _json_number(_first_number(raw, ("e", "errors"))),
+        "dp": _json_number(_first_number(raw, ("dp", "double_plays"))),
+        "pb": _json_number(_first_number(raw, ("pb", "passed_balls"))),
+        "fpct": _json_number(_as_number(raw.get("fpct"))),
+    }
+    counts = [line[key] for key in ("g", "gs", "inn", "po", "a", "e", "dp", "pb", "fpct")]
+    if line["pos"] is None and all(value is None for value in counts):
+        return None
+    if all(value is None for value in counts):
+        return None
+    if line["fpct"] is None:
+        line["fpct"] = _json_number(_fielding_fpct(line["po"], line["a"], line["e"]))
+    return line
+
+
+def public_fielding_lines(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Published fielding lines only. Empty when the feed has no defensive counting."""
+    raw = row.get("fielding")
+    if isinstance(raw, list):
+        lines = [_fielding_line_from_mapping(item) for item in raw if isinstance(item, Mapping)]
+        return [line for line in lines if line is not None]
+    blob = row.get("fielding_json")
+    if blob not in (None, ""):
+        try:
+            parsed = json.loads(str(blob))
+        except (TypeError, json.JSONDecodeError):
+            parsed = None
+        if isinstance(parsed, list):
+            lines = [_fielding_line_from_mapping(item) for item in parsed if isinstance(item, Mapping)]
+            found = [line for line in lines if line is not None]
+            if found:
+                return found
+    single = _fielding_line_from_mapping(
+        {
+            "pos": row.get("fielding_pos"),
+            "g": row.get("fielding_g"),
+            "gs": row.get("fielding_gs"),
+            "inn": row.get("fielding_inn"),
+            "po": row.get("putouts") if row.get("putouts") not in (None, "") else row.get("po"),
+            "a": row.get("assists") if row.get("assists") not in (None, "") else row.get("a"),
+            "e": row.get("errors") if row.get("errors") not in (None, "") else row.get("e"),
+            "dp": row.get("double_plays") if row.get("double_plays") not in (None, "") else row.get("dp"),
+            "pb": row.get("passed_balls") if row.get("passed_balls") not in (None, "") else row.get("pb"),
+            "fpct": row.get("fpct"),
+        }
+    )
+    return [single] if single is not None else []
 
 
 def public_player_identity(row: Mapping[str, Any]) -> dict[str, Any]:

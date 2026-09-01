@@ -8,34 +8,28 @@ import {
   RECENT_GAME_LIMIT,
   formatCount,
   formatIp,
-  hittingCountingLine,
-  hittingRatesLine,
   isApproxWar,
-  pitchingCountingLine,
-  pitchingRatesLine,
   selectedYearMissing,
-  type HittingSeason,
-  type PitchingSeason,
   type PlayerSide,
 } from "@bos/api-client";
 import { CURRENT_SEASON_BANNER, EARLY_MODEL_BADGE, FOOTER, labelTone } from "@bos/card-schema";
 
 import { SiteHeader } from "@/components/SiteHeader";
 import { buildComparePath, compareHrefForPlayer } from "@/lib/compare";
+import {
+  EMPTY_FIELDING_COPY,
+  fieldingCells,
+  fieldingForSeason,
+  hasFieldingLine,
+  hittingCells,
+  hittingGameColumns,
+  pitchingCells,
+  pitchingGameColumns,
+} from "@/lib/playerPage";
 import type { PlayerPageData } from "@/lib/load";
 
 function lineForSeason<T extends { season: number }>(rows: T[], season: number): T | null {
   return rows.find((row) => row.season === season) || null;
-}
-
-function countingAndRates(side: PlayerSide, hitting: HittingSeason | null, pitching: PitchingSeason | null) {
-  if (side === "pitching" && pitching) {
-    return { counting: pitchingCountingLine(pitching), rates: pitchingRatesLine(pitching), approx: isApproxWar(pitching.war_source) };
-  }
-  if (hitting) {
-    return { counting: hittingCountingLine(hitting), rates: hittingRatesLine(hitting), approx: isApproxWar(hitting.war_source) };
-  }
-  return { counting: "", rates: "", approx: false };
 }
 
 function AddToCompare({ playerId, season }: { playerId: string; season: number }) {
@@ -58,6 +52,36 @@ function AddToCompare({ playerId, season }: { playerId: string; season: number }
   );
 }
 
+function StatTable({ cells }: { cells: ReturnType<typeof hittingCells> }) {
+  if (!cells.length) {
+    return null;
+  }
+  return (
+    <div className="bos-table-wrap">
+      <table className="bos-table bos-table-compact">
+        <thead>
+          <tr>
+            {cells.map((cell) => (
+              <th key={cell.key} className="bos-num">
+                {cell.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            {cells.map((cell) => (
+              <td key={cell.key} className="bos-num">
+                {cell.value}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function PlayerProfile({
   detail,
   seasons,
@@ -69,6 +93,7 @@ export function PlayerProfile({
 
   const hitting = detail ? lineForSeason(detail.hitting, season) : null;
   const pitching = detail ? lineForSeason(detail.pitching, season) : null;
+  const fielding = fieldingForSeason(detail, season);
   const hasBothSides = Boolean(hitting && pitching);
 
   const resolvedSide: PlayerSide = useMemo(() => {
@@ -98,8 +123,10 @@ export function PlayerProfile({
   }
 
   const activeRow = resolvedSide === "pitching" ? pitching : hitting;
-  const lines = countingAndRates(resolvedSide, hitting, pitching);
   const yearMissing = selectedYearMissing(health, season, Boolean(activeRow));
+  const approx = isApproxWar(
+    resolvedSide === "pitching" ? pitching?.war_source : hitting?.war_source,
+  );
 
   const hittingGames = detail.recent_games.hitting
     .filter((game) => !game.season || game.season === season)
@@ -108,6 +135,8 @@ export function PlayerProfile({
     .filter((game) => !game.season || game.season === season)
     .slice(0, RECENT_GAME_LIMIT);
   const games = resolvedSide === "pitching" ? pitchingGames : hittingGames;
+  const hittingHeaders = hittingGameColumns(hittingGames);
+  const pitchingHeaders = pitchingGameColumns(pitchingGames);
 
   return (
     <div className="bos-shell">
@@ -128,7 +157,7 @@ export function PlayerProfile({
       <header className="bos-identity">
         <h1>
           {detail.player.name}
-          {lines.approx ? <span className="bos-badge">{EARLY_MODEL_BADGE}</span> : null}
+          {approx ? <span className="bos-badge">{EARLY_MODEL_BADGE}</span> : null}
         </h1>
         <p>
           {detail.player.team} · {detail.player.position}
@@ -192,16 +221,60 @@ export function PlayerProfile({
       ) : null}
 
       {activeRow ? (
-        <section className="bos-lines">
-          {lines.counting ? <p className="bos-counting">{lines.counting}</p> : null}
-          {lines.rates ? <p className="bos-rates">{lines.rates}</p> : null}
-        </section>
+        resolvedSide === "pitching" && pitching ? (
+          <section className="bos-block">
+            <h2>Pitching</h2>
+            <StatTable cells={pitchingCells(pitching)} />
+          </section>
+        ) : hitting ? (
+          <section className="bos-block">
+            <h2>Batting</h2>
+            <StatTable cells={hittingCells(hitting)} />
+          </section>
+        ) : null
       ) : (
         <div className="bos-empty" role="status">
           <h2>No {season} line yet</h2>
           <p>Empty tab until the nightly publishes that year. We do not invent rows.</p>
         </div>
       )}
+
+      <section className="bos-block">
+        <h2>Fielding</h2>
+        {hasFieldingLine(fielding) ? (
+          <div className="bos-table-wrap">
+            <table className="bos-table bos-table-compact">
+              <thead>
+                <tr>
+                  {fieldingCells(fielding[0]).map((cell) => (
+                    <th key={cell.key} className={cell.key === "pos" ? undefined : "bos-num"}>
+                      {cell.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {fielding.map((row) => {
+                  const cells = fieldingCells(row);
+                  return (
+                    <tr key={`${row.season}-${row.pos}`}>
+                      {cells.map((cell) => (
+                        <td key={cell.key} className={cell.key === "pos" ? undefined : "bos-num"}>
+                          {cell.value}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="bos-caption" role="status">
+            {EMPTY_FIELDING_COPY}
+          </p>
+        )}
+      </section>
 
       <section className="bos-block">
         <h2>Recent games</h2>
@@ -212,13 +285,11 @@ export function PlayerProfile({
             <table className="bos-table bos-table-compact">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Opp</th>
-                  <th className="bos-num">IP</th>
-                  <th className="bos-num">H</th>
-                  <th className="bos-num">ER</th>
-                  <th className="bos-num">BB</th>
-                  <th className="bos-num">K</th>
+                  {pitchingHeaders.map((header) => (
+                    <th key={header} className={header === "Date" || header === "Opp" || header === "Dec" ? undefined : "bos-num"}>
+                      {header}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -226,11 +297,14 @@ export function PlayerProfile({
                   <tr key={`${game.date}-${game.opponent}`}>
                     <td>{game.date}</td>
                     <td>{game.opponent}</td>
+                    {pitchingHeaders.includes("GS") ? <td className="bos-num">{formatCount(game.gs)}</td> : null}
                     <td className="bos-num">{formatIp(game.ip)}</td>
                     <td className="bos-num">{formatCount(game.h)}</td>
+                    {pitchingHeaders.includes("HR") ? <td className="bos-num">{formatCount(game.hr)}</td> : null}
                     <td className="bos-num">{formatCount(game.er)}</td>
                     <td className="bos-num">{formatCount(game.bb)}</td>
                     <td className="bos-num">{formatCount(game.so)}</td>
+                    {pitchingHeaders.includes("Dec") ? <td>{game.decision || "—"}</td> : null}
                   </tr>
                 ))}
               </tbody>
@@ -241,15 +315,11 @@ export function PlayerProfile({
             <table className="bos-table bos-table-compact">
               <thead>
                 <tr>
-                  <th>Date</th>
-                  <th>Opp</th>
-                  <th className="bos-num">AB</th>
-                  <th className="bos-num">R</th>
-                  <th className="bos-num">H</th>
-                  <th className="bos-num">HR</th>
-                  <th className="bos-num">RBI</th>
-                  <th className="bos-num">BB</th>
-                  <th className="bos-num">K</th>
+                  {hittingHeaders.map((header) => (
+                    <th key={header} className={header === "Date" || header === "Opp" ? undefined : "bos-num"}>
+                      {header}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -260,8 +330,11 @@ export function PlayerProfile({
                     <td className="bos-num">{formatCount(game.ab)}</td>
                     <td className="bos-num">{formatCount(game.r)}</td>
                     <td className="bos-num">{formatCount(game.h)}</td>
+                    {hittingHeaders.includes("2B") ? <td className="bos-num">{formatCount(game.doubles)}</td> : null}
+                    {hittingHeaders.includes("3B") ? <td className="bos-num">{formatCount(game.triples)}</td> : null}
                     <td className="bos-num">{formatCount(game.hr)}</td>
                     <td className="bos-num">{formatCount(game.rbi)}</td>
+                    {hittingHeaders.includes("SB") ? <td className="bos-num">{formatCount(game.sb)}</td> : null}
                     <td className="bos-num">{formatCount(game.bb)}</td>
                     <td className="bos-num">{formatCount(game.so)}</td>
                   </tr>

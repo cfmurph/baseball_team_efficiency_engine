@@ -256,6 +256,8 @@ export const HITTING_STATS: CompareStatDef[] = [
   { key: "g", label: "G", block: "hitting", direction: "higher", read: (col) => col.hitting?.g ?? null, format: formatCount },
   { key: "pa", label: "PA", block: "hitting", direction: "higher", read: (col) => col.hitting?.pa ?? null, format: formatCount },
   { key: "h", label: "H", block: "hitting", direction: "higher", read: (col) => col.hitting?.h ?? null, format: formatCount },
+  { key: "doubles", label: "2B", block: "hitting", direction: "higher", read: (col) => col.hitting?.doubles ?? null, format: formatCount },
+  { key: "triples", label: "3B", block: "hitting", direction: "higher", read: (col) => col.hitting?.triples ?? null, format: formatCount },
   { key: "hr", label: "HR", block: "hitting", direction: "higher", read: (col) => col.hitting?.hr ?? null, format: formatCount },
   { key: "r", label: "R", block: "hitting", direction: "higher", read: (col) => col.hitting?.r ?? null, format: formatCount },
   { key: "rbi", label: "RBI", block: "hitting", direction: "higher", read: (col) => col.hitting?.rbi ?? null, format: formatCount },
@@ -266,6 +268,7 @@ export const HITTING_STATS: CompareStatDef[] = [
   { key: "obp", label: "OBP", block: "hitting", direction: "higher", read: (col) => col.hitting?.obp ?? null, format: formatAvg },
   { key: "slg", label: "SLG", block: "hitting", direction: "higher", read: (col) => col.hitting?.slg ?? null, format: formatAvg },
   { key: "ops", label: "OPS", block: "hitting", direction: "higher", read: (col) => col.hitting?.ops ?? null, format: formatOps },
+  { key: "woba", label: "wOBA", block: "hitting", direction: "higher", read: (col) => col.hitting?.woba ?? null, format: formatAvg },
   { key: "war", label: "WAR", block: "hitting", direction: "higher", read: (col) => col.hitting?.war ?? null, format: formatWar },
 ];
 
@@ -278,8 +281,10 @@ export const PITCHING_STATS: CompareStatDef[] = [
   { key: "sv", label: "SV", block: "pitching", direction: "higher", read: (col) => col.pitching?.sv ?? null, format: formatCount },
   { key: "so", label: "K", block: "pitching", direction: "higher", read: (col) => col.pitching?.so ?? null, format: formatCount },
   { key: "bb", label: "BB", block: "pitching", direction: "higher", read: (col) => col.pitching?.bb ?? null, format: formatCount },
+  { key: "er", label: "ER", block: "pitching", direction: "lower", read: (col) => col.pitching?.er ?? null, format: formatCount },
   { key: "era", label: "ERA", block: "pitching", direction: "lower", read: (col) => col.pitching?.era ?? null, format: formatEra },
   { key: "whip", label: "WHIP", block: "pitching", direction: "lower", read: (col) => col.pitching?.whip ?? null, format: formatWhip },
+  { key: "fip", label: "FIP", block: "pitching", direction: "lower", read: (col) => col.pitching?.fip ?? null, format: formatEra },
   { key: "war", label: "WAR", block: "pitching", direction: "higher", read: (col) => col.pitching?.war ?? null, format: formatWar },
 ];
 
