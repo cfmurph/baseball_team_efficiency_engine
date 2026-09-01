@@ -40,6 +40,9 @@ test("friendly labels never leak raw SDIO keys", () => {
     obp: 0.458,
     slg: 0.701,
     ops: 1.159,
+    doubles: 36,
+    triples: 1,
+    woba: 0.458,
     war: 10.8,
     war_source: "bbref",
   });
@@ -55,8 +58,10 @@ test("friendly labels never leak raw SDIO keys", () => {
     sv: 0,
     so: 228,
     bb: 35,
+    er: 51,
     era: 2.39,
     whip: 0.92,
+    fip: 2.81,
     war: 6.4,
     war_source: "bbref",
   });
@@ -97,6 +102,9 @@ test("counting and rates stay friendly and never say vs repl", () => {
     obp: 0.445,
     slg: 0.688,
     ops: 1.133,
+    doubles: 22,
+    triples: 1,
+    woba: 0.445,
     war: 7.1,
     war_source: "bbref",
   };
@@ -144,6 +152,7 @@ test("parses #152 PlayerRecord and keeps an empty game log honest", () => {
   assert.equal(detail?.player.player_id, "judgeaa01");
   assert.equal(detail?.hitting[0]?.hr, 40);
   assert.deepEqual(detail?.recent_games.hitting, []);
+  assert.deepEqual(detail?.fielding, []);
   const list = parsePlayersList(
     {
       players: [
@@ -160,6 +169,45 @@ test("parses #152 PlayerRecord and keeps an empty game log honest", () => {
   );
   assert.equal(list[0]?.player_id, "judgeaa01");
   assert.equal(list[0]?.war, 6.1);
+});
+
+test("parses fielding lines when present and omits them when absent", () => {
+  const withFielding = parsePlayerDetail({
+    player: {
+      player_id: "judgeaa01",
+      name: "Aaron Judge",
+      position: "OF",
+      team: "NYY",
+      seasons: [
+        {
+          season: 2026,
+          player_type: "batter",
+          pa: 500,
+          hits: 140,
+          ab: 400,
+          hr: 40,
+          fielding: [
+            { pos: "RF", g: 112, po: 248, a: 7, e: 3, dp: 2, fpct: 0.988 },
+          ],
+        },
+      ],
+    },
+  });
+  assert.equal(withFielding?.fielding.length, 1);
+  assert.equal(withFielding?.fielding[0]?.pos, "RF");
+  assert.equal(withFielding?.fielding[0]?.po, 248);
+  assert.equal(withFielding?.fielding[0]?.fpct, 0.988);
+
+  const emptyFielding = parsePlayerDetail({
+    player: {
+      player_id: "solerjo01",
+      name: "Jorge Soler",
+      position: "DH",
+      team: "LAA",
+      seasons: [{ season: 2026, player_type: "batter", pa: 210, hits: 40, ab: 180 }],
+    },
+  });
+  assert.deepEqual(emptyFielding?.fielding, []);
 });
 
 test("banner only when the selected year is the missing current season", () => {

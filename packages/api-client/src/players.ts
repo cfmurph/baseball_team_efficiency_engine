@@ -28,6 +28,8 @@ export type HittingSeason = {
   ab: number | null;
   r: number | null;
   h: number | null;
+  doubles: number | null;
+  triples: number | null;
   hr: number | null;
   rbi: number | null;
   sb: number | null;
@@ -37,6 +39,7 @@ export type HittingSeason = {
   obp: number | null;
   slg: number | null;
   ops: number | null;
+  woba: number | null;
   war: number | null;
   war_source: string;
 };
@@ -51,10 +54,26 @@ export type PitchingSeason = {
   sv: number | null;
   so: number | null;
   bb: number | null;
+  er: number | null;
   era: number | null;
   whip: number | null;
+  fip: number | null;
   war: number | null;
   war_source: string;
+};
+
+export type FieldingSeason = {
+  season: number;
+  pos: string;
+  g: number | null;
+  gs: number | null;
+  inn: number | null;
+  po: number | null;
+  a: number | null;
+  e: number | null;
+  dp: number | null;
+  pb: number | null;
+  fpct: number | null;
 };
 
 /** #152 published season row on GET /v1/players and /v1/players/{id}. */
@@ -87,6 +106,25 @@ export type PlayerSeason = {
   era?: number | null;
   whip?: number | null;
   fip?: number | null;
+  runs?: number | null;
+  doubles?: number | null;
+  triples?: number | null;
+  gs?: number | null;
+  w?: number | null;
+  l?: number | null;
+  sv?: number | null;
+  er?: number | null;
+  putouts?: number | null;
+  assists?: number | null;
+  errors?: number | null;
+  double_plays?: number | null;
+  passed_balls?: number | null;
+  fielding_g?: number | null;
+  fielding_gs?: number | null;
+  fielding_inn?: number | null;
+  fielding_pos?: string | null;
+  fpct?: number | null;
+  fielding?: FieldingSeason[] | Array<Record<string, unknown>>;
 };
 
 export type PlayerRecord = {
@@ -104,8 +142,11 @@ export type HittingGame = {
   ab: number | null;
   r: number | null;
   h: number | null;
+  doubles: number | null;
+  triples: number | null;
   hr: number | null;
   rbi: number | null;
+  sb: number | null;
   bb: number | null;
   so: number | null;
 };
@@ -117,8 +158,10 @@ export type PitchingGame = {
   ip: number | null;
   h: number | null;
   er: number | null;
+  hr: number | null;
   bb: number | null;
   so: number | null;
+  gs: number | null;
   decision: string | null;
 };
 
@@ -132,6 +175,7 @@ export type PlayerDetail = {
   player: PlayerIdentity;
   hitting: HittingSeason[];
   pitching: PitchingSeason[];
+  fielding: FieldingSeason[];
   recent_games: {
     hitting: HittingGame[];
     pitching: PitchingGame[];
@@ -152,6 +196,8 @@ export type PlayerListItem = {
   war: number | null;
   edge: number | null;
   line: string;
+  fpct: number | null;
+  fielding_line: string;
 };
 
 export type PlayersQuery = {
@@ -175,6 +221,7 @@ export type StubPlayerRecord = {
   player: PlayerIdentity;
   hitting?: HittingSeason[];
   pitching?: PitchingSeason[];
+  fielding?: FieldingSeason[];
   recent_games?: {
     hitting?: HittingGame[];
     pitching?: PitchingGame[];
@@ -260,8 +307,34 @@ export function formatWl(row: Pick<PitchingSeason, "w" | "l">): string {
   return `${formatCount(row.w)}–${formatCount(row.l)}`;
 }
 
+export function formatFpct(value: number | null | undefined): string {
+  return formatAvg(value);
+}
+
+export function fieldingSignal(row: Pick<FieldingSeason, "pos" | "po" | "a" | "e" | "fpct"> | null | undefined): string {
+  if (!row) {
+    return "";
+  }
+  if (row.fpct !== null && row.fpct !== undefined) {
+    return `${formatFpct(row.fpct)} FPCT`;
+  }
+  if (row.po !== null || row.a !== null || row.e !== null) {
+    return `${formatCount(row.po)}-${formatCount(row.a)}-${formatCount(row.e)}`;
+  }
+  return row.pos || "";
+}
+
 export function hittingLine(row: HittingSeason): string {
   return `${formatAvg(row.avg)} AVG · ${formatOps(row.ops)} OPS · ${formatCount(row.hr)} HR`;
+}
+
+export function directoryLine(row: PlayerListItem): string {
+  const off = text(row.line);
+  const def = text(row.fielding_line);
+  if (off && def) {
+    return `${off} · ${def}`;
+  }
+  return off || def;
 }
 
 export function pitchingLine(row: PitchingSeason): string {
@@ -410,6 +483,8 @@ function parseHittingSeason(value: unknown): HittingSeason | null {
     ab: num(raw.ab),
     r: num(raw.r ?? raw.runs),
     h: num(raw.h ?? raw.hits),
+    doubles: num(raw.doubles ?? raw["2b"]),
+    triples: num(raw.triples ?? raw["3b"]),
     hr: num(raw.hr),
     rbi: num(raw.rbi),
     sb: num(raw.sb),
@@ -419,6 +494,7 @@ function parseHittingSeason(value: unknown): HittingSeason | null {
     obp: num(raw.obp),
     slg: num(raw.slg),
     ops: num(raw.ops),
+    woba: num(raw.woba),
     war: num(raw.war),
     war_source: text(raw.war_source),
   };
@@ -440,11 +516,81 @@ function parsePitchingSeason(value: unknown): PitchingSeason | null {
     sv: num(raw.sv ?? raw.saves),
     so: num(raw.so ?? raw.pitching_so),
     bb: num(raw.bb ?? raw.pitching_bb),
+    er: num(raw.er),
     era: num(raw.era),
     whip: num(raw.whip),
+    fip: num(raw.fip),
     war: num(raw.war),
     war_source: text(raw.war_source),
   };
+}
+
+function parseFieldingSeason(value: unknown, fallbackSeason?: number): FieldingSeason | null {
+  const raw = asRecord(value);
+  const season = num(raw.season) ?? fallbackSeason ?? null;
+  if (season === null) {
+    return null;
+  }
+  const line: FieldingSeason = {
+    season,
+    pos: text(raw.pos || raw.position || raw.fielding_pos),
+    g: num(raw.g ?? raw.fielding_g),
+    gs: num(raw.gs ?? raw.fielding_gs),
+    inn: num(raw.inn ?? raw.fielding_inn),
+    po: num(raw.po ?? raw.putouts),
+    a: num(raw.a ?? raw.assists),
+    e: num(raw.e ?? raw.errors),
+    dp: num(raw.dp ?? raw.double_plays),
+    pb: num(raw.pb ?? raw.passed_balls),
+    fpct: num(raw.fpct),
+  };
+  const counts = [line.g, line.gs, line.inn, line.po, line.a, line.e, line.dp, line.pb, line.fpct];
+  if (!line.pos && counts.every((value) => value === null)) {
+    return null;
+  }
+  if (counts.every((value) => value === null)) {
+    return null;
+  }
+  return line;
+}
+
+function parseFieldingBlob(raw: Record<string, unknown>, season: number): FieldingSeason[] {
+  const listed = asList(raw.fielding);
+  if (listed.length) {
+    return listed
+      .map((item) => parseFieldingSeason({ ...asRecord(item), season }, season))
+      .filter((row): row is FieldingSeason => row !== null);
+  }
+  const blob = raw.fielding_json;
+  if (typeof blob === "string" && blob.trim()) {
+    try {
+      const parsed = JSON.parse(blob) as unknown;
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => parseFieldingSeason({ ...asRecord(item), season }, season))
+          .filter((row): row is FieldingSeason => row !== null);
+      }
+    } catch {
+      // Honest omit when the blob is not JSON.
+    }
+  }
+  const single = parseFieldingSeason(
+    {
+      season,
+      pos: raw.fielding_pos,
+      g: raw.fielding_g,
+      gs: raw.fielding_gs,
+      inn: raw.fielding_inn,
+      po: raw.putouts ?? raw.po,
+      a: raw.assists ?? raw.a,
+      e: raw.errors ?? raw.e,
+      dp: raw.double_plays ?? raw.dp,
+      pb: raw.passed_balls ?? raw.pb,
+      fpct: raw.fpct,
+    },
+    season,
+  );
+  return single ? [single] : [];
 }
 
 function parseHittingGame(value: unknown): HittingGame | null {
@@ -460,8 +606,11 @@ function parseHittingGame(value: unknown): HittingGame | null {
     ab: num(raw.ab),
     r: num(raw.r ?? raw.runs),
     h: num(raw.h ?? raw.hits),
+    doubles: num(raw.doubles ?? raw["2b"]),
+    triples: num(raw.triples ?? raw["3b"]),
     hr: num(raw.hr),
     rbi: num(raw.rbi),
+    sb: num(raw.sb),
     bb: num(raw.bb),
     so: num(raw.so),
   };
@@ -480,8 +629,10 @@ function parsePitchingGame(value: unknown): PitchingGame | null {
     ip: num(raw.ip),
     h: num(raw.h ?? raw.hits),
     er: num(raw.er),
+    hr: num(raw.hr ?? raw.pitching_hr),
     bb: num(raw.bb ?? raw.pitching_bb),
     so: num(raw.so ?? raw.pitching_so),
+    gs: num(raw.gs ?? raw.games_started),
     decision: text(raw.decision) || null,
   };
 }
@@ -505,9 +656,11 @@ function seasonLooksLikeHitting(raw: Record<string, unknown>): boolean {
 function expandPublishedSeasons(seasons: unknown[]): {
   hitting: HittingSeason[];
   pitching: PitchingSeason[];
+  fielding: FieldingSeason[];
 } {
   const hitting: HittingSeason[] = [];
   const pitching: PitchingSeason[] = [];
+  const fielding: FieldingSeason[] = [];
   for (const row of seasons) {
     const raw = asRecord(row);
     const hit = seasonLooksLikeHitting(raw);
@@ -524,8 +677,12 @@ function expandPublishedSeasons(seasons: unknown[]): {
         pitching.push(parsed);
       }
     }
+    const season = num(raw.season);
+    if (season !== null) {
+      fielding.push(...parseFieldingBlob(raw, season));
+    }
   }
-  return { hitting, pitching };
+  return { hitting, pitching, fielding };
 }
 
 export function parsePlayerDetail(
@@ -546,6 +703,13 @@ export function parsePlayerDetail(
   const fromPublished = published.length ? expandPublishedSeasons(published) : null;
   const gamesRaw = asRecord(raw.recent_games || raw.game_log || raw.games || nestedRecord.recent_games);
   const cardRaw = raw.card === undefined || raw.card === null ? null : asRecord(raw.card);
+  const fallbackSeason = fromPublished?.hitting[0]?.season ?? fromPublished?.pitching[0]?.season ?? undefined;
+  const fielding = fromPublished
+    ? fromPublished.fielding
+    : [
+        ...asList(raw.fielding).map((item) => parseFieldingSeason(item, fallbackSeason)),
+        ...asList(nestedRecord.fielding).map((item) => parseFieldingSeason(item, fallbackSeason)),
+      ].filter((row): row is FieldingSeason => row !== null);
   return {
     player,
     hitting: fromPublished
@@ -558,6 +722,7 @@ export function parsePlayerDetail(
       : asList(raw.pitching)
           .map(parsePitchingSeason)
           .filter((row): row is PitchingSeason => row !== null),
+    fielding,
     recent_games: {
       hitting: asList(gamesRaw.hitting)
         .map(parseHittingGame)
@@ -605,6 +770,8 @@ function parseListItem(value: unknown, fallbackSeason: number): PlayerListItem |
     war,
     edge: num(raw.edge ?? raw.vs_replacement),
     line,
+    fpct: num(raw.fpct),
+    fielding_line: fieldingSignal(parseFieldingSeason({ ...raw, season }, season)),
   };
 }
 
@@ -654,6 +821,9 @@ export function listItemFromDetail(
   const preferPitching = isPitcherPosition(detail.player.position);
   const side: PlayerSide = preferPitching && pitching ? "pitching" : hitting ? "hitting" : "pitching";
   const war = side === "pitching" ? (pitching?.war ?? null) : (hitting?.war ?? null);
+  const fielding = detail.fielding.find((row) => row.season === season) || null;
+  const off = side === "pitching" && pitching ? pitchingLine(pitching) : hitting ? hittingLine(hitting) : "";
+  const def = fieldingSignal(fielding);
   return {
     player_id: detail.player.player_id,
     name: detail.player.name,
@@ -665,7 +835,9 @@ export function listItemFromDetail(
     ip: pitching?.ip ?? null,
     war,
     edge,
-    line: side === "pitching" && pitching ? pitchingLine(pitching) : hitting ? hittingLine(hitting) : "",
+    line: off,
+    fpct: fielding?.fpct ?? null,
+    fielding_line: def,
   };
 }
 
@@ -744,6 +916,7 @@ export function stubPlayerDetail(
     ...parsed,
     hitting: dropCurrentSeasonLines(parsed.hitting, health),
     pitching: dropCurrentSeasonLines(parsed.pitching, health),
+    fielding: dropCurrentSeasonLines(parsed.fielding, health),
     recent_games: {
       hitting: dropCurrentSeasonLines(parsed.recent_games.hitting, health),
       pitching: dropCurrentSeasonLines(parsed.recent_games.pitching, health),
@@ -758,6 +931,7 @@ export function honestyFilterDetail(detail: PlayerDetail, health: Health): Playe
     ...detail,
     hitting: dropCurrentSeasonLines(detail.hitting, health),
     pitching: dropCurrentSeasonLines(detail.pitching, health),
+    fielding: dropCurrentSeasonLines(detail.fielding, health),
     recent_games: {
       hitting: dropCurrentSeasonLines(detail.recent_games.hitting, health),
       pitching: dropCurrentSeasonLines(detail.recent_games.pitching, health),

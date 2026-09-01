@@ -471,7 +471,31 @@ components:
         sb:
           type: number
           nullable: true
+        runs:
+          type: number
+          nullable: true
+        doubles:
+          type: number
+          nullable: true
+        triples:
+          type: number
+          nullable: true
         ip:
+          type: number
+          nullable: true
+        gs:
+          type: number
+          nullable: true
+        w:
+          type: number
+          nullable: true
+        l:
+          type: number
+          nullable: true
+        sv:
+          type: number
+          nullable: true
+        er:
           type: number
           nullable: true
         pitching_so:
@@ -502,6 +526,74 @@ components:
           type: number
           nullable: true
         fip:
+          type: number
+          nullable: true
+        putouts:
+          type: number
+          nullable: true
+        assists:
+          type: number
+          nullable: true
+        errors:
+          type: number
+          nullable: true
+        double_plays:
+          type: number
+          nullable: true
+        passed_balls:
+          type: number
+          nullable: true
+        fielding_g:
+          type: number
+          nullable: true
+        fielding_gs:
+          type: number
+          nullable: true
+        fielding_inn:
+          type: number
+          nullable: true
+        fielding_pos:
+          type: string
+          nullable: true
+        fpct:
+          type: number
+          nullable: true
+        fielding:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldingLine"
+    FieldingLine:
+      type: object
+      additionalProperties: false
+      properties:
+        pos:
+          type: string
+          nullable: true
+        g:
+          type: number
+          nullable: true
+        gs:
+          type: number
+          nullable: true
+        inn:
+          type: number
+          nullable: true
+        po:
+          type: number
+          nullable: true
+        a:
+          type: number
+          nullable: true
+        e:
+          type: number
+          nullable: true
+        dp:
+          type: number
+          nullable: true
+        pb:
+          type: number
+          nullable: true
+        fpct:
           type: number
           nullable: true
     PlayerRecord:

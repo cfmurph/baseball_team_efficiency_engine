@@ -296,8 +296,17 @@ def test_players_directory_from_fixture_current(tmp_path: Path) -> None:
     season_2026 = judge["seasons"][0]
     assert season_2026["pa"] == 500
     assert season_2026["hr"] == 40
+    assert season_2026["runs"] == 85
+    assert season_2026["doubles"] == 22
     assert season_2026["avg"] == pytest.approx(0.35)
     assert season_2026["war"] == pytest.approx(6.1)
+    assert season_2026["putouts"] == 248
+    assert season_2026["fpct"] == pytest.approx(0.988)
+    assert season_2026["fielding"][0]["pos"] == "RF"
+    assert season_2026["fielding"][0]["po"] == 248
+    soler = next(player for player in body["players"] if player["player_id"] == "solerjo01")
+    assert soler["seasons"][0]["fielding"] == []
+    assert soler["seasons"][0]["putouts"] is None
     dumped = json.dumps(body)
     assert "vs_replacement" not in dumped
     assert "vs repl" not in dumped

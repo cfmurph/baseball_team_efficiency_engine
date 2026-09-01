@@ -81,7 +81,7 @@ export function PlayersDirectory({
 
       <section className="bos-pagehead">
         <h1>Players</h1>
-        <p>Season lines for the live window, sorted by WAR.</p>
+        <p>Season batting, pitching, and fielding lines for the live window, sorted by WAR.</p>
       </section>
 
       <div className="bos-filters">
@@ -149,7 +149,8 @@ export function PlayersDirectory({
                 <th>Player</th>
                 <th>Pos</th>
                 <th>Team</th>
-                <th>Line</th>
+                <th>Offense / Pitch</th>
+                <th>Fielding</th>
                 <th className="bos-num">WAR</th>
               </tr>
             </thead>
@@ -161,7 +162,8 @@ export function PlayersDirectory({
                   </td>
                   <td>{row.position}</td>
                   <td>{row.team}</td>
-                  <td>{row.line}</td>
+                  <td>{row.line || "—"}</td>
+                  <td>{row.fielding_line || "—"}</td>
                   <td className="bos-num">{formatWar(row.war)}</td>
                 </tr>
               ))}

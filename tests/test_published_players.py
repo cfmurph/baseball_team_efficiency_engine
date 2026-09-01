@@ -105,6 +105,49 @@ def test_resolve_unknown_player_is_none() -> None:
     assert resolve_published_player([JUDGE_2026], "nope") is None
 
 
+def test_public_season_passes_fielding_and_omits_when_absent() -> None:
+    with_fielding = {
+        **JUDGE_2026,
+        "putouts": "248",
+        "assists": "7",
+        "errors": "3",
+        "double_plays": "2",
+        "fielding_g": "112",
+        "fielding_pos": "RF",
+        "fielding_json": '[{"pos":"RF","g":112,"po":248,"a":7,"e":3,"dp":2,"fpct":0.988}]',
+        "runs": "85",
+        "doubles": "22",
+        "triples": "1",
+    }
+    season = public_player_season(with_fielding)
+    assert season is not None
+    assert season["runs"] == 85
+    assert season["doubles"] == 22
+    assert season["putouts"] == 248
+    assert season["fpct"] == pytest.approx(0.988)
+    assert season["fielding"][0]["pos"] == "RF"
+    assert season["fielding"][0]["po"] == 248
+    assert "dfs_salary" not in season
+
+    empty = public_player_season(JUDGE_2026)
+    assert empty is not None
+    assert empty["fielding"] == []
+    assert empty["putouts"] is None
+    assert empty["fpct"] is None
+
+
+def test_public_season_does_not_treat_batting_games_as_fielding() -> None:
+    row = {
+        **JUDGE_2026,
+        "games": "120",
+        "position": "OF",
+    }
+    season = public_player_season(row)
+    assert season is not None
+    assert season["games"] == 120
+    assert season["fielding"] == []
+
+
 def test_resolve_known_player_empty_seasons_when_year_missing() -> None:
     resolved = resolve_published_player(
         [JUDGE_2024],

@@ -11,7 +11,7 @@ import typer
 
 from src.baseball_analytics.config import load_settings
 from src.baseball_analytics.fantasy import emit_ranked_fantasy_cards
-from src.baseball_analytics.io import ensure_dir
+from src.baseball_analytics.io import ensure_dir, read_csv
 from src.baseball_analytics.metrics import pythag_gap, pythagorean_wins, war_win_gap
 from src.baseball_analytics.sportsdataio import (
     ENDPOINT_EXTRACT_REPORT,
@@ -209,6 +209,19 @@ SELECT
     SUM(s.so)                                 AS so,
     SUM(s.rbi)                                AS rbi,
     SUM(s.sb)                                 AS sb,
+    SUM(s.runs)                               AS runs,
+    SUM(s.doubles)                            AS doubles,
+    SUM(s.triples)                            AS triples,
+    SUM(s.games_started)                      AS gs,
+    SUM(s.wins)                               AS w,
+    SUM(s.losses)                             AS l,
+    SUM(s.saves)                              AS sv,
+    SUM(s.er)                                 AS er,
+    SUM(s.putouts)                            AS putouts,
+    SUM(s.assists)                            AS assists,
+    SUM(s.errors)                             AS errors,
+    SUM(s.double_plays)                       AS double_plays,
+    SUM(s.passed_balls)                       AS passed_balls,
     CAST(NULL AS DOUBLE)                      AS woba,
     CAST(NULL AS DOUBLE)                      AS batting_war,
     SUM(s.ip)                                 AS ip,
@@ -268,6 +281,19 @@ SELECT
     SUM(g.so)                                 AS so,
     SUM(g.rbi)                                AS rbi,
     SUM(g.sb)                                 AS sb,
+    SUM(g.runs)                               AS runs,
+    SUM(g.doubles)                            AS doubles,
+    SUM(g.triples)                            AS triples,
+    SUM(g.games_started)                      AS gs,
+    SUM(g.wins)                               AS w,
+    SUM(g.losses)                             AS l,
+    SUM(g.saves)                              AS sv,
+    SUM(g.er)                                 AS er,
+    SUM(g.putouts)                            AS putouts,
+    SUM(g.assists)                            AS assists,
+    SUM(g.errors)                             AS errors,
+    SUM(g.double_plays)                       AS double_plays,
+    SUM(g.passed_balls)                       AS passed_balls,
     CAST(NULL AS DOUBLE)                      AS woba,
     CAST(NULL AS DOUBLE)                      AS batting_war,
     SUM(g.ip)                                 AS ip,
@@ -583,6 +609,452 @@ _POSITION_FROM_TYPE = {
     "batter": "UTIL",
     "both": "UTIL",
 }
+
+_LAHMAN_COUNTING_MAP = (
+    ("games", ("G", "g")),
+    ("ab", ("AB", "ab")),
+    ("runs", ("R", "r", "runs")),
+    ("hits", ("H", "h", "hits")),
+    ("doubles", ("X2B", "2B", "doubles")),
+    ("triples", ("X3B", "3B", "triples")),
+    ("hr", ("HR", "hr")),
+    ("rbi", ("RBI", "rbi")),
+    ("sb", ("SB", "sb")),
+    ("bb", ("BB", "bb")),
+    ("so", ("SO", "so")),
+    ("pa", ("PA", "pa")),
+)
+
+_LAHMAN_PITCHING_MAP = (
+    ("games", ("G", "g")),
+    ("gs", ("GS", "gs")),
+    ("w", ("W", "w")),
+    ("l", ("L", "l")),
+    ("sv", ("SV", "sv")),
+    ("er", ("ER", "er")),
+    ("ip", ("IP", "ip")),
+    ("era", ("ERA", "era")),
+    ("pitching_so", ("SO", "so")),
+    ("pitching_bb", ("BB", "bb")),
+)
+
+
+def _optional_csv(path: Path) -> pd.DataFrame | None:
+    if not path.is_file():
+        return None
+    try:
+        frame = read_csv(path)
+    except (OSError, ValueError):
+        return None
+    return frame if frame is not None and not frame.empty else None
+
+
+def _first_existing_column(frame: pd.DataFrame, names: tuple[str, ...]) -> str | None:
+    for name in names:
+        if name in frame.columns:
+            return name
+    return None
+
+
+def _numeric_series(frame: pd.DataFrame, names: tuple[str, ...]) -> pd.Series:
+    column = _first_existing_column(frame, names)
+    if column is None:
+        return pd.Series(pd.NA, index=frame.index, dtype="Float64")
+    return pd.to_numeric(frame[column], errors="coerce")
+
+
+def _fielding_fpct(putouts: float | None, assists: float | None, errors: float | None) -> float | None:
+    po = 0.0 if putouts is None or pd.isna(putouts) else float(putouts)
+    a = 0.0 if assists is None or pd.isna(assists) else float(assists)
+    e = 0.0 if errors is None or pd.isna(errors) else float(errors)
+    if putouts is None and assists is None and errors is None:
+        return None
+    if pd.isna(putouts) and pd.isna(assists) and pd.isna(errors):
+        return None
+    denom = po + a + e
+    if denom <= 0:
+        return None
+    return round((po + a) / denom, 3)
+
+
+def _json_number(value: object) -> int | float | None:
+    parsed = pd.to_numeric(value, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    number = float(parsed)
+    if number.is_integer():
+        return int(number)
+    return number
+
+
+def fielding_line_from_counts(
+    *,
+    pos: str | None,
+    g: object = None,
+    gs: object = None,
+    inn: object = None,
+    putouts: object = None,
+    assists: object = None,
+    errors: object = None,
+    double_plays: object = None,
+    passed_balls: object = None,
+    fpct: object = None,
+) -> dict[str, object] | None:
+    line = {
+        "pos": str(pos).strip() if pos not in (None, "") and not (isinstance(pos, float) and pd.isna(pos)) else None,
+        "g": _json_number(g),
+        "gs": _json_number(gs),
+        "inn": _json_number(inn),
+        "po": _json_number(putouts),
+        "a": _json_number(assists),
+        "e": _json_number(errors),
+        "dp": _json_number(double_plays),
+        "pb": _json_number(passed_balls),
+        "fpct": _json_number(fpct),
+    }
+    counts = [line[key] for key in ("g", "gs", "inn", "po", "a", "e", "dp", "pb", "fpct")]
+    if line["pos"] is None and all(value is None for value in counts):
+        return None
+    if line["fpct"] is None:
+        line["fpct"] = _fielding_fpct(line["po"], line["a"], line["e"])
+    if line["pos"] is None and all(value is None or value == 0 for value in counts if value is not None) and all(
+        value is None for value in counts
+    ):
+        return None
+    return line
+
+
+def serialize_fielding_lines(lines: list[dict[str, object]]) -> str | None:
+    cleaned = [line for line in lines if line]
+    if not cleaned:
+        return None
+    return json.dumps(cleaned, separators=(",", ":"))
+
+
+def parse_fielding_json(raw: object) -> list[dict[str, object]]:
+    if raw in (None, ""):
+        return []
+    if isinstance(raw, list):
+        return [item for item in raw if isinstance(item, dict)]
+    text = str(raw).strip()
+    if not text:
+        return []
+    try:
+        payload = json.loads(text)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]
+
+
+def _aggregate_lahman_batting(batting: pd.DataFrame) -> pd.DataFrame:
+    player_col = _first_existing_column(batting, ("playerID", "player_id"))
+    year_col = _first_existing_column(batting, ("yearID", "year_id", "season"))
+    if player_col is None or year_col is None:
+        return pd.DataFrame()
+    work = batting.copy()
+    work["_player_id"] = work[player_col].astype(str)
+    work["_year_id"] = pd.to_numeric(work[year_col], errors="coerce")
+    work = work.dropna(subset=["_year_id"])
+    if work.empty:
+        return pd.DataFrame()
+    aggs: dict[str, tuple[str, str]] = {}
+    for dest, names in _LAHMAN_COUNTING_MAP:
+        source = _first_existing_column(work, names)
+        if source:
+            work[f"_bat_{dest}"] = pd.to_numeric(work[source], errors="coerce")
+            aggs[dest] = (f"_bat_{dest}", "sum")
+    if not aggs:
+        return pd.DataFrame()
+    out = work.groupby(["_player_id", "_year_id"], as_index=False).agg(**aggs)
+    if "ab" in out.columns and "hits" in out.columns:
+        ab = pd.to_numeric(out["ab"], errors="coerce")
+        hits = pd.to_numeric(out["hits"], errors="coerce")
+        out["avg"] = (hits / ab.replace(0, pd.NA)).round(3)
+    if {"hits", "bb", "ab"}.issubset(out.columns):
+        hbp = pd.to_numeric(out["hbp"], errors="coerce") if "hbp" in out.columns else 0
+        sf = pd.to_numeric(out["sf"], errors="coerce") if "sf" in out.columns else 0
+        hits = pd.to_numeric(out["hits"], errors="coerce")
+        bb = pd.to_numeric(out["bb"], errors="coerce")
+        ab = pd.to_numeric(out["ab"], errors="coerce")
+        numer = hits.fillna(0) + bb.fillna(0) + (hbp if isinstance(hbp, pd.Series) else 0)
+        denom = ab.fillna(0) + bb.fillna(0) + (hbp if isinstance(hbp, pd.Series) else 0) + (
+            sf if isinstance(sf, pd.Series) else 0
+        )
+        out["obp"] = (numer / denom.replace(0, pd.NA)).round(3)
+    if {"hits", "doubles", "triples", "hr", "ab"}.issubset(out.columns):
+        hits = pd.to_numeric(out["hits"], errors="coerce").fillna(0)
+        doubles = pd.to_numeric(out["doubles"], errors="coerce").fillna(0)
+        triples = pd.to_numeric(out["triples"], errors="coerce").fillna(0)
+        hr = pd.to_numeric(out["hr"], errors="coerce").fillna(0)
+        ab = pd.to_numeric(out["ab"], errors="coerce")
+        singles = (hits - doubles - triples - hr).clip(lower=0)
+        tb = singles + 2 * doubles + 3 * triples + 4 * hr
+        out["slg"] = (tb / ab.replace(0, pd.NA)).round(3)
+    if "obp" in out.columns and "slg" in out.columns:
+        out["ops"] = (pd.to_numeric(out["obp"], errors="coerce") + pd.to_numeric(out["slg"], errors="coerce")).round(3)
+    return out.rename(columns={"_player_id": "player_id", "_year_id": "year_id"})
+
+
+def _aggregate_lahman_pitching(pitching: pd.DataFrame) -> pd.DataFrame:
+    player_col = _first_existing_column(pitching, ("playerID", "player_id"))
+    year_col = _first_existing_column(pitching, ("yearID", "year_id", "season"))
+    if player_col is None or year_col is None:
+        return pd.DataFrame()
+    work = pitching.copy()
+    work["_player_id"] = work[player_col].astype(str)
+    work["_year_id"] = pd.to_numeric(work[year_col], errors="coerce")
+    work = work.dropna(subset=["_year_id"])
+    if work.empty:
+        return pd.DataFrame()
+    if "IPouts" in work.columns and "ip" not in work.columns:
+        work["ip"] = pd.to_numeric(work["IPouts"], errors="coerce") / 3.0
+    aggs: dict[str, tuple[str, str]] = {}
+    for dest, names in _LAHMAN_PITCHING_MAP:
+        source = _first_existing_column(work, names)
+        if source:
+            work[f"_pit_{dest}"] = pd.to_numeric(work[source], errors="coerce")
+            how = "mean" if dest == "era" else "sum"
+            aggs[dest] = (f"_pit_{dest}", how)
+    if not aggs:
+        return pd.DataFrame()
+    out = work.groupby(["_player_id", "_year_id"], as_index=False).agg(**aggs)
+    if "era" in out.columns:
+        out["era"] = pd.to_numeric(out["era"], errors="coerce").round(2)
+    return out.rename(columns={"_player_id": "player_id", "_year_id": "year_id"})
+
+
+def _aggregate_lahman_fielding(fielding: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return (season totals, per-position lines) from Lahman Fielding."""
+    player_col = _first_existing_column(fielding, ("playerID", "player_id"))
+    year_col = _first_existing_column(fielding, ("yearID", "year_id", "season"))
+    pos_col = _first_existing_column(fielding, ("POS", "pos", "position"))
+    if player_col is None or year_col is None:
+        return pd.DataFrame(), pd.DataFrame()
+    work = fielding.copy()
+    work["_player_id"] = work[player_col].astype(str)
+    work["_year_id"] = pd.to_numeric(work[year_col], errors="coerce")
+    work = work.dropna(subset=["_year_id"])
+    if work.empty:
+        return pd.DataFrame(), pd.DataFrame()
+    work["pos"] = work[pos_col].astype(str).str.strip() if pos_col else ""
+    work["g"] = _numeric_series(work, ("G", "g"))
+    work["gs"] = _numeric_series(work, ("GS", "gs"))
+    inn_outs = _numeric_series(work, ("InnOuts", "innouts"))
+    inn_direct = _numeric_series(work, ("Inn", "inn", "innings"))
+    work["inn"] = inn_direct.where(inn_direct.notna(), inn_outs / 3.0)
+    work["putouts"] = _numeric_series(work, ("PO", "po", "putouts"))
+    work["assists"] = _numeric_series(work, ("A", "a", "assists"))
+    work["errors"] = _numeric_series(work, ("E", "e", "errors"))
+    work["double_plays"] = _numeric_series(work, ("DP", "dp", "double_plays"))
+    work["passed_balls"] = _numeric_series(work, ("PB", "pb", "passed_balls"))
+    group_keys = ["_player_id", "_year_id", "pos"] if pos_col else ["_player_id", "_year_id"]
+    lines = work.groupby(group_keys, as_index=False).agg(
+        g=("g", "sum"),
+        gs=("gs", "sum"),
+        inn=("inn", "sum"),
+        putouts=("putouts", "sum"),
+        assists=("assists", "sum"),
+        errors=("errors", "sum"),
+        double_plays=("double_plays", "sum"),
+        passed_balls=("passed_balls", "sum"),
+    )
+    # DH is not a fielding position in Lahman; drop empty/unknown rows.
+    if "pos" in lines.columns:
+        lines = lines[lines["pos"].astype(str).str.upper() != "DH"]
+        lines = lines[lines["pos"].astype(str).str.len() > 0]
+    totals = lines.groupby(["_player_id", "_year_id"], as_index=False).agg(
+        fielding_g=("g", "sum"),
+        fielding_gs=("gs", "sum"),
+        fielding_inn=("inn", "sum"),
+        putouts=("putouts", "sum"),
+        assists=("assists", "sum"),
+        errors=("errors", "sum"),
+        double_plays=("double_plays", "sum"),
+        passed_balls=("passed_balls", "sum"),
+    )
+    if not lines.empty and "pos" in lines.columns:
+        primary = (
+            lines.sort_values("g", ascending=False)
+            .groupby(["_player_id", "_year_id"], as_index=False)
+            .first()[["_player_id", "_year_id", "pos"]]
+            .rename(columns={"pos": "fielding_pos"})
+        )
+        totals = totals.merge(primary, on=["_player_id", "_year_id"], how="left")
+    totals["fpct"] = [
+        _fielding_fpct(row.putouts, row.assists, row.errors) for row in totals.itertuples(index=False)
+    ]
+    json_rows = []
+    if not lines.empty:
+        for (player_id, year), group in lines.groupby(["_player_id", "_year_id"], sort=False):
+            packed = []
+            for row in group.itertuples(index=False):
+                line = fielding_line_from_counts(
+                    pos=getattr(row, "pos", None),
+                    g=row.g,
+                    gs=row.gs,
+                    inn=row.inn,
+                    putouts=row.putouts,
+                    assists=row.assists,
+                    errors=row.errors,
+                    double_plays=row.double_plays,
+                    passed_balls=row.passed_balls,
+                )
+                if line:
+                    packed.append(line)
+            if packed:
+                json_rows.append(
+                    {
+                        "player_id": player_id,
+                        "year_id": year,
+                        "fielding_json": serialize_fielding_lines(packed),
+                    }
+                )
+    json_df = pd.DataFrame(json_rows)
+    totals = totals.rename(columns={"_player_id": "player_id", "_year_id": "year_id"})
+    if not json_df.empty:
+        totals = totals.merge(json_df, on=["player_id", "year_id"], how="left")
+    lines = lines.rename(columns={"_player_id": "player_id", "_year_id": "year_id"})
+    return totals, lines
+
+
+def _year_key(frame: pd.DataFrame) -> str | None:
+    return _first_existing_column(frame, ("year_id", "season", "season_key"))
+
+
+def _coalesce_columns(base: pd.DataFrame, extra: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    if extra is None or extra.empty:
+        return base
+    out = base.copy()
+    year_col = _year_key(out)
+    extra_year = _year_key(extra)
+    if year_col is None or extra_year is None or "player_id" not in out.columns or "player_id" not in extra.columns:
+        return out
+    keep = ["player_id", extra_year] + [col for col in columns if col in extra.columns]
+    incoming = extra[keep].copy()
+    incoming = incoming.rename(columns={extra_year: "_join_year"})
+    out["_join_year"] = pd.to_numeric(out[year_col], errors="coerce")
+    incoming["_join_year"] = pd.to_numeric(incoming["_join_year"], errors="coerce")
+    incoming["player_id"] = incoming["player_id"].astype(str)
+    out["player_id"] = out["player_id"].astype(str)
+    merged = out.merge(incoming, on=["player_id", "_join_year"], how="left", suffixes=("", "_lahman"))
+    for col in columns:
+        incoming_col = col if col in incoming.columns else None
+        if incoming_col is None:
+            continue
+        overlay = f"{col}_lahman" if f"{col}_lahman" in merged.columns else (
+            col if col not in out.columns else None
+        )
+        if overlay is None or overlay not in merged.columns:
+            if col not in merged.columns:
+                merged[col] = incoming[col] if col in incoming.columns else pd.NA
+            continue
+        if col not in merged.columns:
+            merged[col] = merged[overlay]
+        elif col in {"fielding_json", "fielding_pos"}:
+            existing = merged[col].astype(str).replace({"nan": "", "None": "", "<NA>": ""})
+            merged[col] = merged[col].where(existing.str.len() > 0, merged[overlay])
+        else:
+            current = pd.to_numeric(merged[col], errors="coerce")
+            merged[col] = current.where(current.notna(), pd.to_numeric(merged[overlay], errors="coerce"))
+    drop = [col for col in merged.columns if col.endswith("_lahman") or col == "_join_year"]
+    return merged.drop(columns=drop, errors="ignore")
+
+
+def attach_published_individual_lines(
+    player_df: pd.DataFrame,
+    *,
+    batting: pd.DataFrame | None = None,
+    pitching: pd.DataFrame | None = None,
+    fielding: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Fill published counting / fielding from Lahman CSVs when those columns are empty.
+
+    Does not invent WAR, DRS, OAA, or UZR. Does not write back onto warehouse facts
+    or team overlay CSVs.
+    """
+    out = player_df.copy() if player_df is not None else pd.DataFrame()
+    if out.empty:
+        return out
+    if batting is not None and not batting.empty:
+        bat = _aggregate_lahman_batting(batting)
+        out = _coalesce_columns(
+            out,
+            bat,
+            ["games", "ab", "runs", "hits", "doubles", "triples", "hr", "rbi", "sb", "bb", "so", "pa", "avg", "obp", "slg", "ops"],
+        )
+    if pitching is not None and not pitching.empty:
+        pit = _aggregate_lahman_pitching(pitching)
+        out = _coalesce_columns(
+            out,
+            pit,
+            ["games", "gs", "w", "l", "sv", "er", "ip", "era", "pitching_so", "pitching_bb"],
+        )
+    if fielding is not None and not fielding.empty:
+        totals, _lines = _aggregate_lahman_fielding(fielding)
+        out = _coalesce_columns(
+            out,
+            totals,
+            [
+                "putouts",
+                "assists",
+                "errors",
+                "double_plays",
+                "passed_balls",
+                "fpct",
+                "fielding_g",
+                "fielding_gs",
+                "fielding_inn",
+                "fielding_pos",
+                "fielding_json",
+            ],
+        )
+    return finalize_fielding_publish(out)
+
+
+def finalize_fielding_publish(player_df: pd.DataFrame) -> pd.DataFrame:
+    """Build ``fielding_json`` / FPCT from published totals when a line is present."""
+    out = player_df.copy()
+    if out.empty:
+        return out
+    json_values: list[object] = []
+    fpct_values: list[object] = []
+    has_json = "fielding_json" in out.columns
+    for row in out.itertuples(index=False):
+        data = row._asdict() if hasattr(row, "_asdict") else {
+            col: getattr(row, col) for col in out.columns if hasattr(row, col)
+        }
+        existing = parse_fielding_json(data.get("fielding_json") if has_json else None)
+        if existing:
+            json_values.append(serialize_fielding_lines(existing))
+            fpct_values.append(existing[0].get("fpct") if data.get("fpct") in (None, "") or (isinstance(data.get("fpct"), float) and pd.isna(data.get("fpct"))) else data.get("fpct"))
+            continue
+        line = fielding_line_from_counts(
+            pos=data.get("fielding_pos") or data.get("position"),
+            g=data.get("fielding_g"),
+            gs=data.get("fielding_gs"),
+            inn=data.get("fielding_inn"),
+            putouts=data.get("putouts"),
+            assists=data.get("assists"),
+            errors=data.get("errors"),
+            double_plays=data.get("double_plays"),
+            passed_balls=data.get("passed_balls"),
+            fpct=data.get("fpct"),
+        )
+        # A listed position with no fielding counting is not a fielding line.
+        if line and all(line.get(key) is None for key in ("g", "gs", "inn", "po", "a", "e", "dp", "pb")):
+            line = None
+        json_values.append(serialize_fielding_lines([line]) if line else None)
+        fpct_values.append(line.get("fpct") if line else None)
+    out["fielding_json"] = json_values
+    if "fpct" not in out.columns:
+        out["fpct"] = fpct_values
+    else:
+        current = pd.to_numeric(out["fpct"], errors="coerce")
+        out["fpct"] = current.where(current.notna(), pd.Series(fpct_values, index=out.index))
+    return out
+
 
 PHASE0_PLAYER_FIELDS = (
     "player_id",
@@ -1276,6 +1748,13 @@ def main(config_path: str = "config/settings.yaml") -> None:
         as_of_date=as_of,
         window=window,
         extract_report=extract_report if isinstance(extract_report, dict) else None,
+    )
+    raw_dir = Path(settings["raw_dir"])
+    player_df = attach_published_individual_lines(
+        player_df,
+        batting=_optional_csv(raw_dir / "batting.csv"),
+        pitching=_optional_csv(raw_dir / "pitching.csv"),
+        fielding=_optional_csv(raw_dir / "fielding.csv"),
     )
     coverage = attach_team_coverage(coverage, team_coverage)
     if coverage.current_season_missing:

@@ -156,9 +156,14 @@ def test_parse_games_and_player_game_stats() -> None:
     judge = stats.set_index("sdio_player_id").loc[10001967]
     assert judge["hr"] == 1
     assert judge["pa"] == 5
+    assert judge["putouts"] == 3
+    assert judge["errors"] == 0
     assert int(judge["sdio_game_id"]) == 74546
     season = parse_player_season_stats(_payload("player_season_stats.json"))
     assert int(season.iloc[0]["games"]) == 158
+    assert int(season.iloc[0]["putouts"]) == 361
+    assert int(season.iloc[0]["assists"]) == 8
+    assert int(season.iloc[0]["errors"]) == 4
 
 
 @pytest.mark.unit
