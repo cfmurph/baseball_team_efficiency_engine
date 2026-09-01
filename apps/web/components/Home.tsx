@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 
 import {
   CURRENT_SEASON_BANNER,
-  CTA,
   EMPTY_BODY,
   EMPTY_TAB,
   EMPTY_TITLE,
@@ -20,7 +19,6 @@ import {
 
 import { ShareCard } from "@/components/ShareCard";
 import { SiteHeader } from "@/components/SiteHeader";
-import { WaitlistForm } from "@/components/WaitlistForm";
 import type { HomeData } from "@/lib/load";
 
 const TABS = [TAB_ALL, ...TAB_LABELS] as const;
@@ -49,9 +47,6 @@ export function Home({
       <section className="bos-hero">
         <h1>{HEADLINE}</h1>
         <p>{SUBHEAD}</p>
-        <a className="bos-cta bos-cta-inline" href="#waitlist">
-          {CTA}
-        </a>
       </section>
 
       <section className="bos-feed" aria-label="This week's cards">
@@ -95,7 +90,6 @@ export function Home({
         )}
       </section>
 
-      <WaitlistForm />
       <footer className="bos-foot">{FOOTER}</footer>
     </div>
   );
