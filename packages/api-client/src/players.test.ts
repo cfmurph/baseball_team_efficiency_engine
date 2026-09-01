@@ -12,6 +12,9 @@ import {
   deriveTb,
   deriveTc,
   deriveXbh,
+  withFieldingIdentities,
+  withHittingIdentities,
+  withPitchingIdentities,
   formatAvg,
   formatOps,
   hittingCountingLine,
@@ -229,6 +232,151 @@ test("derived identities need every input and stay off otherwise", () => {
   assert.equal(deriveSbPct(8, null), null);
   assert.equal(deriveTc(248, 7, null), null);
   assert.equal(deriveRf(248, 7, null), null);
+});
+
+test("pitching identities stay off on zero IP and do not overwrite landed rates", () => {
+  const derived = withPitchingIdentities({
+    season: 2024,
+    g: 27,
+    gs: 27,
+    ip: 150,
+    w: 12,
+    l: 8,
+    sv: 4,
+    so: 145,
+    bb: 42,
+    er: 43,
+    era: 2.57,
+    whip: 1.05,
+    fip: null,
+    war: 1.8,
+    war_source: "real",
+    h: 120,
+    hr: 12,
+    r: 48,
+    bs: 1,
+    bf: 610,
+  });
+  assert.equal(derived.wpct, 0.6);
+  assert.equal(derived.svo, 5);
+  assert.equal(derived.sv_pct, 0.8);
+  assert.equal(derived.uer, 5);
+  assert.ok(Math.abs((derived.k9 ?? 0) - (145 * 9) / 150) < 1e-9);
+  assert.ok(Math.abs((derived.k_bb ?? 0) - 145 / 42) < 1e-9);
+  assert.ok(Math.abs((derived.i_gs ?? 0) - 150 / 27) < 1e-9);
+
+  const zero = withPitchingIdentities({
+    season: 2024,
+    g: 1,
+    gs: 0,
+    ip: 0,
+    w: 0,
+    l: 0,
+    sv: 2,
+    so: 3,
+    bb: 0,
+    er: 0,
+    era: null,
+    whip: null,
+    fip: null,
+    war: null,
+    war_source: "approx",
+    bf: 0,
+    go: 4,
+    ao: 0,
+  });
+  assert.equal(zero.wpct, null);
+  assert.equal(zero.k9, null);
+  assert.equal(zero.k_bb, null);
+  assert.equal(zero.i_gs, null);
+  assert.equal(zero.go_ao, null);
+  assert.equal(zero.k_pct, null);
+  assert.equal(zero.sv_pct, null);
+
+  const landed = withPitchingIdentities({
+    season: 2024,
+    g: 27,
+    gs: 27,
+    ip: 150,
+    w: 12,
+    l: 8,
+    sv: 4,
+    so: 145,
+    bb: 42,
+    er: 43,
+    era: 2.57,
+    whip: 1.05,
+    fip: null,
+    war: 1.8,
+    war_source: "real",
+    wpct: 0.55,
+    k9: 9.9,
+    svo: 9,
+  });
+  assert.equal(landed.wpct, 0.55);
+  assert.equal(landed.k9, 9.9);
+  assert.equal(landed.svo, 9);
+  assert.ok(Math.abs((landed.sv_pct ?? 0) - 4 / 9) < 1e-9);
+});
+
+test("fielding OFA stays off for infield and hitting BABIP needs SF", () => {
+  const outfield = withFieldingIdentities({
+    season: 2026,
+    pos: "rf",
+    g: 112,
+    gs: 110,
+    inn: 980,
+    po: 248,
+    a: 7,
+    e: 3,
+    dp: 2,
+    pb: null,
+    fpct: 0.988,
+  });
+  assert.equal(outfield.ofa, 7);
+  assert.equal(outfield.tc, 258);
+
+  const shortstop = withFieldingIdentities({
+    season: 2026,
+    pos: "SS",
+    g: 140,
+    gs: 140,
+    inn: 1200,
+    po: 80,
+    a: 400,
+    e: 12,
+    dp: 80,
+    pb: null,
+    fpct: 0.976,
+  });
+  assert.equal(shortstop.ofa, null);
+  assert.equal(shortstop.tc, 492);
+
+  const hitting = withHittingIdentities({
+    season: 2026,
+    g: 120,
+    pa: 500,
+    ab: 400,
+    r: 85,
+    h: 140,
+    doubles: 22,
+    triples: 1,
+    hr: 40,
+    rbi: 100,
+    sb: 8,
+    bb: 90,
+    so: 130,
+    avg: 0.35,
+    obp: 0.46,
+    slg: 0.71,
+    ops: 1.17,
+    woba: 0.42,
+    war: 6.1,
+    war_source: "real",
+  });
+  assert.equal(hitting.babip, null);
+  assert.ok(Math.abs((hitting.iso ?? 0) - 0.36) < 1e-9);
+  assert.ok(Math.abs((hitting.k_pct ?? 0) - 130 / 500) < 1e-9);
 });
 
 test("banner only when the selected year is the missing current season", () => {

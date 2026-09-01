@@ -114,6 +114,25 @@ function pitcherDetail(): PlayerDetail {
   };
 }
 
+test("invalid season and corrupt stored compare do not invent a year or ids", () => {
+  const query = parseCompareQuery(
+    { season: "not-a-year", ids: ", ,a,,a,b" },
+    2025,
+    [2024, 2025, 2026],
+  );
+  assert.equal(query.season, 2025);
+  assert.deepEqual(query.ids, ["a", "b"]);
+  assert.equal(clampSeason(1999, [], 2026), 2026);
+
+  const { api } = memoryStorage();
+  api.setItem("bos.compare.selection", "{not-json");
+  assert.equal(readStoredCompare(api), null);
+  api.setItem("bos.compare.selection", JSON.stringify({ season: 0, ids: ["x"] }));
+  assert.equal(readStoredCompare(api), null);
+  api.setItem("bos.compare.selection", JSON.stringify({ season: 2025, ids: ["x", "x", "y"] }));
+  assert.deepEqual(readStoredCompare(api), { season: 2025, ids: ["x", "y"] });
+});
+
 test("parses shareable compare URL, caps at four, and defaults to players", () => {
   assert.deepEqual(parseCompareIds("a,b,a,c,d,e"), ["a", "b", "c", "d"]);
   assert.deepEqual(parseCompareIds(["x", "y"]), ["x", "y"]);
