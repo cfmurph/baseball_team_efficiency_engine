@@ -121,6 +121,23 @@ test("live client hits /v1 without inventing rows", async () => {
   assert.ok(calls.some((url) => url.includes("/v1/players/judgeaa01?season=2026")));
 });
 
+test("health season_window list is [Y-2, Y] inclusive, not a two-slot pair", async () => {
+  const client = createApiClient({
+    baseUrl: "https://api.example.test",
+    fetch: async () =>
+      new Response(
+        JSON.stringify({
+          as_of: "2026-08-23",
+          active_season: 2026,
+          current_season_missing: false,
+          season_window: [2024, 2025, 2026],
+        }),
+      ),
+  });
+  const health = await client.getHealth();
+  assert.deepEqual(health.season_window, { start: 2024, end: 2026 });
+});
+
 test("stubHealth override stays explicit", () => {
   assert.equal(stubHealth().current_season_missing, false);
   assert.equal(
