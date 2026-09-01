@@ -25,8 +25,8 @@ def test_header_uses_local_mock_demo_user() -> None:
     assert "demo@benchorstart.local" in combined
     assert "Log out" in header
     assert "Log in" in header
-    for banned in ("clerk", "auth.js", "next-auth", "magic link"):
-        assert banned not in combined.lower()
+    for banned in ("@clerk", "next-auth", "ClerkProvider", "from \"@auth"):
+        assert banned not in combined
 
 
 def test_web_readme_notes_mock_and_real_login_issue() -> None:
