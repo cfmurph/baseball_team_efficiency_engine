@@ -132,7 +132,8 @@ function parseHealth(payload: unknown): Health {
   const start =
     Number(windowRaw.start ?? windowRaw.min ?? windowList[0]) || DEFAULT_ACTIVE_SEASON - 2;
   const end =
-    Number(windowRaw.end ?? windowRaw.max ?? windowList[1]) || DEFAULT_ACTIVE_SEASON;
+    Number(windowRaw.end ?? windowRaw.max ?? windowList[windowList.length - 1]) ||
+    DEFAULT_ACTIVE_SEASON;
   return {
     as_of: String(raw.as_of ?? raw.as_of_date ?? ""),
     active_season: Number(raw.active_season) || DEFAULT_ACTIVE_SEASON,

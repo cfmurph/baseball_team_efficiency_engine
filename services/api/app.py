@@ -62,6 +62,21 @@ class CardsResponse(BaseModel):
     cards: list[dict[str, Any]]
 
 
+class FieldingLine(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    pos: str | None = None
+    g: int | float | None = None
+    gs: int | float | None = None
+    inn: int | float | None = None
+    po: int | float | None = None
+    a: int | float | None = None
+    e: int | float | None = None
+    dp: int | float | None = None
+    pb: int | float | None = None
+    fpct: int | float | None = None
+
+
 class PlayerSeason(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -82,7 +97,15 @@ class PlayerSeason(BaseModel):
     so: int | float | None = None
     rbi: int | float | None = None
     sb: int | float | None = None
+    runs: int | float | None = None
+    doubles: int | float | None = None
+    triples: int | float | None = None
     ip: int | float | None = None
+    gs: int | float | None = None
+    w: int | float | None = None
+    l: int | float | None = None
+    sv: int | float | None = None
+    er: int | float | None = None
     pitching_so: int | float | None = None
     pitching_bb: int | float | None = None
     avg: int | float | None = None
@@ -93,6 +116,17 @@ class PlayerSeason(BaseModel):
     era: int | float | None = None
     whip: int | float | None = None
     fip: int | float | None = None
+    putouts: int | float | None = None
+    assists: int | float | None = None
+    errors: int | float | None = None
+    double_plays: int | float | None = None
+    passed_balls: int | float | None = None
+    fielding_g: int | float | None = None
+    fielding_gs: int | float | None = None
+    fielding_inn: int | float | None = None
+    fielding_pos: str | None = None
+    fpct: int | float | None = None
+    fielding: list[FieldingLine] = Field(default_factory=list)
 
 
 class PlayerRecord(BaseModel):

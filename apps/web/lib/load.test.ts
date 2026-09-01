@@ -4,6 +4,8 @@ import test from "node:test";
 import { defaultDirectorySeason } from "@bos/api-client";
 import { shouldShowSeasonBanner } from "@bos/card-schema";
 
+import { loadCompareData } from "./load.ts";
+
 test("re-exports banner rule used by the page loader", () => {
   assert.equal(
     shouldShowSeasonBanner(
@@ -41,4 +43,18 @@ test("player page does not treat a published prior year as missing", () => {
     season_window: { start: 2024, end: 2026 },
   };
   assert.equal(shouldShowSeasonBanner(health, [2024, 2025]), true);
+});
+
+test("compare loader keeps missing players empty in stub mode", async () => {
+  const data = await loadCompareData({
+    mode: "players",
+    season: "2025",
+    ids: "hitter-1,pitcher-1",
+  });
+  assert.equal(data.query.mode, "players");
+  assert.deepEqual(data.query.ids, ["hitter-1", "pitcher-1"]);
+  assert.equal(data.details.length, 2);
+  assert.equal(data.details[0], null);
+  assert.equal(data.details[1], null);
+  assert.ok(data.seasons.includes(data.query.season));
 });
