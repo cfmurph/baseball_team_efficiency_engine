@@ -129,33 +129,358 @@ def filter_cards(
     return out
 
 
-def seasons_from_player_metrics(
+# Public player-page fields only. Cards keep share.stat_line / vs repl.
+# Payroll and WAR-on-spine are never invented here.
+_PLAYER_PRIVATE_KEYS = frozenset(
+    {
+        "salary",
+        "surplus_value",
+        "cost_per_war",
+        "contract_label",
+        "vs_replacement",
+        "edge",
+        "rank_overall",
+        "rank_at_position",
+    }
+)
+_PLAYER_PRIVATE_TOKENS = (
+    "dfs",
+    "salary",
+    "betting",
+    "weather",
+    "box_score",
+    "boxscore",
+    "vs_repl",
+    "vs_replacement",
+)
+_PLAYER_COUNTING_ALIASES = {
+    "games": ("games", "g"),
+    "pa": ("pa",),
+    "ab": ("ab",),
+    "hits": ("hits", "h"),
+    "hr": ("hr",),
+    "bb": ("bb",),
+    "so": ("so",),
+    "rbi": ("rbi",),
+    "sb": ("sb",),
+    "runs": ("runs", "r"),
+    "doubles": ("doubles", "2b", "x2b"),
+    "triples": ("triples", "3b", "x3b"),
+    "ip": ("ip",),
+    "gs": ("gs", "games_started"),
+    "w": ("w", "wins"),
+    "l": ("l", "losses"),
+    "sv": ("sv", "saves"),
+    "er": ("er", "earned_runs"),
+    "pitching_so": ("pitching_so",),
+    "pitching_bb": ("pitching_bb",),
+    "putouts": ("putouts", "po"),
+    "assists": ("assists", "a"),
+    "errors": ("errors", "e"),
+    "double_plays": ("double_plays", "dp"),
+    "passed_balls": ("passed_balls", "pb"),
+    "fielding_g": ("fielding_g",),
+    "fielding_gs": ("fielding_gs",),
+    "fielding_inn": ("fielding_inn", "inn"),
+}
+_PLAYER_RATE_KEYS = ("avg", "obp", "slg", "ops", "woba", "era", "whip", "fip", "fpct")
+
+
+def load_player_season_rows(
     settings: ArtifactSettings | None = None,
     *,
     backend: object | None = None,
     environ: Mapping[str, str] | None = None,
-) -> list[int]:
-    """Years present on published ``player_season_metrics.csv``. Empty if missing."""
+) -> list[dict[str, str]]:
+    """Published ``player_season_metrics.csv`` rows. Empty if the file is missing."""
     hit = resolve_artifact_hit(
         PLAYER_METRICS_NAME, settings, backend=backend, environ=environ
     )
     if hit is None:
         return []
-    years: set[int] = set()
     try:
         with hit.path.open(newline="", encoding="utf-8") as handle:
-            reader = csv.DictReader(handle)
-            for row in reader:
-                raw = row.get("season") or row.get("year_id") or row.get("season_key")
-                if raw in (None, ""):
-                    continue
-                try:
-                    years.add(int(float(raw)))
-                except (TypeError, ValueError):
-                    continue
+            return [dict(row) for row in csv.DictReader(handle)]
     except OSError:
         return []
+
+
+def seasons_from_player_metrics(
+    settings: ArtifactSettings | None = None,
+    *,
+    backend: object | None = None,
+    environ: Mapping[str, str] | None = None,
+    rows: Sequence[Mapping[str, Any]] | None = None,
+) -> list[int]:
+    """Years present on published ``player_season_metrics.csv``. Empty if missing."""
+    records = (
+        list(rows)
+        if rows is not None
+        else load_player_season_rows(settings, backend=backend, environ=environ)
+    )
+    years: set[int] = set()
+    for row in records:
+        parsed = player_season_year(row)
+        if parsed is not None:
+            years.add(parsed)
     return sorted(years)
+
+
+def player_season_year(row: Mapping[str, Any]) -> int | None:
+    raw = row.get("season") or row.get("year_id") or row.get("season_key")
+    if raw in (None, ""):
+        return None
+    try:
+        return int(float(raw))
+    except (TypeError, ValueError):
+        return None
+
+
+def player_row_id(row: Mapping[str, Any]) -> str:
+    return str(row.get("player_id") or "").strip()
+
+
+def public_player_season(row: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Project one published metric row. Never invents WAR, payroll, or vs repl."""
+    year = player_season_year(row)
+    if year is None:
+        return None
+    hits = _first_number(row, _PLAYER_COUNTING_ALIASES["hits"])
+    ab = _first_number(row, _PLAYER_COUNTING_ALIASES["ab"])
+    avg = _as_number(row.get("avg"))
+    if avg is None and hits is not None and ab not in (None, 0):
+        avg = round(hits / ab, 3)
+    season: dict[str, Any] = {
+        "season": year,
+        "team": _first_text(row, ("team", "team_id")),
+        "team_name": _first_text(row, ("team_name", "team")),
+        "position": _first_text(row, ("position",)),
+        "player_type": _first_text(row, ("player_type",)),
+        "stat_source": _first_text(row, ("stat_source",)),
+        "war_source": _first_text(row, ("war_source",)),
+        "war": _as_number(row.get("player_war") if row.get("player_war") not in (None, "") else row.get("war")),
+        "avg": _json_number(avg),
+    }
+    for public, aliases in _PLAYER_COUNTING_ALIASES.items():
+        season[public] = _json_number(_first_number(row, aliases))
+    for key in _PLAYER_RATE_KEYS:
+        if key == "avg":
+            continue
+        season[key] = _json_number(_as_number(row.get(key)))
+    if season.get("fpct") is None:
+        season["fpct"] = _json_number(
+            _fielding_fpct(
+                season.get("putouts"),
+                season.get("assists"),
+                season.get("errors"),
+            )
+        )
+    season["fielding_pos"] = _first_text(row, ("fielding_pos",))
+    season["fielding"] = public_fielding_lines(row)
+    return season
+
+
+def _fielding_fpct(putouts: object, assists: object, errors: object) -> float | None:
+    po = _as_number(putouts)
+    a = _as_number(assists)
+    e = _as_number(errors)
+    if po is None and a is None and e is None:
+        return None
+    denom = (po or 0.0) + (a or 0.0) + (e or 0.0)
+    if denom <= 0:
+        return None
+    return round(((po or 0.0) + (a or 0.0)) / denom, 3)
+
+
+def _fielding_line_from_mapping(raw: Mapping[str, Any]) -> dict[str, Any] | None:
+    line = {
+        "pos": _first_text(raw, ("pos", "position", "fielding_pos")),
+        "g": _json_number(_first_number(raw, ("g", "games", "fielding_g"))),
+        "gs": _json_number(_first_number(raw, ("gs", "games_started", "fielding_gs"))),
+        "inn": _json_number(_first_number(raw, ("inn", "innings", "fielding_inn"))),
+        "po": _json_number(_first_number(raw, ("po", "putouts"))),
+        "a": _json_number(_first_number(raw, ("a", "assists"))),
+        "e": _json_number(_first_number(raw, ("e", "errors"))),
+        "dp": _json_number(_first_number(raw, ("dp", "double_plays"))),
+        "pb": _json_number(_first_number(raw, ("pb", "passed_balls"))),
+        "fpct": _json_number(_as_number(raw.get("fpct"))),
+    }
+    counts = [line[key] for key in ("g", "gs", "inn", "po", "a", "e", "dp", "pb", "fpct")]
+    if line["pos"] is None and all(value is None for value in counts):
+        return None
+    if all(value is None for value in counts):
+        return None
+    if line["fpct"] is None:
+        line["fpct"] = _json_number(_fielding_fpct(line["po"], line["a"], line["e"]))
+    return line
+
+
+def public_fielding_lines(row: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Published fielding lines only. Empty when the feed has no defensive counting."""
+    raw = row.get("fielding")
+    if isinstance(raw, list):
+        lines = [_fielding_line_from_mapping(item) for item in raw if isinstance(item, Mapping)]
+        return [line for line in lines if line is not None]
+    blob = row.get("fielding_json")
+    if blob not in (None, ""):
+        try:
+            parsed = json.loads(str(blob))
+        except (TypeError, json.JSONDecodeError):
+            parsed = None
+        if isinstance(parsed, list):
+            lines = [_fielding_line_from_mapping(item) for item in parsed if isinstance(item, Mapping)]
+            found = [line for line in lines if line is not None]
+            if found:
+                return found
+    single = _fielding_line_from_mapping(
+        {
+            "pos": row.get("fielding_pos"),
+            "g": row.get("fielding_g"),
+            "gs": row.get("fielding_gs"),
+            "inn": row.get("fielding_inn"),
+            "po": row.get("putouts") if row.get("putouts") not in (None, "") else row.get("po"),
+            "a": row.get("assists") if row.get("assists") not in (None, "") else row.get("a"),
+            "e": row.get("errors") if row.get("errors") not in (None, "") else row.get("e"),
+            "dp": row.get("double_plays") if row.get("double_plays") not in (None, "") else row.get("dp"),
+            "pb": row.get("passed_balls") if row.get("passed_balls") not in (None, "") else row.get("pb"),
+            "fpct": row.get("fpct"),
+        }
+    )
+    return [single] if single is not None else []
+
+
+def public_player_identity(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "player_id": player_row_id(row),
+        "name": _first_text(row, ("player_name", "name_full", "name", "display_name")),
+        "position": _first_text(row, ("position",)),
+        "team": _first_text(row, ("team", "team_id")),
+    }
+
+
+def group_public_players(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    season: int | None = None,
+    window: Sequence[int] | None = None,
+) -> list[dict[str, Any]]:
+    """Group published rows by internal ``player_id``. Empty seasons are omitted."""
+    wanted = int(season) if season is not None else None
+    allowed = {int(year) for year in window} if window is not None else None
+    grouped: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for row in rows:
+        if _row_is_private_only(row):
+            continue
+        player_id = player_row_id(row)
+        year = player_season_year(row)
+        if not player_id or year is None:
+            continue
+        if wanted is not None and year != wanted:
+            continue
+        if allowed is not None and year not in allowed:
+            continue
+        public = public_player_season(row)
+        if public is None:
+            continue
+        bucket = grouped.get(player_id)
+        if bucket is None:
+            identity = public_player_identity(row)
+            bucket = {**identity, "seasons": []}
+            grouped[player_id] = bucket
+            order.append(player_id)
+        else:
+            identity = public_player_identity(row)
+            if not bucket.get("name"):
+                bucket["name"] = identity["name"]
+            if public["season"] >= max((item["season"] for item in bucket["seasons"]), default=-1):
+                bucket["position"] = identity["position"] or bucket.get("position")
+                bucket["team"] = identity["team"] or bucket.get("team")
+        bucket["seasons"].append(public)
+    players: list[dict[str, Any]] = []
+    for player_id in order:
+        payload = grouped[player_id]
+        payload["seasons"] = sorted(
+            payload["seasons"], key=lambda item: int(item["season"]), reverse=True
+        )
+        if payload["seasons"]:
+            players.append(payload)
+    players.sort(key=lambda item: (str(item.get("name") or "").lower(), item["player_id"]))
+    return players
+
+
+def resolve_published_player(
+    rows: Sequence[Mapping[str, Any]],
+    player_id: str,
+    *,
+    season: int | None = None,
+    window: Sequence[int] | None = None,
+) -> dict[str, Any] | None:
+    """Resolve URL ``id`` as the published internal ``player_id`` PK.
+
+    Returns identity with an empty ``seasons`` list when the player exists
+    but the requested year / default window has no published row. ``None``
+    when the PK is absent from published metrics.
+    """
+    wanted = str(player_id or "").strip()
+    if not wanted:
+        return None
+    matches = [row for row in rows if player_row_id(row) == wanted]
+    if not matches:
+        return None
+    grouped = group_public_players(matches, season=season, window=window)
+    if grouped:
+        return grouped[0]
+    latest = max(matches, key=lambda row: player_season_year(row) or -1)
+    identity = public_player_identity(latest)
+    identity["seasons"] = []
+    return identity
+
+
+def _row_is_private_only(row: Mapping[str, Any]) -> bool:
+    """True when a row is only private keys (should not happen on published CSV)."""
+    keys = {str(key).strip().lower() for key in row if str(key).strip()}
+    if not keys:
+        return True
+    return keys <= _PLAYER_PRIVATE_KEYS
+
+
+def _first_text(row: Mapping[str, Any], keys: Sequence[str]) -> str | None:
+    for key in keys:
+        raw = row.get(key)
+        if raw in (None, ""):
+            continue
+        text = str(raw).strip()
+        if text:
+            return text
+    return None
+
+
+def _first_number(row: Mapping[str, Any], keys: Sequence[str]) -> float | None:
+    for key in keys:
+        parsed = _as_number(row.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _as_number(value: object) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _json_number(value: float | None) -> int | float | None:
+    if value is None:
+        return None
+    if value != value:  # NaN
+        return None
+    if float(value).is_integer():
+        return int(value)
+    return float(value)
 
 
 def published_snapshot(
@@ -176,7 +501,8 @@ def published_snapshot(
     if source == "missing" and card_source != "missing":
         source = card_source
 
-    metric_years = seasons_from_player_metrics(cfg, backend=backend, environ=env)
+    player_seasons = load_player_season_rows(cfg, backend=backend, environ=env)
+    metric_years = seasons_from_player_metrics(rows=player_seasons)
     card_years = sorted({year for year in (card_season(card) for card in cards) if year is not None})
     derived_present = sorted(set(metric_years) | set(card_years))
 
@@ -218,6 +544,7 @@ def published_snapshot(
         "source": source,
         "schema_version": FANTASY_SCHEMA_VERSION,
         "cards": cards,
+        "player_seasons": player_seasons,
     }
 
 

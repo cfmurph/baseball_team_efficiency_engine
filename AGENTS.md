@@ -24,8 +24,9 @@ The system Python is 3.12; `python3.12-venv` must be installed at the system lev
 | Run tests | `python3 -m pytest tests/ -v` (or `-m unit` / `-m integration` / `-m e2e`; see `docs/testing.md`) |
 | Run full pipeline | See "Pipeline" section below |
 | Start FO dashboard | `streamlit run dashboard/app.py --server.port 8501 --server.headless true` |
-| Start BenchOrStart | `streamlit run dashboard/fantasy_app.py --server.port 8502 --server.headless true` |
-| Start read API | `python3 -m services.api` (`curl 'http://127.0.0.1:8000/v1/cards?season=2026'`) |
+| Start BenchOrStart (Next.js) | `npm install && npm run dev` (http://localhost:3000) |
+| Start BenchOrStart (Streamlit fallback) | `streamlit run dashboard/fantasy_app.py --server.port 8502 --server.headless true` |
+| Start read API | `python3 -m services.api` (`curl 'http://127.0.0.1:8000/v1/players'`) |
 
 ### Pipeline
 

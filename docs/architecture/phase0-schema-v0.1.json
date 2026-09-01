@@ -75,6 +75,8 @@
     "season_id_is_not_as_of": true,
     "active_season_required_in_current": true,
     "default_season_window": "[Y-2, Y]",
-    "live_path_for_in_season": "sportsdataio"
+    "live_path_for_in_season": "sportsdataio",
+    "team_grain_issue": 138,
+    "fo_team_overlay": "team_onfield_contract_metrics"
   }
 }

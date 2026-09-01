@@ -82,7 +82,7 @@ def render_share_card_png(view: ShareCardView) -> bytes:
     stat_font = _font(20, bold=True)
     asof_font = _font(15)
 
-    reason_lines = _wrap(view.reason, 52)
+    reason_lines = _wrap(normalize_stat_line(view.reason), 52)
     stat_line = normalize_stat_line(view.stat_line)
     content_h = 220 + (28 if view.rank_line else 0)
     content_h += 48 if view.headline else 0

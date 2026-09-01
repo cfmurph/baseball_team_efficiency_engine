@@ -1,24 +1,27 @@
 # BenchOrStart (fantasy Phase 0)
 
-Thin waitlist + share-card shell. Separate from the front-office GM dashboard.
+Thin waitlist + share-card product. Separate from the front-office GM dashboard.
 
-Closes the FE slice of [#112](https://github.com/cfmurph/baseball_team_efficiency_engine/issues/112). Live cards come from the #111 nightly emitter.
+Public surface is **Next.js** (`apps/web`, [#140](https://github.com/cfmurph/baseball_team_efficiency_engine/issues/140)). The Streamlit shell at `dashboard/fantasy_app.py` stays as a **local fallback** until Next parity. Do not delete it. `dashboard/app.py` stays FO-only.
+
+Live cards come from the #111 nightly emitter via the #106 `/v1` API (when present). The web client stubs that contract so it runs without the API.
 
 ## How to run
 
-From the repo root, after `source .venv/bin/activate`:
-
 | Surface | Command |
 |---|---|
-| Front office (8-section GM app) | `streamlit run dashboard/app.py` |
-| BenchOrStart | `streamlit run dashboard/fantasy_app.py` |
+| BenchOrStart (public / Next.js) | `npm install && npm run dev` → [http://localhost:3000](http://localhost:3000) |
+| BenchOrStart (Streamlit fallback) | `source .venv/bin/activate && streamlit run dashboard/fantasy_app.py` |
+| Front office (8-section GM app) | `source .venv/bin/activate && streamlit run dashboard/app.py` |
 
-Optional ports:
+Optional Streamlit ports:
 
 ```bash
 streamlit run dashboard/app.py --server.port 8501 --server.headless true
 streamlit run dashboard/fantasy_app.py --server.port 8502 --server.headless true
 ```
+
+See [apps/web/README.md](../apps/web/README.md) for Vercel and env.
 
 ## Card feed
 
@@ -40,14 +43,42 @@ Recommendation labels (schema v1.0): `start` → START, `sit` → BENCH, `pickup
 ## Soft-launch UX
 
 - **Invite-only** chip sits next to the BenchOrStart wordmark.
-- Share cards render **above** the waitlist form, tabbed by **All / START / BENCH / PICK UP / STREAM**.
+- Local Next.js boot is signed in as `demo@benchorstart.local` (browser mock; not Clerk). Log out / Log in flip that flag only. Real login is [#158](https://github.com/cfmurph/baseball_team_efficiency_engine/issues/158).
+- Share cards render on `/`, tabbed by **All / START / BENCH / PICK UP / STREAM**. Waitlist is not the Next.js CTA.
 - When `share.headline` is empty, the card H2 is the **player name** (`player.name`). The START/BENCH/PICK UP/STREAM badge stays a separate pill — do not reuse the recommendation label as the title.
 - Face copy says **edge** for `edge.vs_replacement` (for example `+1.6 edge`). The schema field name is unchanged. Stub / sample `share.stat_line` should be empty or use **edge**. If an emitter still sends `vs repl` / `vs replacement`, render (card face, Copy text, Download image) rewrites it to **edge** or omits the line.
-- Each card has **Copy text** (league-chat blurb: decision + player + stat line + reason + as-of) and **Download image** (PNG via Pillow, already a Streamlit/matplotlib dependency).
+- Each card has **Copy text** (league-chat blurb: decision + player + stat line + reason + as-of) and **Download image** (canvas PNG in Next.js; Pillow in the Streamlit fallback).
+
+## `/v1` client (Next.js)
+
+`packages/api-client` talks to the #106 contract:
+
+| Endpoint | Shape |
+|---|---|
+| `GET /v1/health` | `{ as_of, active_season, current_season_missing, season_window }` |
+| `GET /v1/cards?season=&rec=` | schema 1.0 cards (`current/fantasy/cards.jsonl`) |
+| `GET /v1/seasons` | default `[Y-2, Y]` (2024–2026 when Y=2026) |
+| `GET /v1/players?season=&sort=&min_pa=` | directory (client-stubbed until the API ships it) |
+| `GET /v1/players/{id}` | identity + `[Y-2, Y]` lines + recent games |
+
+If `NEXT_PUBLIC_API_URL` is unset, the client uses the same four fixtures as `fantasy/stub_cards.jsonl` plus a health object that can set `current_season_missing` (`NEXT_PUBLIC_STUB_CURRENT_SEASON_MISSING=true` for QA). Player pages use the same honesty rule and do not invent a 2026 season line when that flag is on. When the API is up, set the env URL — no other client change.
+
+The web UI shows a not-current-year banner when `current_season_missing` is true **or** the max season in `/v1/seasons` is below `active_season`. It does **not** invent 2026 rows.
+
+## QA notes
+
+- **Cards from API or stub.** Unset `NEXT_PUBLIC_API_URL` → four stubs (Steer / Suárez / Judge / Soler) and the sample caption. Set the URL → `/v1/cards` only; empty API payloads stay empty (no silent 2026 invention).
+- **Players directory.** `/players` + `/players/[id]`. Card names on `/` deep-link via `player.player_id`. Silent 50 PA / 20 IP floor.
+- **Compare.** `/compare?mode=players&season=&ids=` — 2–4 players, search slots + stats table. Player page **Add to compare** deep-links into that URL using the same `player_id`. Teams nav is visible but disabled.
+- **Waitlist.** Not the Next.js CTA. The form is hidden on `apps/web`. `POST /api/waitlist` and `fantasy/waitlist.py` remain for the Streamlit fallback.
+- **Local mock session.** Header shows `demo@benchorstart.local` + Log out. No identity API. Real login is #158.
+- **No `vs repl`.** Face copy, Copy text, and Download image say **edge**. Schema field `edge.vs_replacement` is unchanged.
+- **Approx badge.** `war_source=approx` or `is_approx` shows the **early model** badge and hides confidence.
+- **Copy lock.** `packages/card-schema` strings must match `fantasy/copy.py` (Invite only, sit→BENCH, tabs, footer).
 
 ## Waitlist hook (marketing)
 
-The form is email-only. Default sink is a local JSONL file:
+Not the Next.js CTA. The Streamlit fallback still uses this email-only hook. Default sink is a local JSONL file:
 
 ```text
 data/waitlist/signups.jsonl
@@ -64,4 +95,4 @@ Point `FANTASY_WAITLIST_WEBHOOK` at Zapier, Make, Buttondown, Mailchimp, or any 
 
 ## Copy lock
 
-Headline, subhead, CTA, microcopy, success, and footer strings live in `fantasy/copy.py` and must stay exact until marketing revises them. Soft-launch chrome (`Invite only`, `Copy text`, `Download image`) is also in that module.
+Headline, subhead, CTA, microcopy, success, and footer strings live in `fantasy/copy.py` and `packages/card-schema` and must stay exact until marketing revises them. Soft-launch chrome (`Invite only`, `Copy text`, `Download image`) is also in those modules.

@@ -102,6 +102,7 @@ class _FakeStreamlit:
     def __init__(self, *, selectbox_values: dict | None = None):
         self.selectbox_values = selectbox_values or {}
         self.captions: list[str] = []
+        self.infos: list[str] = []
         self.session_state: dict = {}
         self.plotly_chart_calls: list[tuple[object, bool]] = []
         self.column_config = _FakeColumnConfig()
@@ -125,6 +126,8 @@ class _FakeStreamlit:
         return None
 
     def info(self, *args, **kwargs) -> None:
+        if args:
+            self.infos.append(str(args[0]))
         return None
 
     def divider(self, *args, **kwargs) -> None:
@@ -223,19 +226,19 @@ def test_slider_max_expression_handles_empty_and_non_empty_years():
     expr = _slider_max_expr()
     compiled = compile(ast.Expression(expr), str(APP_PATH), "eval")
 
-    from src.baseball_analytics.dashboard_helpers import compute_slider_max
+    from dashboard.helpers import data_slider_max
 
     empty_result = eval(
         compiled,
-        {"all_years": [], "_current_year": 2026, "compute_slider_max": compute_slider_max},
+        {"all_years": [], "_current_year": 2026, "data_slider_max": data_slider_max},
     )
     non_empty_result = eval(
         compiled,
-        {"all_years": [2018, 2024], "_current_year": 2020, "compute_slider_max": compute_slider_max},
+        {"all_years": [2016], "_current_year": 2026, "data_slider_max": data_slider_max},
     )
 
     assert empty_result == 2026
-    assert non_empty_result == 2024
+    assert non_empty_result == 2016
 
 
 def test_chart_applies_layout_and_renders_once():
@@ -326,7 +329,11 @@ def test_player_explorer_shows_player_id_when_name_collides():
     )
     from dashboard.helpers import (
         empty_state_copy,
+        is_prior_only_publish,
+        max_season_from_frame,
         metric_label,
+        resolve_active_year,
+        seasons_from_manifest,
         salary_coverage_note,
         scale_money_columns,
         teams_from_frame,
@@ -356,7 +363,13 @@ def test_player_explorer_shows_player_id_when_name_collides():
             "st": st,
             "px": fake_px,
             "load_player_season_metrics": lambda: players,
+            "load_metrics_manifest": lambda: None,
             "load_sr_player_metrics": lambda: None,
+            "is_prior_only_publish": is_prior_only_publish,
+            "max_season_from_frame": max_season_from_frame,
+            "resolve_active_year": resolve_active_year,
+            "seasons_from_manifest": seasons_from_manifest,
+            "_prior_season_note": lambda *args, **kwargs: None,
             "_scale_payroll": lambda df: df,
             "_PLAYER_COL_CFG": {},
             "_show_table": lambda df, *args, **kwargs: captured_tables.append(df.copy()),
@@ -521,3 +534,119 @@ def test_team_deep_dive_roster_includes_player_id_for_name_collisions():
     roster_tables = [df for df in captured_tables if "name_full" in df.columns]
     assert roster_tables, "Expected at least one roster table render call"
     assert "player_id" in roster_tables[-1].columns
+
+
+def test_contract_watch_keeps_2026_nan_salary_and_shows_prior_banner():
+    from dashboard.helpers import (
+        PRIOR_SEASON_TABLE_NOTE,
+        blank_unknown_salary,
+        empty_state_copy,
+        filter_contract_watch_rows,
+        is_prior_only_publish,
+        max_season_from_frame,
+        resolve_active_year,
+        seasons_from_manifest,
+        salary_coverage_note,
+        teams_from_frame,
+        years_from_frame,
+    )
+
+    st = _FakeStreamlit(
+        selectbox_values={
+            "contracts_season_filter": 2026,
+            "contracts_team_filter": "All Teams",
+        }
+    )
+    st.session_state["contracts_season_filter"] = 2026
+    players = pd.DataFrame(
+        [
+            {
+                "name_full": "Juan Soto",
+                "year_id": 2026,
+                "team_name": "Mets",
+                "player_type": "batter",
+                "player_war": 4.1,
+                "war_source": "approx",
+                "salary": float("nan"),
+                "surplus_value": float("nan"),
+                "contract_label": None,
+                "pa": 400,
+                "ip": 0.0,
+            },
+            {
+                "name_full": "Paid Veteran",
+                "year_id": 2016,
+                "team_name": "Mets",
+                "player_type": "batter",
+                "player_war": 2.0,
+                "war_source": "real",
+                "salary": 20_000_000,
+                "surplus_value": 1_000_000,
+                "contract_label": "fair_value",
+                "pa": 500,
+                "ip": 0.0,
+            },
+        ]
+    )
+    captured_tables: list[pd.DataFrame] = []
+    infos: list[str] = []
+    fake_px = SimpleNamespace(scatter=lambda *args, **kwargs: _FakeFigure())
+    contracts_path = Path(__file__).resolve().parents[1] / "dashboard" / "views" / "contracts.py"
+    tree = ast.parse(contracts_path.read_text())
+    selected = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name in {"page_contract_analysis", "_cfg"}
+    ]
+    module = ast.Module(body=selected, type_ignores=[])
+    ast.fix_missing_locations(module)
+    namespace = {
+        "pd": pd,
+        "st": st,
+        "px": fake_px,
+        "load_player_season_metrics": lambda: players,
+        "load_metrics_manifest": lambda: {
+            "current_season_missing": True,
+            "active_season": 2026,
+            "as_of_date": "2026-08-23",
+        },
+        "filter_contract_watch_rows": filter_contract_watch_rows,
+        "blank_unknown_salary": blank_unknown_salary,
+        "is_prior_only_publish": is_prior_only_publish,
+        "max_season_from_frame": max_season_from_frame,
+        "resolve_active_year": resolve_active_year,
+        "seasons_from_manifest": seasons_from_manifest,
+        "scale_money_columns": scale_money_columns,
+        "teams_from_frame": teams_from_frame,
+        "years_from_frame": years_from_frame,
+        "CONTRACT_COLORS": CONTRACT_COLORS,
+        "_show_table": lambda df, *args, **kwargs: captured_tables.append(df.copy()),
+        "_empty": lambda *args, **kwargs: None,
+        "_page_header": lambda *args, **kwargs: None,
+        "_salary_note": lambda *args, **kwargs: None,
+        "_prior_season_note": lambda *, show, message=None: infos.append(
+            message or PRIOR_SEASON_TABLE_NOTE
+        )
+        if show
+        else None,
+        "_chart": lambda *args, **kwargs: None,
+        "panel_head": lambda *args, **kwargs: None,
+        "SCATTER_MARKER": {},
+        "player_column_config": lambda: {},
+        "_PLAYER_COL_CFG": None,
+        "SEASON_YEAR": "season_year",
+        "SELECTED_TEAM": "selected_team",
+        "nav_page": nav_page,
+        "empty_state_copy": empty_state_copy,
+        "salary_coverage_note": salary_coverage_note,
+    }
+    exec(compile(module, str(contracts_path), "exec"), namespace)
+
+    namespace["page_contract_analysis"]()
+
+    assert infos == [PRIOR_SEASON_TABLE_NOTE]
+    assert captured_tables, "Expected Contract Watch tables"
+    all_contracts = captured_tables[0]
+    assert "Juan Soto" in set(all_contracts["name_full"])
+    soto = all_contracts.loc[all_contracts["name_full"] == "Juan Soto"].iloc[0]
+    assert pd.isna(soto["salary"])

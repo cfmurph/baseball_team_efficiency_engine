@@ -8,8 +8,10 @@ import pandas as pd
 import streamlit as st
 
 from dashboard.helpers import (
+    PRIOR_SEASON_TABLE_NOTE,
     app_frame_html,
     artifact_status,
+    clamp_season_for_page,
     empty_state_copy,
     masthead_html,
     nav_groups,
@@ -52,6 +54,11 @@ def salary_note(year: int | None) -> None:
         st.info(note)
 
 
+def prior_season_note(*, show: bool, message: str | None = None) -> None:
+    if show:
+        st.info(message or PRIOR_SEASON_TABLE_NOTE)
+
+
 def panel_head(title: str, hint: str = "") -> None:
     hint_html = f'<span class="hint">{html.escape(hint)}</span>' if hint else ""
     st.markdown(
@@ -84,25 +91,36 @@ ALL_YEARS: list[int] = []
 
 
 def season_picker(key: str = SEASON_YEAR, default_latest: bool = True, years: list[int] | None = None) -> int | None:
-    """Season control bound to shared ``season_year`` session state."""
+    """Season control for team pages. Does not clobber a player-only ``season_year``."""
     year_opts = years if years is not None else ALL_YEARS
     if not year_opts:
         return None
     current = st.session_state.get(SEASON_YEAR)
-    if current not in year_opts:
-        st.session_state[SEASON_YEAR] = year_opts[-1] if default_latest else year_opts[0]
+    display, write_shared = clamp_season_for_page(
+        current if current is None else int(current),
+        year_opts,
+        default_latest=default_latest,
+    )
+    widget_key = key if key != SEASON_YEAR else f"{SEASON_YEAR}_team"
+    if current not in year_opts or st.session_state.get(widget_key) not in year_opts:
+        st.session_state[widget_key] = display
+    elif write_shared and st.session_state.get(widget_key) != current:
+        st.session_state[widget_key] = current
     c1, c2, c3 = st.columns([1, 6, 1])
     with c1:
-        if st.button("◀", key=f"{SEASON_YEAR}_prev", help="Previous season"):
-            idx = year_opts.index(st.session_state[SEASON_YEAR])
-            st.session_state[SEASON_YEAR] = year_opts[max(0, idx - 1)]
+        if st.button("◀", key=f"{widget_key}_prev", help="Previous season"):
+            idx = year_opts.index(st.session_state[widget_key])
+            st.session_state[widget_key] = year_opts[max(0, idx - 1)]
     with c3:
-        if st.button("▶", key=f"{SEASON_YEAR}_next", help="Next season"):
-            idx = year_opts.index(st.session_state[SEASON_YEAR])
-            st.session_state[SEASON_YEAR] = year_opts[min(len(year_opts) - 1, idx + 1)]
+        if st.button("▶", key=f"{widget_key}_next", help="Next season"):
+            idx = year_opts.index(st.session_state[widget_key])
+            st.session_state[widget_key] = year_opts[min(len(year_opts) - 1, idx + 1)]
     with c2:
-        st.selectbox("Season", year_opts, key=SEASON_YEAR, label_visibility="collapsed")
-    return int(st.session_state[SEASON_YEAR])
+        st.selectbox("Season", year_opts, key=widget_key, label_visibility="collapsed")
+    chosen = int(st.session_state[widget_key])
+    if write_shared or chosen != display:
+        st.session_state[SEASON_YEAR] = chosen
+    return chosen
 
 
 def team_select(all_teams: list[str], *, label: str = "Team") -> str | None:
@@ -251,6 +269,7 @@ __all__ = [
     "page_header",
     "panel_head",
     "player_column_config",
+    "prior_season_note",
     "render_app_frame",
     "render_sidebar",
     "salary_note",

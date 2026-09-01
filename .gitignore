@@ -20,3 +20,9 @@ data/waitlist/*.jsonl
 artifacts/current/
 .env
 *.env
+node_modules/
+.next/
+apps/web/.next/
+apps/web/out/
+*.tsbuildinfo
+.vercel/

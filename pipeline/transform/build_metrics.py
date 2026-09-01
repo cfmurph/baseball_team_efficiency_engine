@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import json
 import logging
 from pathlib import Path
@@ -11,7 +11,8 @@ import typer
 
 from src.baseball_analytics.config import load_settings
 from src.baseball_analytics.fantasy import emit_ranked_fantasy_cards
-from src.baseball_analytics.io import ensure_dir
+from src.baseball_analytics.io import ensure_dir, read_csv
+from src.baseball_analytics.metrics import pythag_gap, pythagorean_wins, war_win_gap
 from src.baseball_analytics.sportsdataio import (
     ENDPOINT_EXTRACT_REPORT,
     default_season_window,
@@ -208,6 +209,19 @@ SELECT
     SUM(s.so)                                 AS so,
     SUM(s.rbi)                                AS rbi,
     SUM(s.sb)                                 AS sb,
+    SUM(s.runs)                               AS runs,
+    SUM(s.doubles)                            AS doubles,
+    SUM(s.triples)                            AS triples,
+    SUM(s.games_started)                      AS gs,
+    SUM(s.wins)                               AS w,
+    SUM(s.losses)                             AS l,
+    SUM(s.saves)                              AS sv,
+    SUM(s.er)                                 AS er,
+    SUM(s.putouts)                            AS putouts,
+    SUM(s.assists)                            AS assists,
+    SUM(s.errors)                             AS errors,
+    SUM(s.double_plays)                       AS double_plays,
+    SUM(s.passed_balls)                       AS passed_balls,
     CAST(NULL AS DOUBLE)                      AS woba,
     CAST(NULL AS DOUBLE)                      AS batting_war,
     SUM(s.ip)                                 AS ip,
@@ -267,6 +281,19 @@ SELECT
     SUM(g.so)                                 AS so,
     SUM(g.rbi)                                AS rbi,
     SUM(g.sb)                                 AS sb,
+    SUM(g.runs)                               AS runs,
+    SUM(g.doubles)                            AS doubles,
+    SUM(g.triples)                            AS triples,
+    SUM(g.games_started)                      AS gs,
+    SUM(g.wins)                               AS w,
+    SUM(g.losses)                             AS l,
+    SUM(g.saves)                              AS sv,
+    SUM(g.er)                                 AS er,
+    SUM(g.putouts)                            AS putouts,
+    SUM(g.assists)                            AS assists,
+    SUM(g.errors)                             AS errors,
+    SUM(g.double_plays)                       AS double_plays,
+    SUM(g.passed_balls)                       AS passed_balls,
     CAST(NULL AS DOUBLE)                      AS woba,
     CAST(NULL AS DOUBLE)                      AS batting_war,
     SUM(g.ip)                                 AS ip,
@@ -302,11 +329,249 @@ GROUP BY
 ORDER BY g.season, SUM(COALESCE(g.pa, 0)) DESC
 """
 
+# Team grain of the #133 overlay. v0.1 has no team_season_stat — roll up
+# player_season_stat / player_game_stat by team_id + season. Do not write WAR
+# onto spine facts. Payroll/salary stay null (do not invent).
+_SDIO_TEAM_SEASON_QUERY = """
+SELECT
+    COALESCE(lahman.external_id, t.sdio_abbr, s.team_id) AS team_id,
+    FIRST(
+        COALESCE(
+            NULLIF(TRIM(COALESCE(t.city, '') || ' ' || COALESCE(t.team_name, '')), ''),
+            t.team_name,
+            t.sdio_abbr,
+            CAST(s.team_id AS VARCHAR)
+        )
+        ORDER BY COALESCE(s.pa, 0) + COALESCE(s.ip, 0) DESC
+    ) AS team_name,
+    FIRST(COALESCE(lahman.external_id, t.sdio_abbr)) AS franchise_id,
+    FIRST(t.league) AS league_id,
+    s.season AS year_id,
+    CAST(NULL AS BIGINT) AS wins,
+    CAST(NULL AS BIGINT) AS losses,
+    MAX(s.games) AS games,
+    CAST(NULL AS DOUBLE) AS runs_scored,
+    CAST(NULL AS DOUBLE) AS runs_allowed,
+    SUM(s.pa) AS pa,
+    SUM(s.hr) AS hr,
+    SUM(s.bb) AS bb,
+    SUM(s.hits) AS hits,
+    SUM(s.ab) AS ab,
+    SUM(s.so) AS so,
+    SUM(s.rbi) AS rbi,
+    SUM(s.sb) AS sb,
+    SUM(s.ip) AS ip,
+    SUM(s.pitching_so) AS pitching_so,
+    SUM(s.pitching_bb) AS pitching_bb,
+    CAST(NULL AS DOUBLE) AS team_batting_war,
+    CAST(NULL AS DOUBLE) AS team_pitching_war,
+    CAST(NULL AS DOUBLE) AS team_total_war,
+    'approx' AS war_source,
+    CAST(NULL AS DOUBLE) AS payroll,
+    CAST(NULL AS DOUBLE) AS max_salary,
+    CAST(NULL AS DOUBLE) AS median_salary,
+    CAST(NULL AS DOUBLE) AS top_1_salary_share,
+    CAST(NULL AS DOUBLE) AS top_3_salary_share,
+    CAST(NULL AS DOUBLE) AS top_5_salary_share,
+    CAST(NULL AS DOUBLE) AS gini_salary,
+    CAST(NULL AS DOUBLE) AS dead_money_share,
+    CAST(NULL AS DOUBLE) AS payroll_per_win,
+    CAST(NULL AS DOUBLE) AS wins_per_10m,
+    CAST(NULL AS DOUBLE) AS run_diff_per_10m,
+    CAST(NULL AS DOUBLE) AS cost_per_war,
+    CAST(NULL AS DOUBLE) AS war_per_1m,
+    CAST(NULL AS DOUBLE) AS surplus_value,
+    CAST(NULL AS VARCHAR) AS window_phase,
+    'sportsdataio' AS stat_source
+FROM player_season_stat s
+LEFT JOIN team t ON t.team_id = s.team_id
+LEFT JOIN (
+    SELECT internal_id, MIN(external_id) AS external_id
+    FROM external_id_alias
+    WHERE system = 'lahman' AND entity_type = 'team'
+    GROUP BY internal_id
+) lahman ON lahman.internal_id = s.team_id
+WHERE s.team_id IS NOT NULL
+GROUP BY COALESCE(lahman.external_id, t.sdio_abbr, s.team_id), s.season
+ORDER BY s.season, SUM(COALESCE(s.pa, 0)) DESC
+"""
+
+_SDIO_TEAM_GAME_ROLLUP_QUERY = """
+SELECT
+    COALESCE(lahman.external_id, t.sdio_abbr, g.team_id) AS team_id,
+    FIRST(
+        COALESCE(
+            NULLIF(TRIM(COALESCE(t.city, '') || ' ' || COALESCE(t.team_name, '')), ''),
+            t.team_name,
+            t.sdio_abbr,
+            CAST(g.team_id AS VARCHAR)
+        )
+        ORDER BY COALESCE(g.pa, 0) + COALESCE(g.ip, 0) DESC
+    ) AS team_name,
+    FIRST(COALESCE(lahman.external_id, t.sdio_abbr)) AS franchise_id,
+    FIRST(t.league) AS league_id,
+    g.season AS year_id,
+    CAST(NULL AS BIGINT) AS wins,
+    CAST(NULL AS BIGINT) AS losses,
+    COUNT(DISTINCT g.game_id) AS games,
+    SUM(g.runs) AS runs_scored,
+    CAST(NULL AS DOUBLE) AS runs_allowed,
+    SUM(g.pa) AS pa,
+    SUM(g.hr) AS hr,
+    SUM(g.bb) AS bb,
+    SUM(g.hits) AS hits,
+    SUM(g.ab) AS ab,
+    SUM(g.so) AS so,
+    SUM(g.rbi) AS rbi,
+    SUM(g.sb) AS sb,
+    SUM(g.ip) AS ip,
+    SUM(g.pitching_so) AS pitching_so,
+    SUM(g.pitching_bb) AS pitching_bb,
+    CAST(NULL AS DOUBLE) AS team_batting_war,
+    CAST(NULL AS DOUBLE) AS team_pitching_war,
+    CAST(NULL AS DOUBLE) AS team_total_war,
+    'approx' AS war_source,
+    CAST(NULL AS DOUBLE) AS payroll,
+    CAST(NULL AS DOUBLE) AS max_salary,
+    CAST(NULL AS DOUBLE) AS median_salary,
+    CAST(NULL AS DOUBLE) AS top_1_salary_share,
+    CAST(NULL AS DOUBLE) AS top_3_salary_share,
+    CAST(NULL AS DOUBLE) AS top_5_salary_share,
+    CAST(NULL AS DOUBLE) AS gini_salary,
+    CAST(NULL AS DOUBLE) AS dead_money_share,
+    CAST(NULL AS DOUBLE) AS payroll_per_win,
+    CAST(NULL AS DOUBLE) AS wins_per_10m,
+    CAST(NULL AS DOUBLE) AS run_diff_per_10m,
+    CAST(NULL AS DOUBLE) AS cost_per_war,
+    CAST(NULL AS DOUBLE) AS war_per_1m,
+    CAST(NULL AS DOUBLE) AS surplus_value,
+    CAST(NULL AS VARCHAR) AS window_phase,
+    'sportsdataio' AS stat_source
+FROM player_game_stat g
+LEFT JOIN team t ON t.team_id = g.team_id
+LEFT JOIN (
+    SELECT internal_id, MIN(external_id) AS external_id
+    FROM external_id_alias
+    WHERE system = 'lahman' AND entity_type = 'team'
+    GROUP BY internal_id
+) lahman ON lahman.internal_id = g.team_id
+WHERE g.team_id IS NOT NULL
+GROUP BY COALESCE(lahman.external_id, t.sdio_abbr, g.team_id), g.season
+ORDER BY g.season, SUM(COALESCE(g.pa, 0)) DESC
+"""
+
+_SDIO_TEAM_STANDINGS_QUERY = """
+WITH team_games AS (
+    SELECT
+        home_team_id AS team_id,
+        season,
+        home_score AS team_score,
+        away_score AS opp_score
+    FROM game
+    WHERE home_score IS NOT NULL AND away_score IS NOT NULL
+    UNION ALL
+    SELECT
+        away_team_id AS team_id,
+        season,
+        away_score AS team_score,
+        home_score AS opp_score
+    FROM game
+    WHERE home_score IS NOT NULL AND away_score IS NOT NULL
+)
+SELECT
+    COALESCE(lahman.external_id, t.sdio_abbr, g.team_id) AS team_id,
+    FIRST(
+        COALESCE(
+            NULLIF(TRIM(COALESCE(t.city, '') || ' ' || COALESCE(t.team_name, '')), ''),
+            t.team_name,
+            t.sdio_abbr,
+            CAST(g.team_id AS VARCHAR)
+        )
+    ) AS team_name,
+    FIRST(COALESCE(lahman.external_id, t.sdio_abbr)) AS franchise_id,
+    FIRST(t.league) AS league_id,
+    g.season AS year_id,
+    SUM(CASE WHEN g.team_score > g.opp_score THEN 1 ELSE 0 END) AS wins,
+    SUM(CASE WHEN g.team_score < g.opp_score THEN 1 ELSE 0 END) AS losses,
+    COUNT(*) AS games,
+    SUM(g.team_score) AS runs_scored,
+    SUM(g.opp_score) AS runs_allowed,
+    CAST(0 AS DOUBLE) AS pa,
+    CAST(0 AS DOUBLE) AS hr,
+    CAST(0 AS DOUBLE) AS bb,
+    CAST(0 AS DOUBLE) AS hits,
+    CAST(0 AS DOUBLE) AS ab,
+    CAST(0 AS DOUBLE) AS so,
+    CAST(0 AS DOUBLE) AS rbi,
+    CAST(0 AS DOUBLE) AS sb,
+    CAST(0 AS DOUBLE) AS ip,
+    CAST(0 AS DOUBLE) AS pitching_so,
+    CAST(0 AS DOUBLE) AS pitching_bb,
+    CAST(NULL AS DOUBLE) AS team_batting_war,
+    CAST(NULL AS DOUBLE) AS team_pitching_war,
+    CAST(NULL AS DOUBLE) AS team_total_war,
+    'approx' AS war_source,
+    CAST(NULL AS DOUBLE) AS payroll,
+    CAST(NULL AS VARCHAR) AS window_phase,
+    'sportsdataio' AS stat_source
+FROM team_games g
+LEFT JOIN team t ON t.team_id = g.team_id
+LEFT JOIN (
+    SELECT internal_id, MIN(external_id) AS external_id
+    FROM external_id_alias
+    WHERE system = 'lahman' AND entity_type = 'team'
+    GROUP BY internal_id
+) lahman ON lahman.internal_id = g.team_id
+WHERE g.team_id IS NOT NULL
+GROUP BY COALESCE(lahman.external_id, t.sdio_abbr, g.team_id), g.season
+ORDER BY g.season
+"""
+
 METRICS_MANIFEST_NAME = "metrics_manifest.json"
+
+TEAM_PUBLISH_COLUMNS = (
+    "year_id",
+    "team_name",
+    "team_id",
+    "franchise_id",
+    "league_id",
+    "wins",
+    "losses",
+    "games",
+    "runs_scored",
+    "runs_allowed",
+    "run_diff",
+    "pythag_wins",
+    "pythag_gap",
+    "base_runs",
+    "base_runs_gap",
+    "team_batting_war",
+    "team_pitching_war",
+    "team_total_war",
+    "war_source",
+    "war_win_gap",
+    "payroll",
+    "max_salary",
+    "median_salary",
+    "top_1_salary_share",
+    "top_3_salary_share",
+    "top_5_salary_share",
+    "gini_salary",
+    "dead_money_share",
+    "payroll_per_win",
+    "wins_per_10m",
+    "run_diff_per_10m",
+    "cost_per_war",
+    "war_per_1m",
+    "surplus_value",
+    "window_phase",
+)
 
 
 def _efficiency_labels(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
+    if "wins_per_10m" not in df.columns:
+        df["wins_per_10m"] = pd.NA
     df["efficiency_label"] = pd.cut(
         df["wins_per_10m"],
         bins=[-float("inf"), 0.5, 1.0, 1.5, float("inf")],
@@ -344,6 +609,452 @@ _POSITION_FROM_TYPE = {
     "batter": "UTIL",
     "both": "UTIL",
 }
+
+_LAHMAN_COUNTING_MAP = (
+    ("games", ("G", "g")),
+    ("ab", ("AB", "ab")),
+    ("runs", ("R", "r", "runs")),
+    ("hits", ("H", "h", "hits")),
+    ("doubles", ("X2B", "2B", "doubles")),
+    ("triples", ("X3B", "3B", "triples")),
+    ("hr", ("HR", "hr")),
+    ("rbi", ("RBI", "rbi")),
+    ("sb", ("SB", "sb")),
+    ("bb", ("BB", "bb")),
+    ("so", ("SO", "so")),
+    ("pa", ("PA", "pa")),
+)
+
+_LAHMAN_PITCHING_MAP = (
+    ("games", ("G", "g")),
+    ("gs", ("GS", "gs")),
+    ("w", ("W", "w")),
+    ("l", ("L", "l")),
+    ("sv", ("SV", "sv")),
+    ("er", ("ER", "er")),
+    ("ip", ("IP", "ip")),
+    ("era", ("ERA", "era")),
+    ("pitching_so", ("SO", "so")),
+    ("pitching_bb", ("BB", "bb")),
+)
+
+
+def _optional_csv(path: Path) -> pd.DataFrame | None:
+    if not path.is_file():
+        return None
+    try:
+        frame = read_csv(path)
+    except (OSError, ValueError):
+        return None
+    return frame if frame is not None and not frame.empty else None
+
+
+def _first_existing_column(frame: pd.DataFrame, names: tuple[str, ...]) -> str | None:
+    for name in names:
+        if name in frame.columns:
+            return name
+    return None
+
+
+def _numeric_series(frame: pd.DataFrame, names: tuple[str, ...]) -> pd.Series:
+    column = _first_existing_column(frame, names)
+    if column is None:
+        return pd.Series(pd.NA, index=frame.index, dtype="Float64")
+    return pd.to_numeric(frame[column], errors="coerce")
+
+
+def _fielding_fpct(putouts: float | None, assists: float | None, errors: float | None) -> float | None:
+    po = 0.0 if putouts is None or pd.isna(putouts) else float(putouts)
+    a = 0.0 if assists is None or pd.isna(assists) else float(assists)
+    e = 0.0 if errors is None or pd.isna(errors) else float(errors)
+    if putouts is None and assists is None and errors is None:
+        return None
+    if pd.isna(putouts) and pd.isna(assists) and pd.isna(errors):
+        return None
+    denom = po + a + e
+    if denom <= 0:
+        return None
+    return round((po + a) / denom, 3)
+
+
+def _json_number(value: object) -> int | float | None:
+    parsed = pd.to_numeric(value, errors="coerce")
+    if pd.isna(parsed):
+        return None
+    number = float(parsed)
+    if number.is_integer():
+        return int(number)
+    return number
+
+
+def fielding_line_from_counts(
+    *,
+    pos: str | None,
+    g: object = None,
+    gs: object = None,
+    inn: object = None,
+    putouts: object = None,
+    assists: object = None,
+    errors: object = None,
+    double_plays: object = None,
+    passed_balls: object = None,
+    fpct: object = None,
+) -> dict[str, object] | None:
+    line = {
+        "pos": str(pos).strip() if pos not in (None, "") and not (isinstance(pos, float) and pd.isna(pos)) else None,
+        "g": _json_number(g),
+        "gs": _json_number(gs),
+        "inn": _json_number(inn),
+        "po": _json_number(putouts),
+        "a": _json_number(assists),
+        "e": _json_number(errors),
+        "dp": _json_number(double_plays),
+        "pb": _json_number(passed_balls),
+        "fpct": _json_number(fpct),
+    }
+    counts = [line[key] for key in ("g", "gs", "inn", "po", "a", "e", "dp", "pb", "fpct")]
+    if line["pos"] is None and all(value is None for value in counts):
+        return None
+    if line["fpct"] is None:
+        line["fpct"] = _fielding_fpct(line["po"], line["a"], line["e"])
+    if line["pos"] is None and all(value is None or value == 0 for value in counts if value is not None) and all(
+        value is None for value in counts
+    ):
+        return None
+    return line
+
+
+def serialize_fielding_lines(lines: list[dict[str, object]]) -> str | None:
+    cleaned = [line for line in lines if line]
+    if not cleaned:
+        return None
+    return json.dumps(cleaned, separators=(",", ":"))
+
+
+def parse_fielding_json(raw: object) -> list[dict[str, object]]:
+    if raw in (None, ""):
+        return []
+    if isinstance(raw, list):
+        return [item for item in raw if isinstance(item, dict)]
+    text = str(raw).strip()
+    if not text:
+        return []
+    try:
+        payload = json.loads(text)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    if not isinstance(payload, list):
+        return []
+    return [item for item in payload if isinstance(item, dict)]
+
+
+def _aggregate_lahman_batting(batting: pd.DataFrame) -> pd.DataFrame:
+    player_col = _first_existing_column(batting, ("playerID", "player_id"))
+    year_col = _first_existing_column(batting, ("yearID", "year_id", "season"))
+    if player_col is None or year_col is None:
+        return pd.DataFrame()
+    work = batting.copy()
+    work["_player_id"] = work[player_col].astype(str)
+    work["_year_id"] = pd.to_numeric(work[year_col], errors="coerce")
+    work = work.dropna(subset=["_year_id"])
+    if work.empty:
+        return pd.DataFrame()
+    aggs: dict[str, tuple[str, str]] = {}
+    for dest, names in _LAHMAN_COUNTING_MAP:
+        source = _first_existing_column(work, names)
+        if source:
+            work[f"_bat_{dest}"] = pd.to_numeric(work[source], errors="coerce")
+            aggs[dest] = (f"_bat_{dest}", "sum")
+    if not aggs:
+        return pd.DataFrame()
+    out = work.groupby(["_player_id", "_year_id"], as_index=False).agg(**aggs)
+    if "ab" in out.columns and "hits" in out.columns:
+        ab = pd.to_numeric(out["ab"], errors="coerce")
+        hits = pd.to_numeric(out["hits"], errors="coerce")
+        out["avg"] = (hits / ab.replace(0, pd.NA)).round(3)
+    if {"hits", "bb", "ab"}.issubset(out.columns):
+        hbp = pd.to_numeric(out["hbp"], errors="coerce") if "hbp" in out.columns else 0
+        sf = pd.to_numeric(out["sf"], errors="coerce") if "sf" in out.columns else 0
+        hits = pd.to_numeric(out["hits"], errors="coerce")
+        bb = pd.to_numeric(out["bb"], errors="coerce")
+        ab = pd.to_numeric(out["ab"], errors="coerce")
+        numer = hits.fillna(0) + bb.fillna(0) + (hbp if isinstance(hbp, pd.Series) else 0)
+        denom = ab.fillna(0) + bb.fillna(0) + (hbp if isinstance(hbp, pd.Series) else 0) + (
+            sf if isinstance(sf, pd.Series) else 0
+        )
+        out["obp"] = (numer / denom.replace(0, pd.NA)).round(3)
+    if {"hits", "doubles", "triples", "hr", "ab"}.issubset(out.columns):
+        hits = pd.to_numeric(out["hits"], errors="coerce").fillna(0)
+        doubles = pd.to_numeric(out["doubles"], errors="coerce").fillna(0)
+        triples = pd.to_numeric(out["triples"], errors="coerce").fillna(0)
+        hr = pd.to_numeric(out["hr"], errors="coerce").fillna(0)
+        ab = pd.to_numeric(out["ab"], errors="coerce")
+        singles = (hits - doubles - triples - hr).clip(lower=0)
+        tb = singles + 2 * doubles + 3 * triples + 4 * hr
+        out["slg"] = (tb / ab.replace(0, pd.NA)).round(3)
+    if "obp" in out.columns and "slg" in out.columns:
+        out["ops"] = (pd.to_numeric(out["obp"], errors="coerce") + pd.to_numeric(out["slg"], errors="coerce")).round(3)
+    return out.rename(columns={"_player_id": "player_id", "_year_id": "year_id"})
+
+
+def _aggregate_lahman_pitching(pitching: pd.DataFrame) -> pd.DataFrame:
+    player_col = _first_existing_column(pitching, ("playerID", "player_id"))
+    year_col = _first_existing_column(pitching, ("yearID", "year_id", "season"))
+    if player_col is None or year_col is None:
+        return pd.DataFrame()
+    work = pitching.copy()
+    work["_player_id"] = work[player_col].astype(str)
+    work["_year_id"] = pd.to_numeric(work[year_col], errors="coerce")
+    work = work.dropna(subset=["_year_id"])
+    if work.empty:
+        return pd.DataFrame()
+    if "IPouts" in work.columns and "ip" not in work.columns:
+        work["ip"] = pd.to_numeric(work["IPouts"], errors="coerce") / 3.0
+    aggs: dict[str, tuple[str, str]] = {}
+    for dest, names in _LAHMAN_PITCHING_MAP:
+        source = _first_existing_column(work, names)
+        if source:
+            work[f"_pit_{dest}"] = pd.to_numeric(work[source], errors="coerce")
+            how = "mean" if dest == "era" else "sum"
+            aggs[dest] = (f"_pit_{dest}", how)
+    if not aggs:
+        return pd.DataFrame()
+    out = work.groupby(["_player_id", "_year_id"], as_index=False).agg(**aggs)
+    if "era" in out.columns:
+        out["era"] = pd.to_numeric(out["era"], errors="coerce").round(2)
+    return out.rename(columns={"_player_id": "player_id", "_year_id": "year_id"})
+
+
+def _aggregate_lahman_fielding(fielding: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return (season totals, per-position lines) from Lahman Fielding."""
+    player_col = _first_existing_column(fielding, ("playerID", "player_id"))
+    year_col = _first_existing_column(fielding, ("yearID", "year_id", "season"))
+    pos_col = _first_existing_column(fielding, ("POS", "pos", "position"))
+    if player_col is None or year_col is None:
+        return pd.DataFrame(), pd.DataFrame()
+    work = fielding.copy()
+    work["_player_id"] = work[player_col].astype(str)
+    work["_year_id"] = pd.to_numeric(work[year_col], errors="coerce")
+    work = work.dropna(subset=["_year_id"])
+    if work.empty:
+        return pd.DataFrame(), pd.DataFrame()
+    work["pos"] = work[pos_col].astype(str).str.strip() if pos_col else ""
+    work["g"] = _numeric_series(work, ("G", "g"))
+    work["gs"] = _numeric_series(work, ("GS", "gs"))
+    inn_outs = _numeric_series(work, ("InnOuts", "innouts"))
+    inn_direct = _numeric_series(work, ("Inn", "inn", "innings"))
+    work["inn"] = inn_direct.where(inn_direct.notna(), inn_outs / 3.0)
+    work["putouts"] = _numeric_series(work, ("PO", "po", "putouts"))
+    work["assists"] = _numeric_series(work, ("A", "a", "assists"))
+    work["errors"] = _numeric_series(work, ("E", "e", "errors"))
+    work["double_plays"] = _numeric_series(work, ("DP", "dp", "double_plays"))
+    work["passed_balls"] = _numeric_series(work, ("PB", "pb", "passed_balls"))
+    group_keys = ["_player_id", "_year_id", "pos"] if pos_col else ["_player_id", "_year_id"]
+    lines = work.groupby(group_keys, as_index=False).agg(
+        g=("g", "sum"),
+        gs=("gs", "sum"),
+        inn=("inn", "sum"),
+        putouts=("putouts", "sum"),
+        assists=("assists", "sum"),
+        errors=("errors", "sum"),
+        double_plays=("double_plays", "sum"),
+        passed_balls=("passed_balls", "sum"),
+    )
+    # DH is not a fielding position in Lahman; drop empty/unknown rows.
+    if "pos" in lines.columns:
+        lines = lines[lines["pos"].astype(str).str.upper() != "DH"]
+        lines = lines[lines["pos"].astype(str).str.len() > 0]
+    totals = lines.groupby(["_player_id", "_year_id"], as_index=False).agg(
+        fielding_g=("g", "sum"),
+        fielding_gs=("gs", "sum"),
+        fielding_inn=("inn", "sum"),
+        putouts=("putouts", "sum"),
+        assists=("assists", "sum"),
+        errors=("errors", "sum"),
+        double_plays=("double_plays", "sum"),
+        passed_balls=("passed_balls", "sum"),
+    )
+    if not lines.empty and "pos" in lines.columns:
+        primary = (
+            lines.sort_values("g", ascending=False)
+            .groupby(["_player_id", "_year_id"], as_index=False)
+            .first()[["_player_id", "_year_id", "pos"]]
+            .rename(columns={"pos": "fielding_pos"})
+        )
+        totals = totals.merge(primary, on=["_player_id", "_year_id"], how="left")
+    totals["fpct"] = [
+        _fielding_fpct(row.putouts, row.assists, row.errors) for row in totals.itertuples(index=False)
+    ]
+    json_rows = []
+    if not lines.empty:
+        for (player_id, year), group in lines.groupby(["_player_id", "_year_id"], sort=False):
+            packed = []
+            for row in group.itertuples(index=False):
+                line = fielding_line_from_counts(
+                    pos=getattr(row, "pos", None),
+                    g=row.g,
+                    gs=row.gs,
+                    inn=row.inn,
+                    putouts=row.putouts,
+                    assists=row.assists,
+                    errors=row.errors,
+                    double_plays=row.double_plays,
+                    passed_balls=row.passed_balls,
+                )
+                if line:
+                    packed.append(line)
+            if packed:
+                json_rows.append(
+                    {
+                        "player_id": player_id,
+                        "year_id": year,
+                        "fielding_json": serialize_fielding_lines(packed),
+                    }
+                )
+    json_df = pd.DataFrame(json_rows)
+    totals = totals.rename(columns={"_player_id": "player_id", "_year_id": "year_id"})
+    if not json_df.empty:
+        totals = totals.merge(json_df, on=["player_id", "year_id"], how="left")
+    lines = lines.rename(columns={"_player_id": "player_id", "_year_id": "year_id"})
+    return totals, lines
+
+
+def _year_key(frame: pd.DataFrame) -> str | None:
+    return _first_existing_column(frame, ("year_id", "season", "season_key"))
+
+
+def _coalesce_columns(base: pd.DataFrame, extra: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    if extra is None or extra.empty:
+        return base
+    out = base.copy()
+    year_col = _year_key(out)
+    extra_year = _year_key(extra)
+    if year_col is None or extra_year is None or "player_id" not in out.columns or "player_id" not in extra.columns:
+        return out
+    keep = ["player_id", extra_year] + [col for col in columns if col in extra.columns]
+    incoming = extra[keep].copy()
+    incoming = incoming.rename(columns={extra_year: "_join_year"})
+    out["_join_year"] = pd.to_numeric(out[year_col], errors="coerce")
+    incoming["_join_year"] = pd.to_numeric(incoming["_join_year"], errors="coerce")
+    incoming["player_id"] = incoming["player_id"].astype(str)
+    out["player_id"] = out["player_id"].astype(str)
+    merged = out.merge(incoming, on=["player_id", "_join_year"], how="left", suffixes=("", "_lahman"))
+    for col in columns:
+        incoming_col = col if col in incoming.columns else None
+        if incoming_col is None:
+            continue
+        overlay = f"{col}_lahman" if f"{col}_lahman" in merged.columns else (
+            col if col not in out.columns else None
+        )
+        if overlay is None or overlay not in merged.columns:
+            if col not in merged.columns:
+                merged[col] = incoming[col] if col in incoming.columns else pd.NA
+            continue
+        if col not in merged.columns:
+            merged[col] = merged[overlay]
+        elif col in {"fielding_json", "fielding_pos"}:
+            existing = merged[col].astype(str).replace({"nan": "", "None": "", "<NA>": ""})
+            merged[col] = merged[col].where(existing.str.len() > 0, merged[overlay])
+        else:
+            current = pd.to_numeric(merged[col], errors="coerce")
+            merged[col] = current.where(current.notna(), pd.to_numeric(merged[overlay], errors="coerce"))
+    drop = [col for col in merged.columns if col.endswith("_lahman") or col == "_join_year"]
+    return merged.drop(columns=drop, errors="ignore")
+
+
+def attach_published_individual_lines(
+    player_df: pd.DataFrame,
+    *,
+    batting: pd.DataFrame | None = None,
+    pitching: pd.DataFrame | None = None,
+    fielding: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Fill published counting / fielding from Lahman CSVs when those columns are empty.
+
+    Does not invent WAR, DRS, OAA, or UZR. Does not write back onto warehouse facts
+    or team overlay CSVs.
+    """
+    out = player_df.copy() if player_df is not None else pd.DataFrame()
+    if out.empty:
+        return out
+    if batting is not None and not batting.empty:
+        bat = _aggregate_lahman_batting(batting)
+        out = _coalesce_columns(
+            out,
+            bat,
+            ["games", "ab", "runs", "hits", "doubles", "triples", "hr", "rbi", "sb", "bb", "so", "pa", "avg", "obp", "slg", "ops"],
+        )
+    if pitching is not None and not pitching.empty:
+        pit = _aggregate_lahman_pitching(pitching)
+        out = _coalesce_columns(
+            out,
+            pit,
+            ["games", "gs", "w", "l", "sv", "er", "ip", "era", "pitching_so", "pitching_bb"],
+        )
+    if fielding is not None and not fielding.empty:
+        totals, _lines = _aggregate_lahman_fielding(fielding)
+        out = _coalesce_columns(
+            out,
+            totals,
+            [
+                "putouts",
+                "assists",
+                "errors",
+                "double_plays",
+                "passed_balls",
+                "fpct",
+                "fielding_g",
+                "fielding_gs",
+                "fielding_inn",
+                "fielding_pos",
+                "fielding_json",
+            ],
+        )
+    return finalize_fielding_publish(out)
+
+
+def finalize_fielding_publish(player_df: pd.DataFrame) -> pd.DataFrame:
+    """Build ``fielding_json`` / FPCT from published totals when a line is present."""
+    out = player_df.copy()
+    if out.empty:
+        return out
+    json_values: list[object] = []
+    fpct_values: list[object] = []
+    has_json = "fielding_json" in out.columns
+    for row in out.itertuples(index=False):
+        data = row._asdict() if hasattr(row, "_asdict") else {
+            col: getattr(row, col) for col in out.columns if hasattr(row, col)
+        }
+        existing = parse_fielding_json(data.get("fielding_json") if has_json else None)
+        if existing:
+            json_values.append(serialize_fielding_lines(existing))
+            fpct_values.append(existing[0].get("fpct") if data.get("fpct") in (None, "") or (isinstance(data.get("fpct"), float) and pd.isna(data.get("fpct"))) else data.get("fpct"))
+            continue
+        line = fielding_line_from_counts(
+            pos=data.get("fielding_pos") or data.get("position"),
+            g=data.get("fielding_g"),
+            gs=data.get("fielding_gs"),
+            inn=data.get("fielding_inn"),
+            putouts=data.get("putouts"),
+            assists=data.get("assists"),
+            errors=data.get("errors"),
+            double_plays=data.get("double_plays"),
+            passed_balls=data.get("passed_balls"),
+            fpct=data.get("fpct"),
+        )
+        # A listed position with no fielding counting is not a fielding line.
+        if line and all(line.get(key) is None for key in ("g", "gs", "inn", "po", "a", "e", "dp", "pb")):
+            line = None
+        json_values.append(serialize_fielding_lines([line]) if line else None)
+        fpct_values.append(line.get("fpct") if line else None)
+    out["fielding_json"] = json_values
+    if "fpct" not in out.columns:
+        out["fpct"] = fpct_values
+    else:
+        current = pd.to_numeric(out["fpct"], errors="coerce")
+        out["fpct"] = current.where(current.notna(), pd.Series(fpct_values, index=out.index))
+    return out
+
 
 PHASE0_PLAYER_FIELDS = (
     "player_id",
@@ -472,9 +1183,27 @@ class SeasonCoverage:
     current_season_missing: bool
     current_season_missing_reason: str | None
     sdio_in_season: bool = False
+    team_seasons_present: list[int] = field(default_factory=list)
+    team_overlay_seasons: list[int] = field(default_factory=list)
+    team_overlay_rows: int = 0
+    team_active_season_present: bool = False
+    team_active_season_source: str | None = None
+    team_current_season_missing: bool = True
+    team_current_season_missing_reason: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
+
+
+@dataclass
+class SdioPublishFrames:
+    """SDIO frames already shaped for the player and team metric overlays."""
+
+    player_season: pd.DataFrame | None = None
+    player_game: pd.DataFrame | None = None
+    team_season: pd.DataFrame | None = None
+    team_game: pd.DataFrame | None = None
+    team_standings: pd.DataFrame | None = None
 
 
 def _year_set(frame: pd.DataFrame, column: str = "year_id") -> set[int]:
@@ -580,6 +1309,226 @@ def select_sdio_overlay_frame(
     return pd.concat(parts, ignore_index=True)
 
 
+def _source_frames_present(*frames: pd.DataFrame | None) -> bool:
+    return any(frame is not None and not frame.empty for frame in frames)
+
+
+def coverage_from_frames(
+    *,
+    as_of_date: str,
+    window: list[int],
+    combined: pd.DataFrame,
+    overlay: pd.DataFrame,
+    lahman_years: set[int],
+    source_present: bool,
+    extract_report: dict | None = None,
+    season_df: pd.DataFrame | None = None,
+    game_df: pd.DataFrame | None = None,
+) -> SeasonCoverage:
+    """Shared #131/#138 coverage block. Same window; grain is the combined frame."""
+    resolved_window = list(window)
+    active = resolved_window[-1] if resolved_window else int(str(as_of_date)[:4])
+    overlay_years = sorted(_year_set(overlay))
+    seasons_present = sorted(_year_set(combined))
+    active_present = active in seasons_present
+    if active in overlay_years:
+        active_source: str | None = "sportsdataio"
+        missing_reason = None
+    elif active in lahman_years:
+        active_source = "lahman"
+        missing_reason = None
+    elif source_present:
+        active_source = None
+        missing_reason = "sdio_empty_active_season"
+    else:
+        active_source = None
+        missing_reason = "sdio_unavailable"
+    sdio_in_season = extract_had_in_season(extract_report, active_season=active)
+    if not sdio_in_season:
+        sdio_in_season = active in _year_set(season_df) or active in _year_set(game_df)
+    return SeasonCoverage(
+        as_of_date=as_of_date,
+        active_season=active,
+        season_window=resolved_window,
+        seasons_present=seasons_present,
+        overlay_seasons=overlay_years,
+        overlay_rows=int(len(overlay)),
+        active_season_present=active_present,
+        active_season_source=active_source,
+        current_season_missing=not active_present,
+        current_season_missing_reason=missing_reason if not active_present else None,
+        sdio_in_season=sdio_in_season,
+    )
+
+
+def attach_team_coverage(player: SeasonCoverage, team: SeasonCoverage) -> SeasonCoverage:
+    """Copy team-grain flags onto the published manifest. Does not fork the window.
+
+    ``current_season_missing`` stays honest for FO desks: if active-season
+    team rows are absent, the published flag is True even when player
+    metrics already include Y.
+    """
+    player.team_seasons_present = list(team.seasons_present)
+    player.team_overlay_seasons = list(team.overlay_seasons)
+    player.team_overlay_rows = int(team.overlay_rows)
+    player.team_active_season_present = bool(team.active_season_present)
+    player.team_active_season_source = team.active_season_source
+    player.team_current_season_missing = bool(team.current_season_missing)
+    player.team_current_season_missing_reason = team.current_season_missing_reason
+    if team.current_season_missing:
+        player.current_season_missing = True
+        if player.current_season_missing_reason is None:
+            player.current_season_missing_reason = team.current_season_missing_reason
+    return player
+
+
+def select_sdio_team_overlay_frame(
+    season_df: pd.DataFrame | None,
+    game_df: pd.DataFrame | None,
+    standings_df: pd.DataFrame | None = None,
+    *,
+    window: list[int],
+    lahman_years: set[int],
+) -> pd.DataFrame:
+    """Reuse the player overlay selector; add game standings only for leftover years.
+
+    One-day ``games_by_date`` standings are not merged onto a fat season-stat
+    rollup (that would publish W=1 as a season record). Standings fill years
+    that have no counting overlay at all.
+    """
+    overlay = select_sdio_overlay_frame(
+        season_df, game_df, window=window, lahman_years=lahman_years
+    )
+    need = [year for year in window if year not in lahman_years]
+    have = _year_set(overlay)
+    still = [year for year in need if year not in have]
+    if (
+        still
+        and standings_df is not None
+        and not standings_df.empty
+        and "year_id" in standings_df.columns
+    ):
+        years = pd.to_numeric(standings_df["year_id"], errors="coerce")
+        extra = standings_df.loc[years.isin(still)]
+        if not extra.empty:
+            overlay = (
+                pd.concat([overlay, extra], ignore_index=True)
+                if not overlay.empty
+                else extra.copy()
+            )
+    return overlay if overlay is not None else pd.DataFrame()
+
+
+def _fill_team_identity(overlay: pd.DataFrame, lahman: pd.DataFrame) -> pd.DataFrame:
+    """Prefer historical Lahman names / franchise ids when team_id already exists."""
+    out = overlay.copy()
+    if out.empty or lahman is None or lahman.empty or "team_id" not in out.columns:
+        return out
+    if "team_id" not in lahman.columns:
+        return out
+    sort_col = "year_id" if "year_id" in lahman.columns else lahman.columns[0]
+    latest = lahman.sort_values(sort_col).groupby("team_id", as_index=False).last()
+    rename = {}
+    for src, dest in (
+        ("team_name", "_lahman_team_name"),
+        ("franchise_id", "_lahman_franchise_id"),
+        ("league_id", "_lahman_league_id"),
+    ):
+        if src in latest.columns:
+            rename[src] = dest
+    latest = latest[["team_id", *rename.keys()]].rename(columns=rename)
+    out = out.merge(latest, on="team_id", how="left")
+    if "_lahman_team_name" in out.columns:
+        out["team_name"] = out["_lahman_team_name"].combine_first(out.get("team_name"))
+    if "_lahman_franchise_id" in out.columns:
+        if "franchise_id" not in out.columns:
+            out["franchise_id"] = pd.NA
+        out["franchise_id"] = out["_lahman_franchise_id"].combine_first(out["franchise_id"])
+    if "_lahman_league_id" in out.columns:
+        if "league_id" not in out.columns:
+            out["league_id"] = pd.NA
+        out["league_id"] = out["_lahman_league_id"].combine_first(out["league_id"])
+    return out.drop(columns=[c for c in out.columns if c.startswith("_lahman_")])
+
+
+def _apply_team_counting_proxy(frame: pd.DataFrame) -> pd.DataFrame:
+    """Approx team WAR from rolled-up counting stats. Never written to the spine."""
+    out = frame.copy()
+    if out.empty:
+        return out
+    if "team_total_war" not in out.columns:
+        out["team_total_war"] = pd.NA
+    missing = pd.to_numeric(out["team_total_war"], errors="coerce").isna()
+    if missing.any():
+        proxy = out.loc[missing].apply(approx_vs_replacement_from_counting, axis=1)
+        out.loc[missing, "team_total_war"] = proxy
+        if "team_batting_war" in out.columns:
+            bat_missing = missing & pd.to_numeric(out["team_batting_war"], errors="coerce").isna()
+            out.loc[bat_missing, "team_batting_war"] = out.loc[bat_missing, "team_total_war"]
+        if "team_pitching_war" in out.columns:
+            pit_missing = missing & pd.to_numeric(out["team_pitching_war"], errors="coerce").isna()
+            out.loc[pit_missing, "team_pitching_war"] = 0.0
+    if "war_source" not in out.columns:
+        out["war_source"] = "approx"
+    else:
+        out["war_source"] = out["war_source"].fillna("approx")
+    return out
+
+
+def _derive_team_onfield(frame: pd.DataFrame) -> pd.DataFrame:
+    """Fill run_diff / Pythag from RS/RA/G when SDIO has them. No invented payroll."""
+    out = frame.copy()
+    if out.empty:
+        return out
+    rs = pd.to_numeric(out["runs_scored"], errors="coerce") if "runs_scored" in out.columns else pd.Series(pd.NA, index=out.index)
+    ra = pd.to_numeric(out["runs_allowed"], errors="coerce") if "runs_allowed" in out.columns else pd.Series(pd.NA, index=out.index)
+    games = pd.to_numeric(out["games"], errors="coerce") if "games" in out.columns else pd.Series(pd.NA, index=out.index)
+    wins = pd.to_numeric(out["wins"], errors="coerce") if "wins" in out.columns else pd.Series(pd.NA, index=out.index)
+    war = pd.to_numeric(out["team_total_war"], errors="coerce") if "team_total_war" in out.columns else pd.Series(pd.NA, index=out.index)
+
+    if "run_diff" not in out.columns:
+        out["run_diff"] = pd.NA
+    run_missing = pd.to_numeric(out["run_diff"], errors="coerce").isna()
+    out.loc[run_missing, "run_diff"] = (rs - ra)[run_missing]
+
+    score_mask = rs.notna() & ra.notna() & games.notna() & (games > 0)
+    if score_mask.any():
+        pythag = pythagorean_wins(rs.fillna(0), ra.fillna(0), games.fillna(0))
+        if "pythag_wins" not in out.columns:
+            out["pythag_wins"] = pd.NA
+        pythag_missing = pd.to_numeric(out["pythag_wins"], errors="coerce").isna()
+        out.loc[score_mask & pythag_missing, "pythag_wins"] = pythag[score_mask & pythag_missing]
+        if "pythag_gap" not in out.columns:
+            out["pythag_gap"] = pd.NA
+        gap_mask = score_mask & wins.notna() & pd.to_numeric(out["pythag_gap"], errors="coerce").isna()
+        if gap_mask.any():
+            out.loc[gap_mask, "pythag_gap"] = pythag_gap(wins, pythag)[gap_mask]
+
+    if "war_win_gap" not in out.columns:
+        out["war_win_gap"] = pd.NA
+    war_mask = wins.notna() & war.notna() & pd.to_numeric(out["war_win_gap"], errors="coerce").isna()
+    if war_mask.any():
+        out.loc[war_mask, "war_win_gap"] = war_win_gap(wins, war)[war_mask]
+    return out
+
+
+def _project_team_publish_columns(overlay: pd.DataFrame, lahman: pd.DataFrame) -> pd.DataFrame:
+    cols = list(
+        dict.fromkeys(
+            [
+                *(lahman.columns.tolist() if lahman is not None and not lahman.empty else []),
+                *TEAM_PUBLISH_COLUMNS,
+                "stat_source",
+            ]
+        )
+    )
+    out = overlay.copy()
+    for col in cols:
+        if col not in out.columns:
+            out[col] = pd.NA
+    return out[cols]
+
+
 def bridge_sdio_player_season_metrics(
     lahman_df: pd.DataFrame,
     season_df: pd.DataFrame | None = None,
@@ -596,54 +1545,80 @@ def bridge_sdio_player_season_metrics(
     That proxy is never written back onto ``player_season_stat``.
     """
     resolved_window = list(window) if window else default_season_window(as_of_date)
-    active = resolved_window[-1] if resolved_window else int(str(as_of_date)[:4])
     lahman = lahman_df.copy() if lahman_df is not None else pd.DataFrame()
     lahman_years = _year_set(lahman)
     overlay = select_sdio_overlay_frame(
         season_df, game_df, window=resolved_window, lahman_years=lahman_years
     )
-    overlay_years = sorted(_year_set(overlay))
     if not overlay.empty:
         overlay = _apply_counting_proxy(overlay)
         if "stat_source" not in overlay.columns:
             overlay["stat_source"] = "sportsdataio"
         combined = pd.concat([lahman, overlay], ignore_index=True) if not lahman.empty else overlay
     else:
+        overlay = pd.DataFrame()
         combined = lahman
 
-    seasons_present = sorted(_year_set(combined))
-    active_present = active in seasons_present
-    if active in overlay_years:
-        active_source: str | None = "sportsdataio"
-        missing_reason = None
-    elif active in lahman_years:
-        active_source = "lahman"
-        missing_reason = None
-    elif (season_df is not None and not season_df.empty) or (
-        game_df is not None and not game_df.empty
-    ):
-        active_source = None
-        missing_reason = "sdio_empty_active_season"
-    else:
-        active_source = None
-        missing_reason = "sdio_unavailable"
-
-    sdio_in_season = extract_had_in_season(extract_report, active_season=active)
-    if not sdio_in_season:
-        sdio_in_season = active in _year_set(season_df) or active in _year_set(game_df)
-
-    coverage = SeasonCoverage(
+    coverage = coverage_from_frames(
         as_of_date=as_of_date,
-        active_season=active,
-        season_window=resolved_window,
-        seasons_present=seasons_present,
-        overlay_seasons=overlay_years,
-        overlay_rows=int(len(overlay)),
-        active_season_present=active_present,
-        active_season_source=active_source,
-        current_season_missing=not active_present,
-        current_season_missing_reason=missing_reason if not active_present else None,
-        sdio_in_season=sdio_in_season,
+        window=resolved_window,
+        combined=combined,
+        overlay=overlay,
+        lahman_years=lahman_years,
+        source_present=_source_frames_present(season_df, game_df),
+        extract_report=extract_report,
+        season_df=season_df,
+        game_df=game_df,
+    )
+    return combined, coverage
+
+
+def bridge_sdio_team_season_metrics(
+    lahman_df: pd.DataFrame,
+    season_df: pd.DataFrame | None = None,
+    game_df: pd.DataFrame | None = None,
+    standings_df: pd.DataFrame | None = None,
+    *,
+    as_of_date: str,
+    window: list[int] | None = None,
+) -> tuple[pd.DataFrame, SeasonCoverage]:
+    """UNION SDIO team-season rows onto Lahman team metrics for missing window years.
+
+    Overlay vs new publish path: same ``team_onfield_contract_metrics.csv`` FO
+    already loads. Historical Lahman + BR team rows stay intact. Overlay WAR is
+    ``approx``; payroll is left null. Nothing is written back onto the SDIO spine.
+    """
+    resolved_window = list(window) if window else default_season_window(as_of_date)
+    lahman = lahman_df.copy() if lahman_df is not None else pd.DataFrame()
+    lahman_years = _year_set(lahman)
+    overlay = select_sdio_team_overlay_frame(
+        season_df,
+        game_df,
+        standings_df,
+        window=resolved_window,
+        lahman_years=lahman_years,
+    )
+    if not overlay.empty:
+        overlay = _fill_team_identity(overlay, lahman)
+        overlay = _apply_team_counting_proxy(overlay)
+        overlay = _derive_team_onfield(overlay)
+        if "stat_source" not in overlay.columns:
+            overlay["stat_source"] = "sportsdataio"
+        overlay = _project_team_publish_columns(overlay, lahman)
+        combined = pd.concat([lahman, overlay], ignore_index=True) if not lahman.empty else overlay
+    else:
+        overlay = pd.DataFrame()
+        combined = lahman
+
+    coverage = coverage_from_frames(
+        as_of_date=as_of_date,
+        window=resolved_window,
+        combined=combined,
+        overlay=overlay,
+        lahman_years=lahman_years,
+        source_present=_source_frames_present(season_df, game_df, standings_df),
+        season_df=season_df,
+        game_df=game_df,
     )
     return combined, coverage
 
@@ -654,16 +1629,22 @@ def write_metrics_manifest(artifacts_dir: Path, coverage: SeasonCoverage) -> Pat
     return dest
 
 
-def load_sdio_metric_frames(con: duckdb.DuckDBPyConnection) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
-    season_df = None
-    game_df = None
+def load_sdio_metric_frames(con: duckdb.DuckDBPyConnection) -> SdioPublishFrames:
+    frames = SdioPublishFrames()
     if _table_has_rows(con, "player_season_stat"):
-        season_df = con.execute(_SDIO_PLAYER_SEASON_QUERY).fetchdf()
-        log.info("SportsDataIO player_season_stat available — %d season rows", len(season_df))
+        frames.player_season = con.execute(_SDIO_PLAYER_SEASON_QUERY).fetchdf()
+        log.info("SportsDataIO player_season_stat available — %d season rows", len(frames.player_season))
+        frames.team_season = con.execute(_SDIO_TEAM_SEASON_QUERY).fetchdf()
+        log.info("SportsDataIO team season rollup — %d rows", len(frames.team_season))
     if _table_has_rows(con, "player_game_stat"):
-        game_df = con.execute(_SDIO_PLAYER_GAME_ROLLUP_QUERY).fetchdf()
-        log.info("SportsDataIO player_game_stat available — %d rolled-up rows", len(game_df))
-    return season_df, game_df
+        frames.player_game = con.execute(_SDIO_PLAYER_GAME_ROLLUP_QUERY).fetchdf()
+        log.info("SportsDataIO player_game_stat available — %d rolled-up rows", len(frames.player_game))
+        frames.team_game = con.execute(_SDIO_TEAM_GAME_ROLLUP_QUERY).fetchdf()
+        log.info("SportsDataIO team game rollup — %d rows", len(frames.team_game))
+    if _table_has_rows(con, "game"):
+        frames.team_standings = con.execute(_SDIO_TEAM_STANDINGS_QUERY).fetchdf()
+        log.info("SportsDataIO team standings from game — %d rows", len(frames.team_standings))
+    return frames
 
 
 @app.command()
@@ -678,7 +1659,7 @@ def main(config_path: str = "config/settings.yaml") -> None:
 
     log.info("Querying player metrics")
     player_df = con.execute(_PLAYER_QUERY).fetchdf()
-    sdio_season_df, sdio_game_df = load_sdio_metric_frames(con)
+    sdio_frames = load_sdio_metric_frames(con)
 
     # ---- Sportradar enrichment (only if data was pulled) ----
     sr_player_df: pd.DataFrame | None = None
@@ -701,7 +1682,39 @@ def main(config_path: str = "config/settings.yaml") -> None:
 
     con.close()
 
-    # ---- Team exports ----
+    as_of = default_as_of_date()
+    window = seasons_from_settings(settings, as_of)
+    extract_report = read_raw_payload(
+        endpoint=ENDPOINT_EXTRACT_REPORT,
+        as_of_date=as_of,
+        filename="extract_report.json",
+        raw_dir=settings["raw_dir"],
+    )
+
+    # ---- Team exports (Lahman + SDIO overlay for window years Lahman lacks) ----
+    team_df, team_coverage = bridge_sdio_team_season_metrics(
+        team_df,
+        sdio_frames.team_season,
+        sdio_frames.team_game,
+        sdio_frames.team_standings,
+        as_of_date=as_of,
+        window=window,
+    )
+    if team_coverage.current_season_missing:
+        log.warning(
+            "Active season %s is missing from team_onfield_contract_metrics (%s). "
+            "Prior-only team metrics are not current-year.",
+            team_coverage.active_season,
+            team_coverage.current_season_missing_reason or "unknown",
+        )
+    else:
+        log.info(
+            "Active team season %s present via %s; overlay seasons=%s",
+            team_coverage.active_season,
+            team_coverage.active_season_source,
+            team_coverage.overlay_seasons,
+        )
+
     team_df.to_csv(artifacts_dir / "team_onfield_contract_metrics.csv", index=False)
     log.info("Wrote team_onfield_contract_metrics.csv (%d rows)", len(team_df))
 
@@ -728,22 +1741,22 @@ def main(config_path: str = "config/settings.yaml") -> None:
     log.info("Wrote team_window_phases.csv (%d rows)", len(window_df))
 
     # ---- Player exports ----
-    as_of = default_as_of_date()
-    window = seasons_from_settings(settings, as_of)
-    extract_report = read_raw_payload(
-        endpoint=ENDPOINT_EXTRACT_REPORT,
-        as_of_date=as_of,
-        filename="extract_report.json",
-        raw_dir=settings["raw_dir"],
-    )
     player_df, coverage = bridge_sdio_player_season_metrics(
         player_df,
-        sdio_season_df,
-        sdio_game_df,
+        sdio_frames.player_season,
+        sdio_frames.player_game,
         as_of_date=as_of,
         window=window,
         extract_report=extract_report if isinstance(extract_report, dict) else None,
     )
+    raw_dir = Path(settings["raw_dir"])
+    player_df = attach_published_individual_lines(
+        player_df,
+        batting=_optional_csv(raw_dir / "batting.csv"),
+        pitching=_optional_csv(raw_dir / "pitching.csv"),
+        fielding=_optional_csv(raw_dir / "fielding.csv"),
+    )
+    coverage = attach_team_coverage(coverage, team_coverage)
     if coverage.current_season_missing:
         log.warning(
             "Active season %s is missing from player_season_metrics (%s). "
@@ -762,7 +1775,12 @@ def main(config_path: str = "config/settings.yaml") -> None:
     player_df.to_csv(artifacts_dir / "player_season_metrics.csv", index=False)
     log.info("Wrote player_season_metrics.csv (%d rows)", len(player_df))
     write_metrics_manifest(artifacts_dir, coverage)
-    log.info("Wrote %s (current_season_missing=%s)", METRICS_MANIFEST_NAME, coverage.current_season_missing)
+    log.info(
+        "Wrote %s (current_season_missing=%s team_current_season_missing=%s)",
+        METRICS_MANIFEST_NAME,
+        coverage.current_season_missing,
+        coverage.team_current_season_missing,
+    )
     cards_path = emit_ranked_fantasy_cards(
         artifacts_dir, as_of_date=as_of, player_df=player_df
     )
