@@ -43,7 +43,8 @@ Recommendation labels (schema v1.0): `start` → START, `sit` → BENCH, `pickup
 ## Soft-launch UX
 
 - **Invite-only** chip sits next to the BenchOrStart wordmark.
-- Share cards render **above** the waitlist form, tabbed by **All / START / BENCH / PICK UP / STREAM**.
+- Local Next.js boot is signed in as `demo@benchorstart.local` (browser mock; not Clerk). Log out / Log in flip that flag only. Real login is [#158](https://github.com/cfmurph/baseball_team_efficiency_engine/issues/158).
+- Share cards render on `/`, tabbed by **All / START / BENCH / PICK UP / STREAM**. Waitlist is not the Next.js CTA.
 - When `share.headline` is empty, the card H2 is the **player name** (`player.name`). The START/BENCH/PICK UP/STREAM badge stays a separate pill — do not reuse the recommendation label as the title.
 - Face copy says **edge** for `edge.vs_replacement` (for example `+1.6 edge`). The schema field name is unchanged. Stub / sample `share.stat_line` should be empty or use **edge**. If an emitter still sends `vs repl` / `vs replacement`, render (card face, Copy text, Download image) rewrites it to **edge** or omits the line.
 - Each card has **Copy text** (league-chat blurb: decision + player + stat line + reason + as-of) and **Download image** (canvas PNG in Next.js; Pillow in the Streamlit fallback).
@@ -69,14 +70,15 @@ The web UI shows a not-current-year banner when `current_season_missing` is true
 - **Cards from API or stub.** Unset `NEXT_PUBLIC_API_URL` → four stubs (Steer / Suárez / Judge / Soler) and the sample caption. Set the URL → `/v1/cards` only; empty API payloads stay empty (no silent 2026 invention).
 - **Players directory.** `/players` + `/players/[id]`. Card names on `/` deep-link via `player.player_id`. Silent 50 PA / 20 IP floor.
 - **Compare.** `/compare?mode=players&season=&ids=` — 2–4 players, search slots + stats table. Player page **Add to compare** deep-links into that URL using the same `player_id`. Teams nav is visible but disabled.
-- **Waitlist.** Email-only. Next route `POST /api/waitlist` validates, optionally POSTs `FANTASY_WAITLIST_WEBHOOK`, appends `data/waitlist/signups.jsonl` when the disk allows, otherwise no-op with the success state. Streamlit fallback uses `fantasy/waitlist.py`.
+- **Waitlist.** Not the Next.js CTA. The form is hidden on `apps/web`. `POST /api/waitlist` and `fantasy/waitlist.py` remain for the Streamlit fallback.
+- **Local mock session.** Header shows `demo@benchorstart.local` + Log out. No identity API. Real login is #158.
 - **No `vs repl`.** Face copy, Copy text, and Download image say **edge**. Schema field `edge.vs_replacement` is unchanged.
 - **Approx badge.** `war_source=approx` or `is_approx` shows the **early model** badge and hides confidence.
 - **Copy lock.** `packages/card-schema` strings must match `fantasy/copy.py` (Invite only, sit→BENCH, tabs, footer).
 
 ## Waitlist hook (marketing)
 
-The form is email-only. Default sink is a local JSONL file:
+Not the Next.js CTA. The Streamlit fallback still uses this email-only hook. Default sink is a local JSONL file:
 
 ```text
 data/waitlist/signups.jsonl

@@ -1,5 +1,8 @@
 "use client";
 
+// Parked: Cole skipped waitlist. Home no longer mounts this as the CTA (#159).
+// Streamlit fallback still uses fantasy/waitlist.py. Real login is #158.
+
 import { FormEvent, useState } from "react";
 
 import { CTA, EMAIL_ERROR, MICROCOPY, SUCCESS } from "@bos/card-schema";
