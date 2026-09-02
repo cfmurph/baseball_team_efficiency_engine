@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import duckdb
 import pandas as pd
@@ -11,6 +12,7 @@ import pytest
 from pipeline.extract import pull_sportsdataio as pull_mod
 from pipeline.transform.build_warehouse import insert_sdio_spine_tables
 from src.baseball_analytics.schema import WAREHOUSE_DDL
+
 from src.baseball_analytics.sportsdataio import (
     API_KEY_ENV,
     ENDPOINT_PLAYER_SEASON_STATS,
@@ -29,6 +31,7 @@ from src.baseball_analytics.sportsdataio import (
     discover_as_of_dates,
     extract_had_in_season,
     load_sdio_frames,
+    load_team_map,
     local_raw_path,
     parse_games,
     parse_player_game_stats,
@@ -39,6 +42,7 @@ from src.baseball_analytics.sportsdataio import (
     raw_object_key,
     read_raw_payload,
     resolve_api_key,
+    resolve_as_of_date,
     sdio_date_token,
     seasons_from_settings,
     stable_uuid,
@@ -721,3 +725,262 @@ def test_warehouse_ddl_has_no_forked_stat_tables() -> None:
     assert "CREATE OR REPLACE TABLE external_id_alias" in WAREHOUSE_DDL
     assert "CREATE OR REPLACE TABLE player_game_stat" in WAREHOUSE_DDL
     assert "PRIMARY KEY (player_id, game_id)" in WAREHOUSE_DDL
+    assert "UNIQUE (system, entity_type, external_id)" in WAREHOUSE_DDL
+
+
+def test_parse_unwraps_payloads_and_drops_rows_missing_ids() -> None:
+    wrapped = parse_teams({"data": [{"TeamID": 31, "Key": "NYY"}, {"Key": "NOID"}]})
+    assert list(wrapped["sdio_team_id"]) == [31]
+    single = parse_teams({"TeamID": 20, "Key": "LAD"})
+    assert list(single["sdio_team_id"]) == [20]
+    assert parse_teams([]).empty
+    assert parse_teams(None).empty
+    assert parse_players([{"FirstName": "NoId"}]).empty
+    stats = parse_player_game_stats(
+        [
+            {"Name": "Missing both"},
+            {"PlayerID": 1, "Name": "Missing game"},
+            {"GameID": 2, "Name": "Missing player"},
+            {"PlayerID": 10001967, "GameID": 74546, "HomeRuns": 1},
+        ]
+    )
+    assert len(stats) == 1
+    assert int(stats.iloc[0]["sdio_player_id"]) == 10001967
+    assert parse_games([{"HomeTeam": "NYY"}]).empty
+
+
+def test_parse_numeric_sentinels_and_leading_dot() -> None:
+    stats = parse_player_game_stats(
+        [
+            {
+                "PlayerID": 42,
+                "GameID": 99,
+                "PlateAppearances": "--",
+                "Hits": True,
+                "HomeRuns": "",
+                "BattingAverage": ".311",
+                "EarnedRunAverage": ".---",
+                "InningsPitchedDecimal": "6.2",
+            }
+        ]
+    )
+    row = stats.iloc[0]
+    assert pd.isna(row["pa"])
+    assert pd.isna(row["hits"])
+    assert pd.isna(row["hr"])
+    assert row["avg"] == pytest.approx(0.311)
+    assert pd.isna(row["era"])
+    assert row["ip"] == pytest.approx(6.2)
+
+
+def test_alternate_mlbam_keys_join_lahman() -> None:
+    players = parse_players(
+        [{"PlayerID": 7, "FirstName": "Alt", "LastName": "Id", "MlbID": 592450}]
+    )
+    people = pd.DataFrame({"playerID": ["judgeaa01"], "mlbID": [592450], "bbrefID": ["judgeaa01"]})
+    joined = attach_lahman_aliases(players, people)
+    assert joined.iloc[0]["lahman_player_id"] == "judgeaa01"
+
+
+def test_attach_team_aliases_maps_oak_ath_and_latest_mia() -> None:
+    team_map = load_team_map(TEAM_MAP)
+    teams = pd.DataFrame(
+        {
+            "sdio_team_id": [11, 12, 13],
+            "sdio_abbr": ["OAK", "ATH", "MIA"],
+        }
+    )
+    mapped = attach_team_aliases(teams, team_map).set_index("sdio_abbr")
+    assert mapped.loc["OAK", "lahman_team_id"] == "OAK"
+    assert mapped.loc["ATH", "lahman_team_id"] == "ATH"
+    assert int(mapped.loc["OAK", "mlb_team_id"]) == 133
+    assert int(mapped.loc["ATH", "mlb_team_id"]) == 133
+    assert mapped.loc["MIA", "lahman_team_id"] == "MIA"
+    assert int(mapped.loc["MIA", "mlb_team_id"]) == 146
+
+
+def test_spine_collapses_duplicate_player_game_and_bootstraps_ids() -> None:
+    player_game = pd.DataFrame(
+        [
+            {
+                "sdio_player_id": 42,
+                "sdio_game_id": 99,
+                "sdio_team_id": 7,
+                "display_name": "Callup",
+                "hr": 1,
+                "pa": 4,
+            },
+            {
+                "sdio_player_id": 42,
+                "sdio_game_id": 99,
+                "sdio_team_id": 7,
+                "display_name": "Callup",
+                "hr": 2,
+                "pa": 4,
+            },
+        ]
+    )
+    frames = build_spine_frames(
+        teams=pd.DataFrame(),
+        players=pd.DataFrame(),
+        games=pd.DataFrame(),
+        player_game=player_game,
+        player_season=pd.DataFrame(),
+        as_of_date=AS_OF,
+        run_id="edge-run",
+        computed_at="2026-08-23T00:00:00Z",
+    )
+    assert len(frames.player_game_stat) == 1
+    assert int(frames.player_game_stat.iloc[0]["hr"]) == 1
+    assert frames.player_game_stat.iloc[0]["player_id"] == stable_uuid("player", 42)
+    assert frames.player_game_stat.iloc[0]["game_id"] == stable_uuid("game", 99)
+    assert list(frames.players["sdio_player_id"]) == [42]
+    assert list(frames.teams["sdio_team_id"]) == [7]
+    assert list(frames.games["sdio_game_id"]) == [99]
+    alias_keys = frames.aliases[["system", "entity_type", "external_id"]]
+    assert alias_keys.duplicated().sum() == 0
+    assert set(frames.aliases["system"]) <= {"sportsdataio", "mlb", "bbref", "fangraphs", "lahman"}
+    assert "fangraphs" not in set(frames.aliases["system"])
+    primary = frames.aliases[frames.aliases["is_primary"]]
+    assert set(primary["system"]) == {"sportsdataio"}
+
+
+def test_lake_key_rejects_path_traversal_and_empty_ids() -> None:
+    with pytest.raises(ValueError, match="endpoint token"):
+        raw_object_key("../teams", AS_OF, "teams.json")
+    with pytest.raises(ValueError, match="endpoint token"):
+        raw_object_key("teams/secret", AS_OF, "teams.json")
+    with pytest.raises(ValueError, match="Invalid raw filename"):
+        raw_object_key("teams", AS_OF, "..")
+    with pytest.raises(ValueError, match="Invalid raw filename"):
+        raw_object_key("teams", AS_OF, "")
+    escaped = raw_object_key("teams", AS_OF, "../secret.json")
+    assert escaped == f"{RAW_REMOTE_PREFIX}/teams/{AS_OF}/secret.json"
+    with pytest.raises(ValueError, match="empty"):
+        stable_uuid("player", "  ")
+
+
+def test_client_sends_key_as_header_not_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("src.baseball_analytics.sportsdataio._backoff", lambda *_a, **_k: None)
+    session = MagicMock()
+    response = MagicMock()
+    response.status_code = 200
+    response.json.return_value = [{"TeamID": 31}]
+    response.text = "ok"
+    session.get.return_value = response
+    client = SportsDataIOClient(
+        api_key="super-secret-key",
+        session=session,
+        min_interval=0,
+        max_retries=0,
+    )
+    payload = client.teams()
+    assert payload == [{"TeamID": 31}]
+    _args, kwargs = session.get.call_args
+    url = _args[0]
+    params = kwargs.get("params") or {}
+    headers = kwargs.get("headers") or {}
+    assert headers["Ocp-Apim-Subscription-Key"] == "super-secret-key"
+    assert "key" not in params
+    assert "super-secret-key" not in url
+    assert "?key=" not in url
+
+
+def test_client_401_does_not_retry_and_hides_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("src.baseball_analytics.sportsdataio._backoff", lambda *_a, **_k: None)
+    session = MagicMock()
+    response = MagicMock()
+    response.status_code = 401
+    response.text = "unauthorized"
+    session.get.return_value = response
+    client = SportsDataIOClient(
+        api_key="super-secret-key",
+        session=session,
+        min_interval=0,
+        max_retries=3,
+    )
+    with pytest.raises(SportsDataIOError) as excinfo:
+        client.teams()
+    assert session.get.call_count == 1
+    assert excinfo.value.status_code == 401
+    assert "super-secret-key" not in str(excinfo.value)
+
+
+def test_client_retries_429_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("src.baseball_analytics.sportsdataio._backoff", lambda *_a, **_k: None)
+    busy = MagicMock()
+    busy.status_code = 429
+    busy.text = "slow down"
+    ok = MagicMock()
+    ok.status_code = 200
+    ok.json.return_value = [{"TeamID": 31}]
+    ok.text = "ok"
+    session = MagicMock()
+    session.get.side_effect = [busy, ok]
+    client = SportsDataIOClient(
+        api_key="test-key",
+        session=session,
+        min_interval=0,
+        max_retries=1,
+    )
+    assert client.teams() == [{"TeamID": 31}]
+    assert session.get.call_count == 2
+
+
+def test_client_get_without_key_raises_missing() -> None:
+    client = SportsDataIOClient(api_key=None, environ={}, min_interval=0)
+    with pytest.raises(MissingApiKeyError):
+        client.teams()
+
+
+def test_date_endpoints_use_month_abbrev_token() -> None:
+    seen: list[str] = []
+
+    def fetcher(path: str, params: dict) -> list:
+        seen.append(path)
+        return []
+
+    client = SportsDataIOClient(api_key="test-key", fetcher=fetcher, min_interval=0)
+    client.games_by_date("2024-07-31")
+    client.player_game_stats_by_date("2017-09-01")
+    assert seen[0].endswith("/GamesByDate/2024-JUL-31")
+    assert seen[1].endswith("/PlayerGameStatsByDate/2017-SEP-01")
+
+
+def test_seasons_from_settings_prefers_env_then_yaml() -> None:
+    assert seasons_from_settings({}, "2026-08-23", environ={}) == [2026]
+    assert seasons_from_settings(
+        {"sportsdataio": {"seasons": [2024, 2025]}},
+        "2026-08-23",
+        environ={},
+    ) == [2024, 2025]
+    assert seasons_from_settings(
+        {"sportsdataio": {"seasons": [2024]}},
+        "2026-08-23",
+        environ={"SPORTSDATAIO_SEASONS": "2023, 2024"},
+    ) == [2023, 2024]
+
+
+def test_resolve_as_of_date_prefers_explicit_then_local(tmp_path: Path) -> None:
+    write_raw_payload(
+        [{"TeamID": 1}],
+        endpoint=ENDPOINT_TEAMS,
+        as_of_date="2024-07-01",
+        filename="teams.json",
+        raw_dir=tmp_path,
+    )
+    assert resolve_as_of_date(tmp_path, as_of_date="2026-08-23") == "2026-08-23"
+    assert (
+        resolve_as_of_date(tmp_path, environ={"ARTIFACTS_AS_OF_DATE": "2024-07-01"})
+        == "2024-07-01"
+    )
+    assert (
+        resolve_as_of_date(tmp_path, environ={"ARTIFACTS_AS_OF_DATE": "1999-01-01"})
+        == "2024-07-01"
+    )
+    empty = tmp_path / "empty-raw"
+    empty.mkdir()
+    assert (
+        resolve_as_of_date(empty, environ={"ARTIFACTS_AS_OF_DATE": "2024-07-04"})
+        == "2024-07-04"
+    )
