@@ -45,7 +45,7 @@ a {
 }
 
 .bos-shell-wide {
-  --max: 58rem;
+  --max: 96rem;
 }
 
 .bos-top {
@@ -532,14 +532,18 @@ a {
 }
 
 .bos-table-wrap {
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--bg-raise);
+  -webkit-overflow-scrolling: touch;
 }
 
 .bos-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: 0.92rem;
 }

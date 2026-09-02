@@ -202,10 +202,10 @@ test("compareHrefForPlayer appends onto stored ids", () => {
 
 test("slot search matches name team pos and ranks by WAR", () => {
   const pool: PlayerListItem[] = [
-    { player_id: "low", name: "Low War", position: "OF", team: "BOS", season: 2025, side: "hitting", pa: 200, ip: null, war: 1.1, edge: null, line: "", fpct: null, fielding_line: "" },
-    { player_id: "tiny", name: "Twelve PA", position: "OF", team: "SEA", season: 2025, side: "hitting", pa: 12, ip: null, war: 8, edge: null, line: "", fpct: null, fielding_line: "" },
-    { player_id: "high", name: "High War", position: "SP", team: "NYY", season: 2025, side: "pitching", pa: null, ip: 80, war: 4.2, edge: null, line: "", fpct: null, fielding_line: "" },
-    { player_id: "taken", name: "Already In", position: "1B", team: "CIN", season: 2025, side: "hitting", pa: 300, ip: null, war: 5, edge: null, line: "", fpct: null, fielding_line: "" },
+    { player_id: "low", name: "Low War", position: "OF", team: "BOS", season: 2025, side: "hitting", pa: 200, ip: null, war: 1.1, edge: null, line: "", fpct: null, fielding_line: "", hitting: null, pitching: null, fielding: [] },
+    { player_id: "tiny", name: "Twelve PA", position: "OF", team: "SEA", season: 2025, side: "hitting", pa: 12, ip: null, war: 8, edge: null, line: "", fpct: null, fielding_line: "", hitting: null, pitching: null, fielding: [] },
+    { player_id: "high", name: "High War", position: "SP", team: "NYY", season: 2025, side: "pitching", pa: null, ip: 80, war: 4.2, edge: null, line: "", fpct: null, fielding_line: "", hitting: null, pitching: null, fielding: [] },
+    { player_id: "taken", name: "Already In", position: "1B", team: "CIN", season: 2025, side: "hitting", pa: 300, ip: null, war: 5, edge: null, line: "", fpct: null, fielding_line: "", hitting: null, pitching: null, fielding: [] },
   ];
   const yankees = filterSlotCandidates(pool, "nyy", ["taken"]);
   assert.deepEqual(yankees.map((row) => row.player_id), ["high"]);

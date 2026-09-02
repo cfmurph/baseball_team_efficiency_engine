@@ -312,6 +312,9 @@ export type PlayerListItem = {
   line: string;
   fpct: number | null;
   fielding_line: string;
+  hitting: HittingSeason | null;
+  pitching: PitchingSeason | null;
+  fielding: FieldingSeason[];
 };
 
 export type PlayersQuery = {
@@ -1000,6 +1003,10 @@ function parsePitchingGame(value: unknown): PitchingGame | null {
 
 function seasonLooksLikePitching(raw: Record<string, unknown>): boolean {
   const type = text(raw.player_type).toLowerCase();
+  if (type === "batter" || type === "hitting" || type === "hitter") {
+    const ip = num(raw.ip);
+    return (ip !== null && ip > 0) || num(raw.era) !== null || num(raw.whip) !== null;
+  }
   if (type === "pitcher" || type === "pitching") {
     return true;
   }
@@ -1008,10 +1015,32 @@ function seasonLooksLikePitching(raw: Record<string, unknown>): boolean {
 
 function seasonLooksLikeHitting(raw: Record<string, unknown>): boolean {
   const type = text(raw.player_type).toLowerCase();
+  if (type === "pitcher" || type === "pitching") {
+    const pa = num(raw.pa);
+    return (pa !== null && pa > 0) && (
+      num(raw.avg) !== null || num(raw.ops) !== null || num(raw.h ?? raw.hits) !== null
+    );
+  }
   if (type === "batter" || type === "hitting" || type === "hitter") {
     return true;
   }
   return num(raw.pa) !== null || num(raw.avg) !== null || num(raw.ops) !== null;
+}
+
+function hittingSeasonPresent(row: HittingSeason | null): row is HittingSeason {
+  if (!row) {
+    return false;
+  }
+  return [row.pa, row.ab, row.h, row.hr, row.r, row.rbi, row.bb, row.so, row.avg, row.obp, row.slg, row.ops]
+    .some((value) => value !== null && value !== undefined);
+}
+
+function pitchingSeasonPresent(row: PitchingSeason | null): row is PitchingSeason {
+  if (!row) {
+    return false;
+  }
+  return [row.ip, row.era, row.whip, row.so, row.er, row.w, row.l, row.gs, row.sv]
+    .some((value) => value !== null && value !== undefined);
 }
 
 function expandPublishedSeasons(seasons: unknown[]): {
@@ -1110,15 +1139,25 @@ function parseListItem(value: unknown, fallbackSeason: number): PlayerListItem |
     return null;
   }
   const season = num(raw.season) ?? fallbackSeason;
-  const side: PlayerSide = text(raw.side).toLowerCase() === "pitching" ? "pitching" : "hitting";
-  const hitting = parseHittingSeason({ ...raw, season });
-  const pitching = parsePitchingSeason({ ...raw, season });
-  const pa = num(raw.pa);
-  const ip = num(raw.ip);
-  const war = num(raw.war);
+  const declaredSide = text(raw.side).toLowerCase();
+  const hitting = seasonLooksLikeHitting(raw) ? parseHittingSeason({ ...raw, season }) : null;
+  const pitching = seasonLooksLikePitching(raw) ? parsePitchingSeason({ ...raw, season }) : null;
+  const keptHitting = hittingSeasonPresent(hitting) ? hitting : null;
+  const keptPitching = pitchingSeasonPresent(pitching) ? pitching : null;
+  const side: PlayerSide = declaredSide === "pitching" || declaredSide === "hitting"
+    ? declaredSide
+    : (isPitcherPosition(player.position) && keptPitching) || (!keptHitting && keptPitching)
+      ? "pitching"
+      : "hitting";
+  const pa = num(raw.pa) ?? keptHitting?.pa ?? null;
+  const ip = num(raw.ip) ?? keptPitching?.ip ?? null;
+  const war = num(raw.war)
+    ?? (side === "pitching" ? keptPitching?.war ?? null : keptHitting?.war ?? null);
   const line = text(raw.line)
-    || (side === "pitching" && pitching ? pitchingLine(pitching) : "")
-    || (hitting ? hittingLine(hitting) : "");
+    || (side === "pitching" && keptPitching ? pitchingLine(keptPitching) : "")
+    || (keptHitting ? hittingLine(keptHitting) : "");
+  const fielding = parseFieldingBlob(raw, season);
+  const primaryField = fielding[0] || parseFieldingSeason({ ...raw, season }, season);
   return {
     player_id: player.player_id,
     name: player.name,
@@ -1131,8 +1170,11 @@ function parseListItem(value: unknown, fallbackSeason: number): PlayerListItem |
     war,
     edge: num(raw.edge ?? raw.vs_replacement),
     line,
-    fpct: num(raw.fpct),
-    fielding_line: fieldingSignal(parseFieldingSeason({ ...raw, season }, season)),
+    fpct: num(raw.fpct) ?? primaryField?.fpct ?? null,
+    fielding_line: fieldingSignal(primaryField),
+    hitting: keptHitting,
+    pitching: keptPitching,
+    fielding,
   };
 }
 
@@ -1145,26 +1187,11 @@ export function parsePlayersList(
     .map((row) => {
       const rec = asRecord(row);
       const seasons = asList(rec.seasons);
-      if (!seasons.length) {
-        return parseListItem(row, fallbackSeason);
+      if (seasons.length) {
+        const detail = parsePlayerDetail({ player: rec }, "api");
+        return detail ? listItemFromDetail(detail, fallbackSeason) : null;
       }
-      const match =
-        seasons.find((season) => num(asRecord(season).season) === fallbackSeason) ||
-        (Number.isFinite(fallbackSeason) ? null : seasons[0]);
-      if (!match) {
-        return null;
-      }
-      const line = asRecord(match);
-      return parseListItem(
-        {
-          player_id: rec.player_id,
-          name: rec.name,
-          position: rec.position || line.position,
-          team: rec.team || line.team,
-          ...line,
-        },
-        fallbackSeason,
-      );
+      return parseListItem(row, fallbackSeason);
     })
     .filter((row): row is PlayerListItem => row !== null);
 }
@@ -1182,9 +1209,10 @@ export function listItemFromDetail(
   const preferPitching = isPitcherPosition(detail.player.position);
   const side: PlayerSide = preferPitching && pitching ? "pitching" : hitting ? "hitting" : "pitching";
   const war = side === "pitching" ? (pitching?.war ?? null) : (hitting?.war ?? null);
-  const fielding = detail.fielding.find((row) => row.season === season) || null;
+  const fielding = detail.fielding.filter((row) => row.season === season);
+  const primaryField = fielding[0] || null;
   const off = side === "pitching" && pitching ? pitchingLine(pitching) : hitting ? hittingLine(hitting) : "";
-  const def = fieldingSignal(fielding);
+  const def = fieldingSignal(primaryField);
   return {
     player_id: detail.player.player_id,
     name: detail.player.name,
@@ -1197,8 +1225,11 @@ export function listItemFromDetail(
     war,
     edge,
     line: off,
-    fpct: fielding?.fpct ?? null,
+    fpct: primaryField?.fpct ?? null,
     fielding_line: def,
+    hitting,
+    pitching,
+    fielding,
   };
 }
 
