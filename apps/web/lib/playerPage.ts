@@ -19,6 +19,8 @@ import {
   type PitchingGame,
   type PitchingSeason,
   type PlayerDetail,
+  type PlayerListItem,
+  type PlayerSide,
 } from "@bos/api-client";
 
 export const EMPTY_FIELDING_COPY = "No fielding line for this season";
@@ -247,4 +249,60 @@ export function pitchingGameColumns(games: PitchingGame[]): string[] {
     "K",
     ...(extra.decision ? ["Dec"] : []),
   ];
+}
+
+export function unionPresentColumns(cellLists: StatCell[][]): StatCell[] {
+  const seen = new Set<string>();
+  const columns: StatCell[] = [];
+  for (const cells of cellLists) {
+    for (const cell of cells) {
+      if (seen.has(cell.key)) {
+        continue;
+      }
+      seen.add(cell.key);
+      columns.push({ key: cell.key, label: cell.label, value: "" });
+    }
+  }
+  return columns;
+}
+
+export function directoryHittingColumns(rows: HittingSeason[]): StatCell[] {
+  return unionPresentColumns(rows.map(hittingStandardCells));
+}
+
+export function directoryHittingAdvancedColumns(rows: HittingSeason[]): StatCell[] {
+  return unionPresentColumns(rows.map(hittingAdvancedCells));
+}
+
+export function directoryPitchingColumns(rows: PitchingSeason[]): StatCell[] {
+  return unionPresentColumns(rows.map(pitchingStandardCells));
+}
+
+export function directoryPitchingAdvancedColumns(rows: PitchingSeason[]): StatCell[] {
+  return unionPresentColumns(rows.map(pitchingAdvancedCells));
+}
+
+export function directoryFieldingColumns(rows: FieldingSeason[]): StatCell[] {
+  return unionPresentColumns(rows.map(fieldingStandardCells));
+}
+
+export function directoryFieldingAdvancedColumns(rows: FieldingSeason[]): StatCell[] {
+  return unionPresentColumns(rows.map(fieldingAdvancedCells));
+}
+
+export function statValue(cells: StatCell[], key: string): string {
+  return cells.find((cell) => cell.key === key)?.value ?? "—";
+}
+
+export function directoryRowsForSide(rows: PlayerListItem[], side: PlayerSide): PlayerListItem[] {
+  return rows.filter((row) => {
+    if (side === "hitting") {
+      return Boolean(row.hitting) || (row.side === "hitting" && !row.pitching);
+    }
+    return Boolean(row.pitching) || (row.side === "pitching" && !row.hitting);
+  });
+}
+
+export function primaryFielding(row: PlayerListItem): FieldingSeason | null {
+  return row.fielding[0] ?? null;
 }
