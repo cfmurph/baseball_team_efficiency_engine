@@ -328,3 +328,213 @@ test("banner only when the selected year is the missing current season", () => {
   assert.equal(selectedYearMissing(health, 2025, false), false);
   assert.equal(selectedYearMissing(health, 2026, true), false);
 });
+
+test("leftover opposite-side zeros do not mint a second season", () => {
+  const leftoverBatter = parsePlayersList(
+    {
+      players: [{
+        player_id: "judgeaa01",
+        name: "Aaron Judge",
+        position: "OF",
+        team: "NYY",
+        seasons: [{
+          season: 2026,
+          player_type: "batter",
+          pa: 500,
+          hits: 140,
+          hr: 40,
+          avg: 0.35,
+          ops: 1.17,
+          ip: 0,
+          era: null,
+          whip: null,
+        }],
+      }],
+    },
+    2026,
+  );
+  assert.equal(leftoverBatter.length, 1);
+  assert.ok(leftoverBatter[0]?.hitting);
+  assert.equal(leftoverBatter[0]?.pitching, null);
+  assert.equal(leftoverBatter[0]?.side, "hitting");
+
+  const leftoverPitcher = parsePlayersList(
+    {
+      players: [{
+        player_id: "suarera02",
+        name: "Ranger Suárez",
+        position: "SP",
+        team: "PHI",
+        seasons: [{
+          season: 2026,
+          player_type: "pitcher",
+          pa: 0,
+          hits: 0,
+          avg: 0,
+          ops: 0,
+          ip: 150.1,
+          era: 2.57,
+          whip: 1.05,
+        }],
+      }],
+    },
+    2026,
+  );
+  assert.equal(leftoverPitcher.length, 1);
+  assert.equal(leftoverPitcher[0]?.hitting, null);
+  assert.ok(leftoverPitcher[0]?.pitching);
+  assert.equal(leftoverPitcher[0]?.side, "pitching");
+
+  const pitcherPaWithoutBattingLine = parsePlayersList(
+    {
+      players: [{
+        player_id: "nolaaa01",
+        name: "Aaron Nola",
+        position: "SP",
+        team: "PHI",
+        seasons: [{
+          season: 2026,
+          player_type: "pitcher",
+          pa: 12,
+          ip: 180,
+          era: 3.4,
+          whip: 1.12,
+        }],
+      }],
+    },
+    2026,
+  );
+  assert.equal(pitcherPaWithoutBattingLine[0]?.hitting, null);
+  assert.equal(pitcherPaWithoutBattingLine[0]?.pitching?.ip, 180);
+
+  const flatLeftoverBatter = parsePlayersList(
+    {
+      players: [{
+        player_id: "troutmi01",
+        name: "Mike Trout",
+        position: "OF",
+        team: "LAA",
+        season: 2026,
+        player_type: "batter",
+        pa: 400,
+        hits: 90,
+        avg: 0.22,
+        ip: 0,
+      }],
+    },
+    2026,
+  );
+  assert.equal(flatLeftoverBatter[0]?.hitting?.pa, 400);
+  assert.equal(flatLeftoverBatter[0]?.pitching, null);
+  assert.equal(flatLeftoverBatter[0]?.side, "hitting");
+});
+
+test("two-way published rows keep both sides and pick side from position", () => {
+  const list = parsePlayersList(
+    {
+      players: [
+        {
+          player_id: "ohtansh01",
+          name: "Shohei Ohtani",
+          position: "DH",
+          team: "LAD",
+          seasons: [{
+            season: 2026,
+            player_type: "batter",
+            pa: 600,
+            ab: 500,
+            hits: 150,
+            hr: 44,
+            avg: 0.3,
+            ops: 1.01,
+            ip: 130,
+            era: 3.1,
+            whip: 1.08,
+            war: 6.2,
+          }],
+        },
+        {
+          player_id: "yamaho01",
+          name: "Yoshinobu Yamamoto",
+          position: "SP",
+          team: "LAD",
+          seasons: [{
+            season: 2026,
+            player_type: "pitcher",
+            pa: 80,
+            hits: 18,
+            avg: 0.24,
+            ops: 0.68,
+            ip: 170,
+            era: 2.8,
+            whip: 1.02,
+            war: 5.1,
+          }],
+        },
+      ],
+    },
+    2026,
+  );
+  const ohtani = list.find((row) => row.player_id === "ohtansh01");
+  const yamamoto = list.find((row) => row.player_id === "yamaho01");
+  assert.equal(ohtani?.side, "hitting");
+  assert.equal(ohtani?.hitting?.hr, 44);
+  assert.equal(ohtani?.pitching?.ip, 130);
+  assert.equal(ohtani?.pitching?.era, 3.1);
+  assert.equal(ohtani?.war, 6.2);
+  assert.equal(yamamoto?.side, "pitching");
+  assert.equal(yamamoto?.pitching?.ip, 170);
+  assert.equal(yamamoto?.hitting?.pa, 80);
+  assert.equal(yamamoto?.hitting?.avg, 0.24);
+  assert.equal(yamamoto?.war, 5.1);
+});
+
+test("directory list item uses the requested year and keeps that year's fielding only", () => {
+  const payload = {
+    players: [{
+      player_id: "judgeaa01",
+      name: "Aaron Judge",
+      position: "OF",
+      team: "NYY",
+      seasons: [
+        {
+          season: 2024,
+          player_type: "batter",
+          pa: 704,
+          hits: 180,
+          hr: 58,
+          avg: 0.322,
+          war: 10.8,
+          fielding: [{ pos: "RF", g: 158, po: 300, a: 8, e: 4 }],
+        },
+        {
+          season: 2026,
+          player_type: "batter",
+          pa: 500,
+          hits: 140,
+          hr: 40,
+          avg: 0.35,
+          war: 6.1,
+          fielding: [
+            { pos: "RF", g: 100, po: 220, a: 6, e: 2 },
+            { pos: "CF", g: 12, po: 28, a: 1, e: 0 },
+          ],
+        },
+      ],
+    }],
+  };
+  const for2026 = parsePlayersList(payload, 2026);
+  assert.equal(for2026.length, 1);
+  assert.equal(for2026[0]?.hitting?.hr, 40);
+  assert.equal(for2026[0]?.hitting?.war, 6.1);
+  assert.equal(for2026[0]?.war, 6.1);
+  assert.deepEqual(for2026[0]?.fielding.map((row) => row.pos), ["RF", "CF"]);
+  assert.ok(for2026[0]?.fielding.every((row) => row.season === 2026));
+
+  const for2024 = parsePlayersList(payload, 2024);
+  assert.equal(for2024[0]?.hitting?.hr, 58);
+  assert.equal(for2024[0]?.war, 10.8);
+  assert.equal(for2024[0]?.fielding.length, 1);
+  assert.equal(for2024[0]?.fielding[0]?.pos, "RF");
+  assert.equal(for2024[0]?.fielding[0]?.g, 158);
+});
