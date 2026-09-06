@@ -15,6 +15,7 @@ from src.baseball_analytics.schema import WAREHOUSE_DDL
 
 from src.baseball_analytics.sportsdataio import (
     API_KEY_ENV,
+    ENDPOINT_GAMES,
     ENDPOINT_PLAYER_SEASON_STATS,
     ENDPOINT_TEAMS,
     NIGHTLY_EXTRACT_REPORT_NAME,
@@ -985,3 +986,107 @@ def test_resolve_as_of_date_prefers_explicit_then_local(tmp_path: Path) -> None:
         resolve_as_of_date(empty, environ={"ARTIFACTS_AS_OF_DATE": "2024-07-04"})
         == "2024-07-04"
     )
+
+
+def _phase0_fetcher(seen: list[str] | None = None):
+    def fetcher(path: str, params: dict):
+        if seen is not None:
+            seen.append(path)
+        if path.endswith("/Teams"):
+            return _payload("teams.json")
+        if path.endswith("/Players"):
+            return _payload("players.json")
+        if "GamesByDate" in path:
+            return _payload("games_by_date.json")
+        if "PlayerGameStatsByDate" in path:
+            return _payload("player_game_stats.json")
+        if "PlayerSeasonStats" in path:
+            return _payload("player_season_stats.json")
+        if path.rstrip("/").endswith("/Games/2024") or "/Games/2024" in path:
+            return _payload("games_by_date.json")
+        raise SportsDataIOError(f"unexpected path {path}")
+
+    return fetcher
+
+
+@pytest.mark.integration
+def test_default_extract_skips_season_wide_games(tmp_path: Path) -> None:
+    seen: list[str] = []
+    raw_dir = tmp_path / "raw"
+    client = SportsDataIOClient(api_key="test-key", fetcher=_phase0_fetcher(seen), min_interval=0)
+    report = pull_phase0_feeds(
+        raw_dir=raw_dir,
+        as_of_date=AS_OF,
+        seasons=[2024],
+        client=client,
+    )
+    assert report.ok
+    assert any("PlayerSeasonStats/2024" in path for path in seen)
+    assert not any(path.endswith("/Games/2024") for path in seen)
+    assert not local_raw_path(raw_dir, ENDPOINT_GAMES, AS_OF, "games_2024.json").is_file()
+    assert any(item.endpoint == ENDPOINT_PLAYER_SEASON_STATS and item.ok for item in report.endpoints)
+    assert not any(item.endpoint == ENDPOINT_GAMES for item in report.endpoints)
+
+
+@pytest.mark.integration
+def test_include_season_feeds_lands_games_and_player_season_stats(tmp_path: Path) -> None:
+    seen: list[str] = []
+    raw_dir = tmp_path / "raw"
+    client = SportsDataIOClient(api_key="test-key", fetcher=_phase0_fetcher(seen), min_interval=0)
+    report = pull_phase0_feeds(
+        raw_dir=raw_dir,
+        as_of_date=AS_OF,
+        seasons=[2024],
+        client=client,
+        include_season_feeds=True,
+    )
+    assert report.ok
+    assert any(path.endswith("/Games/2024") for path in seen)
+    assert any("PlayerSeasonStats/2024" in path for path in seen)
+    games_path = local_raw_path(raw_dir, ENDPOINT_GAMES, AS_OF, "games_2024.json")
+    season_path = local_raw_path(
+        raw_dir, ENDPOINT_PLAYER_SEASON_STATS, AS_OF, "player_season_stats_2024.json"
+    )
+    assert games_path.is_file()
+    assert season_path.is_file()
+    assert any(item.endpoint == ENDPOINT_GAMES and item.season == 2024 and item.ok for item in report.endpoints)
+    assert any(
+        item.endpoint == ENDPOINT_PLAYER_SEASON_STATS and item.season == 2024 and item.ok
+        for item in report.endpoints
+    )
+
+
+@pytest.mark.unit
+def test_load_sdio_frames_reads_season_games_json(tmp_path: Path) -> None:
+    raw_dir = tmp_path / "raw"
+    extra_game = {
+        "GameID": 80001,
+        "Season": 2024,
+        "SeasonType": 1,
+        "Status": "Final",
+        "Day": "2024-04-01T00:00:00",
+        "AwayTeam": "BOS",
+        "HomeTeam": "NYY",
+        "AwayTeamID": 16,
+        "HomeTeamID": 31,
+        "AwayTeamRuns": 1,
+        "HomeTeamRuns": 2,
+    }
+    write_raw_payload(
+        _payload("games_by_date.json"),
+        endpoint="games_by_date",
+        as_of_date=AS_OF,
+        filename=f"games_by_date_{AS_OF}.json",
+        raw_dir=raw_dir,
+    )
+    write_raw_payload(
+        [extra_game],
+        endpoint=ENDPOINT_GAMES,
+        as_of_date=AS_OF,
+        filename="games_2024.json",
+        raw_dir=raw_dir,
+    )
+    frames = load_sdio_frames(raw_dir, as_of_date=AS_OF)
+    ids = set(int(value) for value in frames.games["sdio_game_id"])
+    assert 74546 in ids
+    assert 80001 in ids
