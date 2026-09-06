@@ -327,6 +327,52 @@ test("directory list items keep published season numbers, not only rec strings",
   assert.equal(suarez?.pitching?.bf, 610);
 });
 
+test("pitching counts prefer pitching_* when batting leftovers disagree", () => {
+  const list = parsePlayersList(
+    {
+      players: [{
+        player_id: "nolaaa01",
+        name: "Aaron Nola",
+        position: "SP",
+        team: "PHI",
+        seasons: [{
+          season: 2026,
+          player_type: "pitcher",
+          pa: 0,
+          ip: 180,
+          so: 8,
+          bb: 1,
+          hits: 12,
+          hr: 2,
+          r: 3,
+          go: 20,
+          ao: 15,
+          pitching_so: 200,
+          pitching_bb: 50,
+          pitching_hits: 160,
+          pitching_hr: 22,
+          pitching_r: 70,
+          pitching_go: 240,
+          pitching_ao: 180,
+          era: 3.10,
+          whip: 1.11,
+        }],
+      }],
+    },
+    2026,
+  );
+  const nola = list[0];
+  assert.equal(nola?.side, "pitching");
+  assert.equal(nola?.hitting, null);
+  assert.equal(nola?.pitching?.so, 200);
+  assert.equal(nola?.pitching?.bb, 50);
+  assert.equal(nola?.pitching?.h, 160);
+  assert.equal(nola?.pitching?.hr, 22);
+  assert.equal(nola?.pitching?.r, 70);
+  assert.equal(nola?.pitching?.go, 240);
+  assert.equal(nola?.pitching?.ao, 180);
+});
+
 test("banner only when the selected year is the missing current season", () => {
   const health = stubHealth({ current_season_missing: true });
   assert.equal(selectedYearMissing(health, 2026, false), true);

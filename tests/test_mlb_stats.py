@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import duckdb
 import pandas as pd
@@ -484,3 +485,92 @@ def test_merge_player_seasons_labels_pitcher_batter_and_two_way() -> None:
     assert set(pitcher_only["player_type"]) == {"pitcher"}
     batter_only = _merge_player_seasons([hitting], [])
     assert set(batter_only["player_type"]) == {"batter"}
+
+
+@pytest.mark.unit
+def test_client_retries_429_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("src.baseball_analytics.mlb_stats._backoff", lambda *_a, **_k: None)
+    busy = MagicMock()
+    busy.status_code = 429
+    busy.text = "slow down"
+    busy.url = "https://statsapi.mlb.com/api/v1/teams"
+    ok = MagicMock()
+    ok.status_code = 200
+    ok.json.return_value = {"teams": []}
+    ok.text = "ok"
+    ok.url = "https://statsapi.mlb.com/api/v1/teams"
+    session = MagicMock()
+    session.get.side_effect = [busy, ok]
+    client = MlbStatsClient(session=session, min_interval=0, max_retries=1)
+    assert client.teams() == {"teams": []}
+    assert session.get.call_count == 2
+
+
+@pytest.mark.unit
+def test_client_400_does_not_retry() -> None:
+    bad = MagicMock()
+    bad.status_code = 400
+    bad.text = "bad request"
+    bad.url = "https://statsapi.mlb.com/api/v1/teams"
+    session = MagicMock()
+    session.get.return_value = bad
+    client = MlbStatsClient(session=session, min_interval=0, max_retries=3)
+    with pytest.raises(MlbStatsError) as excinfo:
+        client.teams()
+    assert session.get.call_count == 1
+    assert excinfo.value.status_code == 400
+
+
+@pytest.mark.unit
+def test_client_503_exhausts_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("src.baseball_analytics.mlb_stats._backoff", lambda *_a, **_k: None)
+    busy = MagicMock()
+    busy.status_code = 503
+    busy.text = "unavailable"
+    busy.url = "https://statsapi.mlb.com/api/v1/teams"
+    session = MagicMock()
+    session.get.return_value = busy
+    client = MlbStatsClient(session=session, min_interval=0, max_retries=2)
+    with pytest.raises(MlbStatsError, match="failed after retries"):
+        client.teams()
+    assert session.get.call_count == 3
+
+
+@pytest.mark.integration
+def test_extract_date_schedule_lands_as_of_filename(tmp_path: Path) -> None:
+    seen: list[tuple[str, dict]] = []
+
+    def fetcher(path: str, params: dict) -> dict:
+        seen.append((path, dict(params)))
+        if path.endswith("/teams"):
+            return _payload("teams.json")
+        if path.endswith("/standings"):
+            return _payload("standings_2024.json")
+        if path.endswith("/teams/stats") and params.get("group") == "hitting":
+            return _payload("team_hitting_2024.json")
+        if path.endswith("/teams/stats"):
+            return _payload("team_pitching_2024.json")
+        if path.endswith("/stats") and params.get("group") == "hitting":
+            return _payload("player_hitting_2024.json")
+        if path.endswith("/stats"):
+            return _payload("player_pitching_2024.json")
+        if path.endswith("/schedule"):
+            return _payload("schedule_2024.json")
+        raise MlbStatsError(f"unexpected path {path}")
+
+    raw_dir = tmp_path / "raw"
+    client = MlbStatsClient(fetcher=fetcher, min_interval=0)
+    report = pull_majors_feeds(
+        raw_dir=raw_dir,
+        as_of_date=AS_OF,
+        seasons=[2024],
+        client=client,
+        schedule_mode="date",
+    )
+    assert report.ok
+    schedule_calls = [params for path, params in seen if path.endswith("/schedule")]
+    assert schedule_calls
+    assert schedule_calls[0].get("date") == AS_OF
+    assert schedule_calls[0].get("season") is None
+    assert local_raw_path(raw_dir, "schedule", AS_OF, f"schedule_{AS_OF}.json").is_file()
+    assert not local_raw_path(raw_dir, "schedule", AS_OF, "schedule_2024.json").is_file()
