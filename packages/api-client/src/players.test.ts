@@ -317,6 +317,9 @@ test("directory list items keep published season numbers, not only rec strings",
   assert.equal(suarez?.hitting, null);
   assert.equal(suarez?.pitching?.era, 2.57);
   assert.equal(suarez?.pitching?.ip, 150.1);
+  assert.equal(suarez?.pitching?.so, 145);
+  assert.equal(suarez?.pitching?.bb, 42);
+  assert.equal(suarez?.pitching?.h, 120);
   assert.equal(suarez?.pitching?.cg, 2);
   assert.equal(suarez?.pitching?.qs, 18);
   assert.equal(suarez?.pitching?.bf, 610);
