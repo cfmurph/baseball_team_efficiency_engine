@@ -235,3 +235,63 @@ test("two-way players keep both sides and empty columns stay hidden", () => {
   const advanced = directoryHittingAdvancedColumns([emptyIso]).map((cell) => cell.label);
   assert.equal(advanced.includes("wOBA"), false);
 });
+
+test("one-sided directory rows stay on their own table", () => {
+  const hitter = listItem({
+    player_id: "judgeaa01",
+    name: "Aaron Judge",
+    position: "OF",
+    side: "hitting",
+    hitting: judgeHitting(),
+  });
+  const pitcher = listItem({
+    player_id: "suarera02",
+    name: "Ranger Suárez",
+    position: "SP",
+    side: "pitching",
+    pitching: suarezPitching(),
+  });
+  const rows = [hitter, pitcher];
+  const hitting = directoryRowsForSide(rows, "hitting");
+  const pitching = directoryRowsForSide(rows, "pitching");
+  assert.deepEqual(hitting.map((row) => row.player_id), ["judgeaa01"]);
+  assert.deepEqual(pitching.map((row) => row.player_id), ["suarera02"]);
+});
+
+test("parsed two-way leftover-free payload lands in both directory tables", () => {
+  const list = parsePlayersList(
+    {
+      players: [{
+        player_id: "ohtansh01",
+        name: "Shohei Ohtani",
+        position: "DH",
+        team: "LAD",
+        seasons: [{
+          season: 2026,
+          player_type: "batter",
+          pa: 600,
+          hits: 150,
+          hr: 44,
+          avg: 0.3,
+          ops: 1.01,
+          ip: 130,
+          era: 3.1,
+          whip: 1.08,
+        }],
+      }],
+    },
+    2026,
+  );
+  assert.equal(directoryRowsForSide(list, "hitting").length, 1);
+  assert.equal(directoryRowsForSide(list, "pitching").length, 1);
+  assert.equal(list[0]?.hitting?.hr, 44);
+  assert.equal(list[0]?.pitching?.era, 3.1);
+});
+
+test("directory columns union a stat present on only one row", () => {
+  const withSteals = judgeHitting();
+  const withoutSteals: HittingSeason = { ...judgeHitting(), sb: null, cs: null };
+  const labels = directoryHittingColumns([withoutSteals, withSteals]).map((cell) => cell.label);
+  assert.ok(labels.includes("SB"));
+  assert.ok(labels.includes("SB%"));
+});
