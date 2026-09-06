@@ -375,6 +375,7 @@ def test_insert_rejects_war_column() -> None:
         insert_mlb_stats_tables(con, frames)
 
 
+@pytest.mark.unit
 def test_parse_schedule_drops_missing_pk_and_keeps_postponed_null_scores() -> None:
     payload = {
         "dates": [
@@ -413,6 +414,7 @@ def test_parse_schedule_drops_missing_pk_and_keeps_postponed_null_scores() -> No
     assert int(games.iloc[0]["home_mlb_team_id"]) == 134
 
 
+@pytest.mark.unit
 def test_parse_player_stats_drops_missing_ids_and_sentinels() -> None:
     payload = {
         "stats": [
@@ -449,6 +451,7 @@ def test_parse_player_stats_drops_missing_ids_and_sentinels() -> None:
     assert pd.isna(row["hr"])
 
 
+@pytest.mark.unit
 def test_merge_player_seasons_labels_pitcher_batter_and_two_way() -> None:
     hitting = pd.DataFrame(
         {

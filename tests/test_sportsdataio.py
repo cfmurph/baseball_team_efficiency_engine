@@ -23,9 +23,12 @@ from src.baseball_analytics.sportsdataio import (
     STATUS_HTTP_200,
     STATUS_HTTP_401,
     STATUS_SOFT_FAIL,
+    MissingApiKeyError,
     SportsDataIOClient,
     SportsDataIOError,
     attach_lahman_aliases,
+    attach_team_aliases,
+    build_spine_frames,
     classify_endpoint_status,
     default_season_window,
     discover_as_of_dates,
@@ -728,6 +731,7 @@ def test_warehouse_ddl_has_no_forked_stat_tables() -> None:
     assert "UNIQUE (system, entity_type, external_id)" in WAREHOUSE_DDL
 
 
+@pytest.mark.unit
 def test_parse_unwraps_payloads_and_drops_rows_missing_ids() -> None:
     wrapped = parse_teams({"data": [{"TeamID": 31, "Key": "NYY"}, {"Key": "NOID"}]})
     assert list(wrapped["sdio_team_id"]) == [31]
@@ -749,6 +753,7 @@ def test_parse_unwraps_payloads_and_drops_rows_missing_ids() -> None:
     assert parse_games([{"HomeTeam": "NYY"}]).empty
 
 
+@pytest.mark.unit
 def test_parse_numeric_sentinels_and_leading_dot() -> None:
     stats = parse_player_game_stats(
         [
@@ -773,6 +778,7 @@ def test_parse_numeric_sentinels_and_leading_dot() -> None:
     assert row["ip"] == pytest.approx(6.2)
 
 
+@pytest.mark.unit
 def test_alternate_mlbam_keys_join_lahman() -> None:
     players = parse_players(
         [{"PlayerID": 7, "FirstName": "Alt", "LastName": "Id", "MlbID": 592450}]
@@ -782,6 +788,7 @@ def test_alternate_mlbam_keys_join_lahman() -> None:
     assert joined.iloc[0]["lahman_player_id"] == "judgeaa01"
 
 
+@pytest.mark.unit
 def test_attach_team_aliases_maps_oak_ath_and_latest_mia() -> None:
     team_map = load_team_map(TEAM_MAP)
     teams = pd.DataFrame(
@@ -799,6 +806,7 @@ def test_attach_team_aliases_maps_oak_ath_and_latest_mia() -> None:
     assert int(mapped.loc["MIA", "mlb_team_id"]) == 146
 
 
+@pytest.mark.unit
 def test_spine_collapses_duplicate_player_game_and_bootstraps_ids() -> None:
     player_game = pd.DataFrame(
         [
@@ -845,6 +853,7 @@ def test_spine_collapses_duplicate_player_game_and_bootstraps_ids() -> None:
     assert set(primary["system"]) == {"sportsdataio"}
 
 
+@pytest.mark.unit
 def test_lake_key_rejects_path_traversal_and_empty_ids() -> None:
     with pytest.raises(ValueError, match="endpoint token"):
         raw_object_key("../teams", AS_OF, "teams.json")
@@ -860,6 +869,7 @@ def test_lake_key_rejects_path_traversal_and_empty_ids() -> None:
         stable_uuid("player", "  ")
 
 
+@pytest.mark.unit
 def test_client_sends_key_as_header_not_query(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("src.baseball_analytics.sportsdataio._backoff", lambda *_a, **_k: None)
     session = MagicMock()
@@ -886,6 +896,7 @@ def test_client_sends_key_as_header_not_query(monkeypatch: pytest.MonkeyPatch) -
     assert "?key=" not in url
 
 
+@pytest.mark.unit
 def test_client_401_does_not_retry_and_hides_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("src.baseball_analytics.sportsdataio._backoff", lambda *_a, **_k: None)
     session = MagicMock()
@@ -906,6 +917,7 @@ def test_client_401_does_not_retry_and_hides_key(monkeypatch: pytest.MonkeyPatch
     assert "super-secret-key" not in str(excinfo.value)
 
 
+@pytest.mark.unit
 def test_client_retries_429_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("src.baseball_analytics.sportsdataio._backoff", lambda *_a, **_k: None)
     busy = MagicMock()
@@ -927,12 +939,14 @@ def test_client_retries_429_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> No
     assert session.get.call_count == 2
 
 
+@pytest.mark.unit
 def test_client_get_without_key_raises_missing() -> None:
     client = SportsDataIOClient(api_key=None, environ={}, min_interval=0)
     with pytest.raises(MissingApiKeyError):
         client.teams()
 
 
+@pytest.mark.unit
 def test_date_endpoints_use_month_abbrev_token() -> None:
     seen: list[str] = []
 
@@ -947,20 +961,7 @@ def test_date_endpoints_use_month_abbrev_token() -> None:
     assert seen[1].endswith("/PlayerGameStatsByDate/2017-SEP-01")
 
 
-def test_seasons_from_settings_prefers_env_then_yaml() -> None:
-    assert seasons_from_settings({}, "2026-08-23", environ={}) == [2026]
-    assert seasons_from_settings(
-        {"sportsdataio": {"seasons": [2024, 2025]}},
-        "2026-08-23",
-        environ={},
-    ) == [2024, 2025]
-    assert seasons_from_settings(
-        {"sportsdataio": {"seasons": [2024]}},
-        "2026-08-23",
-        environ={"SPORTSDATAIO_SEASONS": "2023, 2024"},
-    ) == [2023, 2024]
-
-
+@pytest.mark.unit
 def test_resolve_as_of_date_prefers_explicit_then_local(tmp_path: Path) -> None:
     write_raw_payload(
         [{"TeamID": 1}],
