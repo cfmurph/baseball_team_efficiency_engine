@@ -14,6 +14,7 @@ import {
 import {
   EMPTY_FIELDING_COPY,
   fieldingForSeason,
+  fieldingStandardCells,
   hasFieldingLine,
   hittingAdvancedCells,
   hittingCells,
@@ -235,4 +236,42 @@ test("derived columns stay off when inputs are missing", () => {
   assert.equal(labels.includes("XBH"), false);
   assert.equal(labels.includes("TB"), false);
   assert.equal(labels.includes("SB%"), false);
+});
+
+test("pitching advanced hides K/9 when IP is zero and infield hides OFA", () => {
+  const advanced = pitchingAdvancedCells({
+    season: 2024,
+    g: 1,
+    gs: 0,
+    ip: 0,
+    w: 0,
+    l: 0,
+    sv: 0,
+    so: 3,
+    bb: 1,
+    er: 0,
+    era: null,
+    whip: null,
+    fip: null,
+    war: null,
+    war_source: "approx",
+  }).map((cell) => cell.label);
+  assert.equal(advanced.includes("K/9"), false);
+  assert.equal(advanced.includes("I/GS"), false);
+
+  const labels = fieldingStandardCells({
+    season: 2026,
+    pos: "SS",
+    g: 140,
+    gs: 140,
+    inn: 1200,
+    po: 80,
+    a: 400,
+    e: 12,
+    dp: 80,
+    pb: null,
+    fpct: 0.976,
+  }).map((cell) => cell.label);
+  assert.equal(labels.includes("OFA"), false);
+  assert.ok(labels.includes("TC"));
 });
