@@ -5,12 +5,30 @@ import { useMemo, useState } from "react";
 
 import { CURRENT_SEASON_BANNER, FOOTER } from "@bos/card-schema";
 import {
-  formatWar,
   type PlayerListItem,
+  type PlayerSide,
 } from "@bos/api-client";
 
 import { SiteHeader } from "@/components/SiteHeader";
 import type { PlayersPageData } from "@/lib/load";
+import {
+  directoryFieldingAdvancedColumns,
+  directoryFieldingColumns,
+  directoryHittingAdvancedColumns,
+  directoryHittingColumns,
+  directoryPitchingAdvancedColumns,
+  directoryPitchingColumns,
+  directoryRowsForSide,
+  fieldingAdvancedCells,
+  fieldingStandardCells,
+  hittingAdvancedCells,
+  hittingStandardCells,
+  pitchingAdvancedCells,
+  pitchingStandardCells,
+  primaryFielding,
+  statValue,
+  type StatCell,
+} from "@/lib/playerPage";
 
 function uniqueSorted(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right));
@@ -34,6 +52,101 @@ function Chip({
     >
       {label}
     </button>
+  );
+}
+
+function DirectoryTable({
+  caption,
+  rows,
+  side,
+}: {
+  caption: string;
+  rows: PlayerListItem[];
+  side: PlayerSide;
+}) {
+  const hitting = rows.map((row) => row.hitting).filter((row): row is NonNullable<typeof row> => Boolean(row));
+  const pitching = rows.map((row) => row.pitching).filter((row): row is NonNullable<typeof row> => Boolean(row));
+  const fielding = rows.flatMap((row) => row.fielding);
+  const standard = side === "pitching"
+    ? directoryPitchingColumns(pitching)
+    : directoryHittingColumns(hitting);
+  const fieldingCols = side === "hitting" ? directoryFieldingColumns(fielding) : [];
+  const fieldingAdv = side === "hitting" ? directoryFieldingAdvancedColumns(fielding) : [];
+  const advanced = side === "pitching"
+    ? directoryPitchingAdvancedColumns(pitching)
+    : directoryHittingAdvancedColumns(hitting);
+
+  return (
+    <section className="bos-block">
+      <h2>{caption}</h2>
+      <div className="bos-table-wrap">
+        <table className="bos-table bos-table-compact">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Pos</th>
+              <th>Team</th>
+              {standard.map((cell) => (
+                <th key={`std-${cell.key}`} className="bos-num">{cell.label}</th>
+              ))}
+              {fieldingCols.map((cell) => (
+                <th key={`fld-${cell.key}`} className={cell.key === "pos" ? undefined : "bos-num"}>
+                  {cell.label}
+                </th>
+              ))}
+              {fieldingAdv.map((cell) => (
+                <th key={`fadv-${cell.key}`} className="bos-num">{cell.label}</th>
+              ))}
+              {advanced.map((cell) => (
+                <th key={`adv-${cell.key}`} className="bos-num">{cell.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const standardCells: StatCell[] = side === "pitching"
+                ? (row.pitching ? pitchingStandardCells(row.pitching) : [])
+                : (row.hitting ? hittingStandardCells(row.hitting) : []);
+              const fieldLine = primaryFielding(row);
+              const fieldCells = fieldLine ? fieldingStandardCells(fieldLine) : [];
+              const fieldAdvCells = fieldLine ? fieldingAdvancedCells(fieldLine) : [];
+              const advCells = side === "pitching"
+                ? (row.pitching ? pitchingAdvancedCells(row.pitching) : [])
+                : (row.hitting ? hittingAdvancedCells(row.hitting) : []);
+              return (
+                <tr key={`${row.player_id}-${row.season}-${side}`}>
+                  <td>
+                    <Link href={`/players/${encodeURIComponent(row.player_id)}`}>{row.name}</Link>
+                  </td>
+                  <td>{row.position}</td>
+                  <td>{row.team}</td>
+                  {standard.map((cell) => (
+                    <td key={`std-${cell.key}`} className="bos-num">
+                      {statValue(standardCells, cell.key)}
+                    </td>
+                  ))}
+                  {fieldingCols.map((cell) => (
+                    <td key={`fld-${cell.key}`} className={cell.key === "pos" ? undefined : "bos-num"}>
+                      {statValue(fieldCells, cell.key)}
+                    </td>
+                  ))}
+                  {fieldingAdv.map((cell) => (
+                    <td key={`fadv-${cell.key}`} className="bos-num">
+                      {statValue(fieldAdvCells, cell.key)}
+                    </td>
+                  ))}
+                  {advanced.map((cell) => (
+                    <td key={`adv-${cell.key}`} className="bos-num">
+                      {statValue(advCells, cell.key)}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
   );
 }
 
@@ -68,6 +181,9 @@ export function PlayersDirectory({
       return hay.includes(needle);
     });
   }, [pool, position, query, team]);
+
+  const battingRows = useMemo(() => directoryRowsForSide(rows, "hitting"), [rows]);
+  const pitchingRows = useMemo(() => directoryRowsForSide(rows, "pitching"), [rows]);
 
   return (
     <div className="bos-shell bos-shell-wide">
@@ -142,34 +258,14 @@ export function PlayersDirectory({
           <p>Try another season or clear the filters. We do not invent missing-year rows.</p>
         </div>
       ) : (
-        <div className="bos-table-wrap">
-          <table className="bos-table">
-            <thead>
-              <tr>
-                <th>Player</th>
-                <th>Pos</th>
-                <th>Team</th>
-                <th>Offense / Pitch</th>
-                <th>Fielding</th>
-                <th className="bos-num">WAR</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row: PlayerListItem) => (
-                <tr key={`${row.player_id}-${row.season}`}>
-                  <td>
-                    <Link href={`/players/${encodeURIComponent(row.player_id)}`}>{row.name}</Link>
-                  </td>
-                  <td>{row.position}</td>
-                  <td>{row.team}</td>
-                  <td>{row.line || "—"}</td>
-                  <td>{row.fielding_line || "—"}</td>
-                  <td className="bos-num">{formatWar(row.war)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {battingRows.length ? (
+            <DirectoryTable caption="Batting" rows={battingRows} side="hitting" />
+          ) : null}
+          {pitchingRows.length ? (
+            <DirectoryTable caption="Pitching" rows={pitchingRows} side="pitching" />
+          ) : null}
+        </>
       )}
 
       <footer className="bos-foot">{FOOTER}</footer>

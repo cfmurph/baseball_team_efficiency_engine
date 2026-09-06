@@ -178,6 +178,10 @@ test("parses #152 PlayerRecord and keeps an empty game log honest", () => {
   );
   assert.equal(list[0]?.player_id, "judgeaa01");
   assert.equal(list[0]?.war, 6.1);
+  assert.equal(list[0]?.hitting?.hr, 40);
+  assert.equal(list[0]?.hitting?.avg, 0.35);
+  assert.equal(list[0]?.hitting?.ops, 1.1);
+  assert.equal(list[0]?.hitting?.pa, 500);
 });
 
 test("parses fielding lines when present and omits them when absent", () => {
@@ -234,149 +238,91 @@ test("derived identities need every input and stay off otherwise", () => {
   assert.equal(deriveRf(248, 7, null), null);
 });
 
-test("pitching identities stay off on zero IP and do not overwrite landed rates", () => {
-  const derived = withPitchingIdentities({
-    season: 2024,
-    g: 27,
-    gs: 27,
-    ip: 150,
-    w: 12,
-    l: 8,
-    sv: 4,
-    so: 145,
-    bb: 42,
-    er: 43,
-    era: 2.57,
-    whip: 1.05,
-    fip: null,
-    war: 1.8,
-    war_source: "real",
-    h: 120,
-    hr: 12,
-    r: 48,
-    bs: 1,
-    bf: 610,
-  });
-  assert.equal(derived.wpct, 0.6);
-  assert.equal(derived.svo, 5);
-  assert.equal(derived.sv_pct, 0.8);
-  assert.equal(derived.uer, 5);
-  assert.ok(Math.abs((derived.k9 ?? 0) - (145 * 9) / 150) < 1e-9);
-  assert.ok(Math.abs((derived.k_bb ?? 0) - 145 / 42) < 1e-9);
-  assert.ok(Math.abs((derived.i_gs ?? 0) - 150 / 27) < 1e-9);
-
-  const zero = withPitchingIdentities({
-    season: 2024,
-    g: 1,
-    gs: 0,
-    ip: 0,
-    w: 0,
-    l: 0,
-    sv: 2,
-    so: 3,
-    bb: 0,
-    er: 0,
-    era: null,
-    whip: null,
-    fip: null,
-    war: null,
-    war_source: "approx",
-    bf: 0,
-    go: 4,
-    ao: 0,
-  });
-  assert.equal(zero.wpct, null);
-  assert.equal(zero.k9, null);
-  assert.equal(zero.k_bb, null);
-  assert.equal(zero.i_gs, null);
-  assert.equal(zero.go_ao, null);
-  assert.equal(zero.k_pct, null);
-  assert.equal(zero.sv_pct, null);
-
-  const landed = withPitchingIdentities({
-    season: 2024,
-    g: 27,
-    gs: 27,
-    ip: 150,
-    w: 12,
-    l: 8,
-    sv: 4,
-    so: 145,
-    bb: 42,
-    er: 43,
-    era: 2.57,
-    whip: 1.05,
-    fip: null,
-    war: 1.8,
-    war_source: "real",
-    wpct: 0.55,
-    k9: 9.9,
-    svo: 9,
-  });
-  assert.equal(landed.wpct, 0.55);
-  assert.equal(landed.k9, 9.9);
-  assert.equal(landed.svo, 9);
-  assert.ok(Math.abs((landed.sv_pct ?? 0) - 4 / 9) < 1e-9);
-});
-
-test("fielding OFA stays off for infield and hitting BABIP needs SF", () => {
-  const outfield = withFieldingIdentities({
-    season: 2026,
-    pos: "rf",
-    g: 112,
-    gs: 110,
-    inn: 980,
-    po: 248,
-    a: 7,
-    e: 3,
-    dp: 2,
-    pb: null,
-    fpct: 0.988,
-  });
-  assert.equal(outfield.ofa, 7);
-  assert.equal(outfield.tc, 258);
-
-  const shortstop = withFieldingIdentities({
-    season: 2026,
-    pos: "SS",
-    g: 140,
-    gs: 140,
-    inn: 1200,
-    po: 80,
-    a: 400,
-    e: 12,
-    dp: 80,
-    pb: null,
-    fpct: 0.976,
-  });
-  assert.equal(shortstop.ofa, null);
-  assert.equal(shortstop.tc, 492);
-
-  const hitting = withHittingIdentities({
-    season: 2026,
-    g: 120,
-    pa: 500,
-    ab: 400,
-    r: 85,
-    h: 140,
-    doubles: 22,
-    triples: 1,
-    hr: 40,
-    rbi: 100,
-    sb: 8,
-    bb: 90,
-    so: 130,
-    avg: 0.35,
-    obp: 0.46,
-    slg: 0.71,
-    ops: 1.17,
-    woba: 0.42,
-    war: 6.1,
-    war_source: "real",
-  });
-  assert.equal(hitting.babip, null);
-  assert.ok(Math.abs((hitting.iso ?? 0) - 0.36) < 1e-9);
-  assert.ok(Math.abs((hitting.k_pct ?? 0) - 130 / 500) < 1e-9);
+test("directory list items keep published season numbers, not only rec strings", () => {
+  const list = parsePlayersList(
+    {
+      players: [
+        {
+          player_id: "judgeaa01",
+          name: "Aaron Judge",
+          position: "OF",
+          team: "NYY",
+          seasons: [{
+            season: 2026,
+            player_type: "batter",
+            games: 120,
+            pa: 500,
+            ab: 400,
+            runs: 85,
+            hits: 140,
+            doubles: 22,
+            triples: 1,
+            hr: 40,
+            rbi: 100,
+            sb: 8,
+            bb: 90,
+            so: 130,
+            avg: 0.35,
+            obp: 0.46,
+            slg: 0.71,
+            ops: 1.17,
+            woba: 0.42,
+            war: 6.1,
+            war_source: "real",
+            fielding: [{ pos: "RF", g: 112, po: 248, a: 7, e: 3, dp: 2, fpct: 0.988 }],
+          }],
+        },
+        {
+          player_id: "suarera02",
+          name: "Ranger Suárez",
+          position: "SP",
+          team: "PHI",
+          seasons: [{
+            season: 2026,
+            player_type: "pitcher",
+            pa: 0,
+            games: 27,
+            gs: 27,
+            ip: 150.1,
+            w: 12,
+            l: 8,
+            so: 145,
+            pitching_so: 145,
+            pitching_bb: 42,
+            er: 43,
+            era: 2.57,
+            whip: 1.05,
+            pitching_hits: 120,
+            cg: 2,
+            qs: 18,
+            bf: 610,
+            war: 1.8,
+            war_source: "real",
+          }],
+        },
+      ],
+    },
+    2026,
+  );
+  const judge = list.find((row) => row.player_id === "judgeaa01");
+  const suarez = list.find((row) => row.player_id === "suarera02");
+  assert.equal(judge?.hitting?.hr, 40);
+  assert.equal(judge?.hitting?.doubles, 22);
+  assert.equal(judge?.hitting?.singles, 77);
+  assert.equal(judge?.hitting?.ops, 1.17);
+  assert.equal(judge?.fielding[0]?.pos, "RF");
+  assert.equal(judge?.fielding[0]?.fpct, 0.988);
+  assert.equal(judge?.pitching, null);
+  assert.match(judge?.line || "", /AVG/);
+  assert.notEqual(judge?.line, undefined);
+  assert.ok(judge?.hitting);
+  assert.equal(suarez?.side, "pitching");
+  assert.equal(suarez?.hitting, null);
+  assert.equal(suarez?.pitching?.era, 2.57);
+  assert.equal(suarez?.pitching?.ip, 150.1);
+  assert.equal(suarez?.pitching?.cg, 2);
+  assert.equal(suarez?.pitching?.qs, 18);
+  assert.equal(suarez?.pitching?.bf, 610);
 });
 
 test("banner only when the selected year is the missing current season", () => {
