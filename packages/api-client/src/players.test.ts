@@ -12,14 +12,13 @@ import {
   deriveTb,
   deriveTc,
   deriveXbh,
-  withFieldingIdentities,
-  withHittingIdentities,
-  withPitchingIdentities,
+  dropCurrentSeasonLines,
   formatAvg,
   formatOps,
   hittingCountingLine,
   hittingLine,
   hittingRatesLine,
+  honestyFilterDetail,
   isApproxWar,
   parsePlayerDetail,
   parsePlayersList,
@@ -320,6 +319,9 @@ test("directory list items keep published season numbers, not only rec strings",
   assert.equal(suarez?.hitting, null);
   assert.equal(suarez?.pitching?.era, 2.57);
   assert.equal(suarez?.pitching?.ip, 150.1);
+  assert.equal(suarez?.pitching?.so, 145);
+  assert.equal(suarez?.pitching?.bb, 42);
+  assert.equal(suarez?.pitching?.h, 120);
   assert.equal(suarez?.pitching?.cg, 2);
   assert.equal(suarez?.pitching?.qs, 18);
   assert.equal(suarez?.pitching?.bf, 610);
@@ -330,4 +332,143 @@ test("banner only when the selected year is the missing current season", () => {
   assert.equal(selectedYearMissing(health, 2026, false), true);
   assert.equal(selectedYearMissing(health, 2025, false), false);
   assert.equal(selectedYearMissing(health, 2026, true), false);
+});
+
+test("directory list does not invent a row from another season", () => {
+  const list = parsePlayersList(
+    {
+      players: [
+        {
+          player_id: "judgeaa01",
+          name: "Aaron Judge",
+          seasons: [{ season: 2024, pa: 500, war: 10.8 }],
+        },
+      ],
+    },
+    2026,
+  );
+  assert.deepEqual(list, []);
+});
+
+test("honesty filter drops the missing active year and keeps prior lines", () => {
+  const health = stubHealth({ current_season_missing: true });
+  const rows = dropCurrentSeasonLines(
+    [
+      { season: 2026, pa: 12 },
+      { season: 2025, pa: 500 },
+    ],
+    health,
+  );
+  assert.deepEqual(rows, [{ season: 2025, pa: 500 }]);
+  const detail = honestyFilterDetail(
+    {
+      player: { player_id: "judgeaa01", name: "Aaron Judge", position: "OF", team: "NYY" },
+      hitting: [
+        {
+          season: 2026,
+          g: 1,
+          pa: 12,
+          ab: 10,
+          r: 0,
+          h: 1,
+          doubles: 0,
+          triples: 0,
+          hr: 0,
+          rbi: 0,
+          sb: 0,
+          bb: 0,
+          so: 0,
+          avg: 0.1,
+          obp: 0.1,
+          slg: 0.1,
+          ops: 0.2,
+          woba: 0.1,
+          war: 0.1,
+          war_source: "approx",
+        },
+        {
+          season: 2025,
+          g: 150,
+          pa: 600,
+          ab: 500,
+          r: 100,
+          h: 160,
+          doubles: 30,
+          triples: 1,
+          hr: 40,
+          rbi: 90,
+          sb: 5,
+          bb: 80,
+          so: 140,
+          avg: 0.32,
+          obp: 0.42,
+          slg: 0.6,
+          ops: 1.02,
+          woba: 0.42,
+          war: 9.0,
+          war_source: "bbref",
+        },
+      ],
+      pitching: [],
+      fielding: [
+        {
+          season: 2026,
+          pos: "RF",
+          g: 1,
+          gs: 1,
+          inn: 9,
+          po: 2,
+          a: 0,
+          e: 0,
+          dp: 0,
+          pb: null,
+          fpct: 1,
+        },
+        {
+          season: 2025,
+          pos: "RF",
+          g: 140,
+          gs: 138,
+          inn: 1200,
+          po: 300,
+          a: 8,
+          e: 2,
+          dp: 1,
+          pb: null,
+          fpct: 0.994,
+        },
+      ],
+      recent_games: {
+        hitting: [{
+          date: "2026-04-01",
+          opponent: "BOS",
+          season: 2026,
+          ab: 4,
+          r: 0,
+          h: 1,
+          doubles: 0,
+          triples: 0,
+          hr: 0,
+          rbi: 0,
+          sb: 0,
+          bb: 0,
+          so: 1,
+        }],
+        pitching: [],
+      },
+      card: null,
+      source: "api",
+    },
+    health,
+  );
+  assert.equal(detail.hitting.length, 1);
+  assert.equal(detail.hitting[0]?.season, 2025);
+  assert.equal(detail.fielding.length, 1);
+  assert.equal(detail.fielding[0]?.season, 2025);
+  assert.deepEqual(detail.recent_games.hitting, []);
+});
+
+test("default directory season is prior year when no published years exist", () => {
+  const health = stubHealth({ current_season_missing: true });
+  assert.equal(defaultDirectorySeason(health, []), 2025);
 });

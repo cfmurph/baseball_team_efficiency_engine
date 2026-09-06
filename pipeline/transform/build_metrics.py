@@ -877,6 +877,11 @@ def parse_fielding_json(raw: object) -> list[dict[str, object]]:
     return [item for item in payload if isinstance(item, dict)]
 
 
+def _round_numeric(values: pd.Series, decimals: int) -> pd.Series:
+    """Round after coercing to numpy float so pd.NA does not raise TypeError."""
+    return pd.to_numeric(values, errors="coerce").astype("float64").round(decimals)
+
+
 def _aggregate_lahman_batting(batting: pd.DataFrame) -> pd.DataFrame:
     player_col = _first_existing_column(batting, ("playerID", "player_id"))
     year_col = _first_existing_column(batting, ("yearID", "year_id", "season"))
@@ -900,7 +905,7 @@ def _aggregate_lahman_batting(batting: pd.DataFrame) -> pd.DataFrame:
     if "ab" in out.columns and "hits" in out.columns:
         ab = pd.to_numeric(out["ab"], errors="coerce")
         hits = pd.to_numeric(out["hits"], errors="coerce")
-        out["avg"] = (hits / ab.replace(0, pd.NA)).round(3)
+        out["avg"] = _round_numeric(hits / ab.replace(0, pd.NA), 3)
     if {"hits", "bb", "ab"}.issubset(out.columns):
         hbp = pd.to_numeric(out["hbp"], errors="coerce") if "hbp" in out.columns else 0
         sf = pd.to_numeric(out["sf"], errors="coerce") if "sf" in out.columns else 0
@@ -911,7 +916,7 @@ def _aggregate_lahman_batting(batting: pd.DataFrame) -> pd.DataFrame:
         denom = ab.fillna(0) + bb.fillna(0) + (hbp if isinstance(hbp, pd.Series) else 0) + (
             sf if isinstance(sf, pd.Series) else 0
         )
-        out["obp"] = (numer / denom.replace(0, pd.NA)).round(3)
+        out["obp"] = _round_numeric(numer / denom.replace(0, pd.NA), 3)
     if {"hits", "doubles", "triples", "hr", "ab"}.issubset(out.columns):
         hits = pd.to_numeric(out["hits"], errors="coerce").fillna(0)
         doubles = pd.to_numeric(out["doubles"], errors="coerce").fillna(0)
@@ -920,9 +925,12 @@ def _aggregate_lahman_batting(batting: pd.DataFrame) -> pd.DataFrame:
         ab = pd.to_numeric(out["ab"], errors="coerce")
         singles = (hits - doubles - triples - hr).clip(lower=0)
         tb = singles + 2 * doubles + 3 * triples + 4 * hr
-        out["slg"] = (tb / ab.replace(0, pd.NA)).round(3)
+        out["slg"] = _round_numeric(tb / ab.replace(0, pd.NA), 3)
     if "obp" in out.columns and "slg" in out.columns:
-        out["ops"] = (pd.to_numeric(out["obp"], errors="coerce") + pd.to_numeric(out["slg"], errors="coerce")).round(3)
+        out["ops"] = _round_numeric(
+            pd.to_numeric(out["obp"], errors="coerce") + pd.to_numeric(out["slg"], errors="coerce"),
+            3,
+        )
     return out.rename(columns={"_player_id": "player_id", "_year_id": "year_id"})
 
 
@@ -950,7 +958,7 @@ def _aggregate_lahman_pitching(pitching: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame()
     out = work.groupby(["_player_id", "_year_id"], as_index=False).agg(**aggs)
     if "era" in out.columns:
-        out["era"] = pd.to_numeric(out["era"], errors="coerce").round(2)
+        out["era"] = _round_numeric(out["era"], 2)
     return out.rename(columns={"_player_id": "player_id", "_year_id": "year_id"})
 
 

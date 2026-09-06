@@ -5,7 +5,7 @@ import pytest
 
 from src.baseball_analytics.published import (
     group_public_players,
-    public_fielding_lines,
+    player_season_year,
     public_player_season,
     resolve_published_player,
 )
@@ -181,100 +181,60 @@ def test_resolve_known_player_empty_seasons_when_year_missing() -> None:
     assert resolved["seasons"] == []
 
 
-SUAREZ_2024 = {
-    "player_id": "suarera02",
-    "player_name": "Ranger Suarez",
-    "season": "2024",
-    "team": "PHI",
-    "position": "SP",
-    "player_type": "pitcher",
-    "ip": "150",
-    "gs": "27",
-    "w": "12",
-    "l": "8",
-    "sv": "0",
-    "bs": "0",
-    "er": "43",
-    "pitching_so": "145",
-    "pitching_bb": "42",
-    "pitching_hits": "120",
-    "pitching_hr": "12",
-    "pitching_r": "48",
-    "bf": "610",
-    "war_source": "real",
-    "player_war": "1.8",
-    "stat_source": "sportsdataio",
-}
+def test_public_season_returns_none_without_a_year() -> None:
+    assert public_player_season({"player_id": "x01", "pa": "20"}) is None
+    assert public_player_season({**JUDGE_2026, "season": "", "year_id": ""}) is None
 
 
-def test_public_season_derives_pitching_identities_and_skips_zero_ip() -> None:
-    season = public_player_season(SUAREZ_2024)
-    assert season is not None
-    assert season["wpct"] == pytest.approx(0.6)
-    assert season["svo"] == 0
-    assert season["uer"] == 5
-    assert season["k9"] == pytest.approx(145 * 9 / 150)
-    assert season["k_bb"] == pytest.approx(145 / 42)
-    assert season["i_gs"] == pytest.approx(150 / 27)
-    assert season["pitching_k_pct"] == pytest.approx(145 / 610)
-
-    zero_ip = public_player_season({**SUAREZ_2024, "ip": "0", "gs": "0", "pitching_bb": "0", "bf": "0"})
-    assert zero_ip is not None
-    assert zero_ip["k9"] is None
-    assert zero_ip["k_bb"] is None
-    assert zero_ip["i_gs"] is None
-    assert zero_ip["pitching_k_pct"] is None
+def test_player_season_year_accepts_float_strings_and_year_id() -> None:
+    assert player_season_year({"season": "2026.0"}) == 2026
+    assert player_season_year({"year_id": "2024"}) == 2024
+    assert player_season_year({"season_key": 2025}) == 2025
+    assert player_season_year({"season": "not-a-year"}) is None
+    assert player_season_year({}) is None
 
 
-def test_public_season_does_not_invent_catcher_cs_pct_from_batting_steals() -> None:
+def test_public_season_drops_nan_rates_and_does_not_invent_avg_on_zero_ab() -> None:
     season = public_player_season(
         {
-            **JUDGE_2026,
-            "sb": "8",
-            "cs": "3",
-            "fielding_pos": "RF",
-            "putouts": "248",
-            "assists": "7",
-            "errors": "3",
+            "player_id": "x01",
+            "player_name": "No Avg",
+            "season": "2026",
+            "hits": "4",
+            "ab": "0",
+            "era": "nan",
+            "obp": "not-a-number",
         }
     )
     assert season is not None
-    assert season["sb"] == 8
-    assert season["cs"] == 3
-    assert season["cs_pct"] is None
-    assert season["ofa"] == 7
+    assert season["avg"] is None
+    assert season["era"] is None
+    assert season["obp"] is None
+    assert season["hits"] == 4
+    assert season["ab"] == 0
 
-    shortstop = public_player_season(
-        {
-            **JUDGE_2026,
-            "fielding_pos": "SS",
-            "putouts": "80",
-            "assists": "400",
-            "errors": "12",
-        }
+
+def test_group_skips_private_only_and_blank_player_ids() -> None:
+    players = group_public_players(
+        [
+            {"salary": "1", "vs_replacement": "2.0", "edge": "x"},
+            {**JUDGE_2026, "player_id": "  "},
+            JUDGE_2026,
+        ]
     )
-    assert shortstop is not None
-    assert shortstop["ofa"] is None
-    assert shortstop["tc"] == 492
+    assert [item["player_id"] for item in players] == ["judgeaa01"]
 
 
-def test_public_fielding_lines_drop_invalid_json_and_empty_objects() -> None:
-    assert public_fielding_lines({**JUDGE_2026, "fielding_json": "{not-json"}) == []
-    assert public_fielding_lines({**JUDGE_2026, "fielding_json": "[]"}) == []
-    assert public_fielding_lines({**JUDGE_2026, "fielding_json": "[{}]"}) == []
-    assert public_fielding_lines({**JUDGE_2026, "fielding": "not-a-list"}) == []
+def test_group_refreshes_identity_from_the_latest_season() -> None:
+    older = {**JUDGE_2024, "player_name": "", "team": "NYY", "position": "DH"}
+    newer = {**JUDGE_2026, "player_name": "Aaron Judge", "team": "NYY", "position": "OF"}
+    players = group_public_players([older, newer])
+    assert len(players) == 1
+    assert players[0]["name"] == "Aaron Judge"
+    assert players[0]["position"] == "OF"
+    assert [row["season"] for row in players[0]["seasons"]] == [2026, 2024]
 
-    lines = public_fielding_lines(
-        {
-            **JUDGE_2026,
-            "fielding": [
-                {"pos": "RF", "g": 112, "po": 248, "a": 7, "e": 3},
-                {},
-                "skip",
-            ],
-        }
-    )
-    assert len(lines) == 1
-    assert lines[0]["pos"] == "RF"
-    assert lines[0]["tc"] == 258
-    assert lines[0]["fpct"] == pytest.approx(0.988)
+
+def test_resolve_blank_player_id_is_none() -> None:
+    assert resolve_published_player([JUDGE_2026], "") is None
+    assert resolve_published_player([JUDGE_2026], "   ") is None
