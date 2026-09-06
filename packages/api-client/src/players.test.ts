@@ -175,6 +175,10 @@ test("parses #152 PlayerRecord and keeps an empty game log honest", () => {
   );
   assert.equal(list[0]?.player_id, "judgeaa01");
   assert.equal(list[0]?.war, 6.1);
+  assert.equal(list[0]?.hitting?.hr, 40);
+  assert.equal(list[0]?.hitting?.avg, 0.35);
+  assert.equal(list[0]?.hitting?.ops, 1.1);
+  assert.equal(list[0]?.hitting?.pa, 500);
 });
 
 test("parses fielding lines when present and omits them when absent", () => {
@@ -229,6 +233,93 @@ test("derived identities need every input and stay off otherwise", () => {
   assert.equal(deriveSbPct(8, null), null);
   assert.equal(deriveTc(248, 7, null), null);
   assert.equal(deriveRf(248, 7, null), null);
+});
+
+test("directory list items keep published season numbers, not only rec strings", () => {
+  const list = parsePlayersList(
+    {
+      players: [
+        {
+          player_id: "judgeaa01",
+          name: "Aaron Judge",
+          position: "OF",
+          team: "NYY",
+          seasons: [{
+            season: 2026,
+            player_type: "batter",
+            games: 120,
+            pa: 500,
+            ab: 400,
+            runs: 85,
+            hits: 140,
+            doubles: 22,
+            triples: 1,
+            hr: 40,
+            rbi: 100,
+            sb: 8,
+            bb: 90,
+            so: 130,
+            avg: 0.35,
+            obp: 0.46,
+            slg: 0.71,
+            ops: 1.17,
+            woba: 0.42,
+            war: 6.1,
+            war_source: "real",
+            fielding: [{ pos: "RF", g: 112, po: 248, a: 7, e: 3, dp: 2, fpct: 0.988 }],
+          }],
+        },
+        {
+          player_id: "suarera02",
+          name: "Ranger Suárez",
+          position: "SP",
+          team: "PHI",
+          seasons: [{
+            season: 2026,
+            player_type: "pitcher",
+            pa: 0,
+            games: 27,
+            gs: 27,
+            ip: 150.1,
+            w: 12,
+            l: 8,
+            so: 145,
+            pitching_so: 145,
+            pitching_bb: 42,
+            er: 43,
+            era: 2.57,
+            whip: 1.05,
+            pitching_hits: 120,
+            cg: 2,
+            qs: 18,
+            bf: 610,
+            war: 1.8,
+            war_source: "real",
+          }],
+        },
+      ],
+    },
+    2026,
+  );
+  const judge = list.find((row) => row.player_id === "judgeaa01");
+  const suarez = list.find((row) => row.player_id === "suarera02");
+  assert.equal(judge?.hitting?.hr, 40);
+  assert.equal(judge?.hitting?.doubles, 22);
+  assert.equal(judge?.hitting?.singles, 77);
+  assert.equal(judge?.hitting?.ops, 1.17);
+  assert.equal(judge?.fielding[0]?.pos, "RF");
+  assert.equal(judge?.fielding[0]?.fpct, 0.988);
+  assert.equal(judge?.pitching, null);
+  assert.match(judge?.line || "", /AVG/);
+  assert.notEqual(judge?.line, undefined);
+  assert.ok(judge?.hitting);
+  assert.equal(suarez?.side, "pitching");
+  assert.equal(suarez?.hitting, null);
+  assert.equal(suarez?.pitching?.era, 2.57);
+  assert.equal(suarez?.pitching?.ip, 150.1);
+  assert.equal(suarez?.pitching?.cg, 2);
+  assert.equal(suarez?.pitching?.qs, 18);
+  assert.equal(suarez?.pitching?.bf, 610);
 });
 
 test("banner only when the selected year is the missing current season", () => {
