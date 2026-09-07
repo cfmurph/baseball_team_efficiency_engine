@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: btee-read-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /v1/health
+    envVars:
+      - key: ARTIFACTS_URI
+        value: file:///app/tests/fixtures/api/lake_current
+      - key: API_HOST
+        value: "0.0.0.0"
+      - key: API_CORS_ORIGINS
+        value: "*"
+      - key: API_CORS_ORIGIN_REGEX
+        value: https://.*[.]vercel[.]app

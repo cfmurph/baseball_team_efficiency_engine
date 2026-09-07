@@ -249,6 +249,27 @@ def cors_origin_regex(environ: Mapping[str, str] | None = None) -> str | None:
     return raw or None
 
 
+def bind_host(environ: Mapping[str, str] | None = None) -> str:
+    """Listen address. Explicit ``API_HOST`` wins; ``PORT`` implies PaaS."""
+    env = os.environ if environ is None else environ
+    explicit = str(env.get("API_HOST") or "").strip()
+    if explicit:
+        return explicit
+    if str(env.get("PORT") or "").strip():
+        return "0.0.0.0"
+    return "127.0.0.1"
+
+
+def bind_port(environ: Mapping[str, str] | None = None) -> int:
+    """Listen port. ``API_PORT`` wins, then PaaS ``PORT``, then 8000."""
+    env = os.environ if environ is None else environ
+    raw = str(env.get("API_PORT") or env.get("PORT") or "8000").strip() or "8000"
+    try:
+        return int(raw)
+    except ValueError:
+        return 8000
+
+
 def create_app(
     *,
     settings: ArtifactSettings | None = None,

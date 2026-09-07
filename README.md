@@ -167,12 +167,35 @@ curl 'http://127.0.0.1:8000/v1/players'
 curl 'http://127.0.0.1:8000/v1/players/judgeaa01'
 ```
 
-Point at the committed fixture lake (no pipeline, no API key):
+### Start against the fixture lake (honest `current/` until a remote lake exists)
+
+No pipeline, no API key, no invented `ARTIFACTS_URI` or 2026 rows. The committed fixture already includes 2024–2026 seasons (`tests/fixtures/api/lake_current`).
 
 ```bash
+source .venv/bin/activate
 export ARTIFACTS_URI=file://$PWD/tests/fixtures/api/lake_current
+# optional: API_HOST=127.0.0.1  API_PORT=8000  (defaults)
+# optional: API_CORS_ORIGINS=*   # or https://your-app.vercel.app
 python3 -m services.api
+curl -sS 'http://127.0.0.1:8000/v1/health'
+curl -sS 'http://127.0.0.1:8000/v1/players'
+curl -sS 'http://127.0.0.1:8000/v1/cards'
 ```
+
+Set the BenchOrStart frontend `NEXT_PUBLIC_API_URL` to that origin (no trailing slash).
+
+PaaS bind: `API_HOST` wins; if unset and `PORT` is set (Railway / Render / Fly), the process listens on `0.0.0.0`. Port order: `API_PORT`, then `PORT`, then `8000`. Do not pin `API_PORT` in the image — hosts inject `PORT`.
+
+Public demo image (`Dockerfile` / `render.yaml` / `railway.json`) bakes:
+
+| Env | Value |
+|---|---|
+| `ARTIFACTS_URI` | `file:///app/tests/fixtures/api/lake_current` |
+| `API_HOST` | `0.0.0.0` |
+| `API_CORS_ORIGINS` | `*` |
+| `API_CORS_ORIGIN_REGEX` | `https://.*[.]vercel[.]app` |
+
+Start command is `python3 -m services.api`. Slim install: `pip install -r requirements-api.txt`. `#156` `/v1/teams` stays parked.
 
 CORS allowlist: `API_CORS_ORIGINS` (comma-separated; defaults to localhost:3000). Optional `API_CORS_ORIGIN_REGEX` for Vercel preview hosts. Soft-fail is visible: `current_season_missing` is true and `/v1/cards?season=2026` / `/v1/players?season=2026` are empty when the active season was not published — the API does not invent 2026 rows. Player grain is published `player_season_metrics` only (no warehouse, lake, or SportsDataIO pull). `{id}` is the internal `player_id`.
 
