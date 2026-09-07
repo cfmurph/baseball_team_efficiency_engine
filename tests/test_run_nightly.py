@@ -13,6 +13,7 @@ from pipeline.run_nightly import (
     refresh_and_publish,
     run_pipeline,
 )
+from src.baseball_analytics.storage import ArtifactUploadError
 
 pytestmark = pytest.mark.integration
 
@@ -153,6 +154,23 @@ def test_refresh_and_publish_uploads_only_after_success(tmp_path) -> None:
         publish=lambda path: published.append(path),
     )
     assert published == ["config/settings.yaml"]
+
+def test_refresh_and_publish_propagates_upload_error() -> None:
+    def fake_pipeline(config_path, **kwargs):
+        return []
+
+    def fake_publish(config_path, **kwargs):
+        raise ArtifactUploadError(
+            "current/ promote refused: SDIO in-season data present but metrics max(season)=2024"
+        )
+
+    with pytest.raises(ArtifactUploadError, match="promote refused"):
+        refresh_and_publish(
+            "config/settings.yaml",
+            pipeline=fake_pipeline,
+            publish=fake_publish,
+        )
+
 
 def test_refresh_and_publish_skips_upload_when_pipeline_fails(tmp_path) -> None:
     published: list[str] = []

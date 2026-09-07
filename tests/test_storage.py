@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -29,6 +30,7 @@ from src.baseball_analytics.storage import (
     publish_nightly_artifacts,
     remote_lookup_keys,
     resolve_artifact,
+    resolve_artifact_hit,
     resolve_named_artifacts,
     run_object_key,
     upload_artifacts,
@@ -322,6 +324,37 @@ def test_decide_current_promote_fail_closed_when_max_season_unknown() -> None:
     )
 
 
+def test_evaluate_current_promote_trusts_parseable_seasons_present_over_csv(
+    tmp_path: Path,
+) -> None:
+    """Manifest ``seasons_present`` wins even when the CSV is older.
+
+    ``_coverage_max_season`` does not cross-check the player metrics CSV
+    when the list parses. A lying ``[2026]`` with only 2024 rows therefore
+    promotes. Lock that contract so a later honesty change is intentional.
+    """
+    local = tmp_path / "artifacts"
+    local.mkdir()
+    _write_metrics_manifest(
+        local,
+        sdio_in_season=True,
+        current_season_missing=False,
+        current_season_missing_reason=None,
+        active_season_present=True,
+        active_season_source="sportsdataio",
+        seasons_present=[2026],
+        overlay_seasons=[2026],
+        overlay_rows=1,
+    )
+    (local / "player_season_metrics.csv").write_text(
+        "player_id,season\njudgeaa01,2024\n",
+        encoding="utf-8",
+    )
+    decision, reason = evaluate_current_promote(local)
+    assert decision == "promote"
+    assert reason == ""
+
+
 def test_evaluate_current_promote_uses_csv_when_seasons_present_unparseable(
     tmp_path: Path,
 ) -> None:
@@ -519,6 +552,60 @@ def test_resolve_falls_back_to_local_when_remote_unreachable(tmp_path: Path) -> 
     )
     assert path == local / "metrics.csv"
     assert path.read_text() == "local-fallback\n"
+
+def test_resolve_serves_fresh_cache_without_remote_get(tmp_path: Path) -> None:
+    cache = tmp_path / "cache" / "current" / "metrics"
+    cache.mkdir(parents=True)
+    cached = cache / "metrics.csv"
+    cached.write_text("fresh-cache\n")
+
+    backend = MemoryBackend()
+    backend.fail_get = True
+    backend.put("current/metrics/metrics.csv", b"remote-should-not-be-read\n")
+
+    hit = resolve_artifact_hit(
+        "metrics.csv",
+        _settings(
+            tmp_path,
+            uri="s3://bucket/prefix",
+            cache_dir=tmp_path / "cache",
+            cache_ttl_s=300,
+        ),
+        backend=backend,
+    )
+    assert hit is not None
+    assert hit.source == "remote"
+    assert hit.path == cached
+    assert hit.path.read_text() == "fresh-cache\n"
+    assert backend.gets == []
+
+
+def test_resolve_probes_remote_when_cache_expired_then_falls_back(tmp_path: Path) -> None:
+    cache = tmp_path / "cache" / "current" / "metrics"
+    cache.mkdir(parents=True)
+    cached = cache / "metrics.csv"
+    cached.write_text("expired-cache\n")
+    os.utime(cached, (1_600_000_000, 1_600_000_000))
+
+    backend = MemoryBackend()
+    backend.fail_get = True
+
+    hit = resolve_artifact_hit(
+        "metrics.csv",
+        _settings(
+            tmp_path,
+            uri="s3://bucket/prefix",
+            cache_dir=tmp_path / "cache",
+            cache_ttl_s=300,
+        ),
+        backend=backend,
+    )
+    assert hit is not None
+    assert hit.source == "remote"
+    assert hit.path == cached
+    assert hit.path.read_text() == "expired-cache\n"
+    assert backend.gets
+
 
 def test_resolve_uses_stale_cache_when_remote_fails_and_local_missing(tmp_path: Path) -> None:
     cache = tmp_path / "cache" / "current" / "metrics"

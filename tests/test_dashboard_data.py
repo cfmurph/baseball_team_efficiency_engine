@@ -7,7 +7,14 @@ import ast
 from pathlib import Path
 
 from src.baseball_analytics.config import ArtifactSettings
-from dashboard.data import ARTIFACT_NAMES, METRICS_MANIFEST_NAME, resolve_file, resolve_metrics_manifest
+from dashboard.data import (
+    ARTIFACT_NAMES,
+    METRICS_MANIFEST_NAME,
+    load_metrics_manifest,
+    load_named_artifact,
+    resolve_file,
+    resolve_metrics_manifest,
+)
 from dashboard.state import SEASON_YEAR, SELECTED_LEAGUE, SELECTED_TEAM, SHARED_STATE_KEYS
 
 @pytest.mark.unit
@@ -120,6 +127,75 @@ def test_resolve_file_uses_shared_latest_when_uri_set(tmp_path: Path) -> None:
     path = resolve_file("metrics", settings)
     assert path is not None
     assert path.read_text() == "year_id\n2015\n"
+
+@pytest.mark.unit
+def test_load_named_artifact_rejects_unknown_and_json_keys() -> None:
+    assert load_named_artifact("not_a_key") is None
+    assert load_named_artifact("metrics_manifest") is None
+    assert resolve_file("not_a_key") is None
+
+
+@pytest.mark.unit
+def test_load_metrics_manifest_returns_none_on_invalid_or_non_object(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import json
+
+    import dashboard.data as data_mod
+
+    monkeypatch.setattr(
+        data_mod,
+        "_read_json",
+        lambda path_str: json.loads(Path(path_str).read_text(encoding="utf-8")),
+    )
+
+    monkeypatch.setattr(data_mod, "resolve_metrics_manifest", lambda: None)
+    assert load_metrics_manifest() is None
+
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not-json", encoding="utf-8")
+    monkeypatch.setattr(data_mod, "resolve_metrics_manifest", lambda: broken)
+    assert load_metrics_manifest() is None
+
+    array_payload = tmp_path / "array.json"
+    array_payload.write_text("[2024, 2025]", encoding="utf-8")
+    monkeypatch.setattr(data_mod, "resolve_metrics_manifest", lambda: array_payload)
+    assert load_metrics_manifest() is None
+
+    valid = tmp_path / "valid.json"
+    valid.write_text(
+        '{"current_season_missing": true, "active_season": 2026, "seasons_present": [2024]}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(data_mod, "resolve_metrics_manifest", lambda: valid)
+    payload = load_metrics_manifest()
+    assert payload == {
+        "current_season_missing": True,
+        "active_season": 2026,
+        "seasons_present": [2024],
+    }
+
+
+@pytest.mark.unit
+def test_load_named_artifact_reads_csv_and_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import pandas as pd
+
+    import dashboard.data as data_mod
+
+    csv_path = tmp_path / "team_onfield_contract_metrics.csv"
+    csv_path.write_text("year_id,team_id\n2015,NYY\n", encoding="utf-8")
+    monkeypatch.setattr(data_mod, "_read_csv", lambda path_str: pd.read_csv(path_str))
+    monkeypatch.setattr(data_mod, "resolve_file", lambda key, settings=None: csv_path)
+    frame = load_named_artifact("metrics")
+    assert frame is not None
+    assert list(frame["year_id"]) == [2015]
+    assert list(frame["team_id"]) == ["NYY"]
+
+    monkeypatch.setattr(data_mod, "resolve_file", lambda key, settings=None: None)
+    assert load_named_artifact("players") is None
+
 
 @pytest.mark.unit
 def test_app_keeps_resolve_file_and_load_helpers() -> None:
