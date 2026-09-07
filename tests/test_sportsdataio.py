@@ -16,6 +16,8 @@ from src.baseball_analytics.schema import WAREHOUSE_DDL
 from src.baseball_analytics.sportsdataio import (
     API_KEY_ENV,
     ENDPOINT_GAMES,
+    ENDPOINT_GAMES_BY_DATE,
+    ENDPOINT_PLAYER_GAME_STATS,
     ENDPOINT_PLAYER_SEASON_STATS,
     ENDPOINT_TEAMS,
     NIGHTLY_EXTRACT_REPORT_NAME,
@@ -1054,6 +1056,46 @@ def test_include_season_feeds_lands_games_and_player_season_stats(tmp_path: Path
         item.endpoint == ENDPOINT_PLAYER_SEASON_STATS and item.season == 2024 and item.ok
         for item in report.endpoints
     )
+
+
+@pytest.mark.integration
+def test_pull_dates_lands_per_day_game_feeds_under_as_of_partition(tmp_path: Path) -> None:
+    seen: list[str] = []
+    raw_dir = tmp_path / "raw"
+    days = ["2026-08-21", "2026-08-22", "2026-08-23"]
+    client = SportsDataIOClient(api_key="test-key", fetcher=_phase0_fetcher(seen), min_interval=0)
+    report = pull_phase0_feeds(
+        raw_dir=raw_dir,
+        as_of_date=AS_OF,
+        seasons=[2024],
+        client=client,
+        pull_dates=days,
+    )
+    assert report.ok
+    date_games = [item for item in report.endpoints if item.endpoint == ENDPOINT_GAMES_BY_DATE]
+    date_stats = [item for item in report.endpoints if item.endpoint == ENDPOINT_PLAYER_GAME_STATS]
+    assert {item.as_of_date for item in date_games} == set(days)
+    assert {item.as_of_date for item in date_stats} == set(days)
+    assert all(item.ok for item in date_games + date_stats)
+    for day in days:
+        token = sdio_date_token(day)
+        assert any(f"GamesByDate/{token}" in path for path in seen)
+        assert any(f"PlayerGameStatsByDate/{token}" in path for path in seen)
+        games_path = local_raw_path(
+            raw_dir, ENDPOINT_GAMES_BY_DATE, AS_OF, f"games_by_date_{day}.json"
+        )
+        stats_path = local_raw_path(
+            raw_dir, ENDPOINT_PLAYER_GAME_STATS, AS_OF, f"player_game_stats_{day}.json"
+        )
+        assert games_path.is_file()
+        assert stats_path.is_file()
+        if day != AS_OF:
+            assert not local_raw_path(
+                raw_dir, ENDPOINT_GAMES_BY_DATE, day, f"games_by_date_{day}.json"
+            ).is_file()
+            assert not local_raw_path(
+                raw_dir, ENDPOINT_PLAYER_GAME_STATS, day, f"player_game_stats_{day}.json"
+            ).is_file()
 
 
 @pytest.mark.unit
