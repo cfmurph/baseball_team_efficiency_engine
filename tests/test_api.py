@@ -221,6 +221,46 @@ def test_cors_allowlist_for_vercel_origin(tmp_path: Path) -> None:
     assert denied.headers.get("access-control-allow-origin") != "https://evil.example"
 
 
+def test_cors_wildcard_allows_any_origin(tmp_path: Path) -> None:
+    """Dockerfile / Render set API_CORS_ORIGINS=* for the public fixture host."""
+    client = _client(
+        tmp_path,
+        LAKE_CURRENT,
+        environ={**PINNED_ENV, "API_CORS_ORIGINS": "*"},
+    )
+    origin = "https://random-preview.example"
+    response = client.get("/v1/health", headers={"Origin": origin})
+    assert response.headers.get("access-control-allow-origin") in {origin, "*"}
+
+
+def test_cors_origin_regex_allows_vercel_preview_not_on_allowlist(tmp_path: Path) -> None:
+    """Preview hosts match API_CORS_ORIGIN_REGEX even when not in the CSV list."""
+    production = "https://bench-or-start.vercel.app"
+    preview = "https://btee-git-feat-123.vercel.app"
+    client = _client(
+        tmp_path,
+        LAKE_CURRENT,
+        environ={
+            **PINNED_ENV,
+            "API_CORS_ORIGINS": production,
+            "API_CORS_ORIGIN_REGEX": r"https://.*[.]vercel[.]app",
+        },
+    )
+    allowed = client.get("/v1/health", headers={"Origin": preview})
+    assert allowed.headers.get("access-control-allow-origin") == preview
+    preflight = client.options(
+        "/v1/health",
+        headers={
+            "Origin": preview,
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert preflight.status_code in {200, 204}
+    assert preflight.headers.get("access-control-allow-origin") == preview
+    denied = client.get("/v1/health", headers={"Origin": "https://evil.example"})
+    assert denied.headers.get("access-control-allow-origin") != "https://evil.example"
+
+
 def test_invalid_rec_is_rejected(tmp_path: Path) -> None:
     client = _client(tmp_path, LAKE_CURRENT)
     response = client.get("/v1/cards", params={"rec": "bench"})
