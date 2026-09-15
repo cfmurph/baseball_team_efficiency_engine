@@ -13,6 +13,8 @@ from pipeline.extract import pull_mlb_stats as pull_mod
 from pipeline.transform.build_warehouse import insert_mlb_stats_tables
 from src.baseball_analytics.mlb_stats import (
     ENDPOINT_TEAMS,
+    EndpointResult,
+    ExtractReport,
     MlbFrames,
     MlbStatsClient,
     MlbStatsError,
@@ -825,3 +827,205 @@ def test_extract_date_schedule_lands_as_of_filename(tmp_path: Path) -> None:
     assert schedule_calls[0].get("season") is None
     assert local_raw_path(raw_dir, "schedule", AS_OF, f"schedule_{AS_OF}.json").is_file()
     assert not local_raw_path(raw_dir, "schedule", AS_OF, "schedule_2024.json").is_file()
+
+
+@pytest.mark.unit
+def test_parse_teams_skips_non_majors_sport() -> None:
+    teams = parse_teams(
+        {
+            "teams": [
+                {
+                    "id": 147,
+                    "abbreviation": "NYY",
+                    "name": "New York Yankees",
+                    "sport": {"id": 1},
+                },
+                {
+                    "id": 564,
+                    "abbreviation": "SWB",
+                    "name": "Scranton/Wilkes-Barre RailRiders",
+                    "sport": {"id": 11},
+                },
+            ]
+        }
+    )
+    assert list(teams["mlb_team_id"]) == [147]
+
+
+@pytest.mark.unit
+def test_parse_player_stats_accepts_stats_object_not_list() -> None:
+    hitting = parse_player_stats(
+        {
+            "stats": {
+                "splits": [
+                    {
+                        "season": "2024",
+                        "player": {"id": 592450, "fullName": "Aaron Judge"},
+                        "team": {"id": 147, "name": "Yankees"},
+                        "stat": {"homeRuns": 58, "gamesPlayed": 158},
+                    }
+                ]
+            }
+        },
+        "hitting",
+    )
+    assert list(hitting["mlb_player_id"]) == [592450]
+    assert hitting.iloc[0]["hr"] == 58
+
+
+@pytest.mark.unit
+def test_client_standings_uses_library_dump() -> None:
+    mlb = MagicMock()
+    mlb.get_standings.return_value = [
+        _Dump(
+            {
+                "team_records": [
+                    {
+                        "team": {"id": 147, "name": "Yankees"},
+                        "season": "2024",
+                        "wins": 94,
+                        "losses": 68,
+                        "games_played": 162,
+                        "winning_percentage": 0.58,
+                    }
+                ]
+            }
+        )
+    ]
+    client = MlbStatsClient(mlb=mlb, min_interval=0)
+    standings = parse_standings(client.standings(2024))
+    mlb.get_standings.assert_called_once()
+    args, kwargs = mlb.get_standings.call_args
+    assert args[:2] == ("103,104", "2024")
+    assert kwargs["sportId"] == 1
+    assert standings.iloc[0]["wins"] == 94
+    assert standings.iloc[0]["winning_pct"] == pytest.approx(0.58)
+
+
+@pytest.mark.unit
+def test_schedule_non_mapping_dump_returns_empty_dates() -> None:
+    mlb = MagicMock()
+    mlb.get_schedule.return_value = ["not-a-schedule"]
+    client = MlbStatsClient(mlb=mlb, min_interval=0)
+    assert client.schedule(season=2024) == {"dates": []}
+
+
+@pytest.mark.unit
+def test_get_without_fetcher_raises() -> None:
+    client = MlbStatsClient(mlb=MagicMock(), min_interval=0)
+    with pytest.raises(MlbStatsError, match="test fetcher hook"):
+        client.get("/api/v1/teams", {"sportId": 1})
+
+
+@pytest.mark.unit
+def test_team_stats_skips_teams_without_id() -> None:
+    mlb = MagicMock()
+    mlb.get_teams.return_value = [
+        _Dump({"name": "No Id"}),
+        _Dump({"id": 147, "name": "Yankees"}),
+    ]
+    mlb.get_team_stats.return_value = {
+        "hitting": {
+            "season": _Dump(
+                {
+                    "splits": [
+                        {
+                            "season": "2024",
+                            "team": {"id": 147, "name": "Yankees"},
+                            "stat": {"home_runs": 237, "games_played": 162},
+                        }
+                    ]
+                }
+            )
+        }
+    }
+    client = MlbStatsClient(mlb=mlb, min_interval=0)
+    hitting = parse_team_stats(client.team_stats(2024, "hitting"), "hitting")
+    mlb.get_team_stats.assert_called_once()
+    assert mlb.get_team_stats.call_args.args[0] == 147
+    assert list(hitting["mlb_team_id"]) == [147]
+
+
+@pytest.mark.unit
+def test_team_stats_raises_when_every_team_fails() -> None:
+    from mlbstatsapi import MlbHttpError
+
+    mlb = MagicMock()
+    mlb.get_teams.return_value = [
+        _Dump({"id": 147, "name": "Yankees"}),
+        _Dump({"id": 133, "name": "Athletics"}),
+    ]
+    mlb.get_team_stats.side_effect = MlbHttpError(503, "unavailable", url="/teams/stats")
+    client = MlbStatsClient(mlb=mlb, min_interval=0)
+    with pytest.raises(MlbStatsError) as excinfo:
+        client.team_stats(2024, "hitting")
+    assert excinfo.value.status_code == 503
+    assert mlb.get_team_stats.call_count == 2
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("exc", "match"),
+    [
+        ("transport", "transport failed"),
+        ("decode", "Invalid JSON"),
+        ("generic", "request failed"),
+    ],
+)
+def test_client_maps_remaining_library_errors(exc: str, match: str) -> None:
+    from mlbstatsapi import MlbDecodeError, MlbTransportError, TheMlbStatsApiException
+
+    errors = {
+        "transport": MlbTransportError("connection reset"),
+        "decode": MlbDecodeError("truncated body"),
+        "generic": TheMlbStatsApiException("unexpected library failure"),
+    }
+    mlb = MagicMock()
+    mlb.get_teams.side_effect = errors[exc]
+    client = MlbStatsClient(mlb=mlb, min_interval=0)
+    with pytest.raises(MlbStatsError, match=match):
+        client.teams()
+
+
+@pytest.mark.unit
+def test_cli_closes_client_after_success_and_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typer.testing import CliRunner
+
+    settings_path = tmp_path / "settings.yaml"
+    settings_path.write_text(
+        "raw_dir: raw\nartifacts_uri: ''\nartifacts_dir: artifacts\nmlb_stats: {}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    fake_client = MagicMock()
+    monkeypatch.setattr(pull_mod, "client_from_settings", lambda _settings: fake_client)
+
+    def ok_report(*_args, **_kwargs):
+        return ExtractReport(
+            as_of_date=AS_OF,
+            seasons=[2024],
+            endpoints=[EndpointResult(endpoint="teams", ok=True)],
+        )
+
+    monkeypatch.setattr(pull_mod, "pull_majors_feeds", ok_report)
+    success = CliRunner().invoke(
+        pull_mod.app,
+        ["--config-path", str(settings_path), "--as-of-date", AS_OF],
+    )
+    assert success.exit_code == 0
+    fake_client.close.assert_called_once()
+
+    fake_client.reset_mock()
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("statsapi down")
+
+    monkeypatch.setattr(pull_mod, "pull_majors_feeds", boom)
+    failed = CliRunner().invoke(
+        pull_mod.app,
+        ["--config-path", str(settings_path), "--as-of-date", AS_OF],
+    )
+    assert failed.exit_code == 0
+    fake_client.close.assert_called_once()
