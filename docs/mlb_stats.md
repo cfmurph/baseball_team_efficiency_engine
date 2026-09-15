@@ -43,17 +43,20 @@ today). Override with `--season` / `MLB_STATS_SEASONS=2024,2025` /
 
 ## Rate limits
 
-The Stats API is unofficial and unpublished. This client uses polite defaults:
-
-- `User-Agent`: project identity from `src/baseball_analytics/io.py`
-- 0.35s minimum interval between requests
-- 3 retries with exponential backoff on 429 / 5xx
-- 45s request timeout
+HTTP goes through [`python-mlb-statsapi`](https://github.com/zero-sum-seattle/python-mlb-statsapi)
+(`Mlb`). Timeouts, bounded GET retries (429 / 5xx), and `strict_http=True`
+come from the library. This extract still spaces calls with a 0.35s minimum
+interval.
 
 Do not tighten the interval in nightly. There is no API key and no quota
 dashboard — if the API blips, the extract **soft-fails** (exit 0) and writes
 `extract_report.json` with `ok: false`. Nightly continues; the warehouse
 builds Lahman-only.
+
+Landed JSON may be the legacy camelCase Stats API shape or a Pydantic
+snake_case dump. Parsers accept both and map only columns that already exist
+on `fact_mlb_*` (no DRS / OAA / UZR, no WAR). SportsDataIO stays the Phase 0
+live path.
 
 ## How to refresh
 

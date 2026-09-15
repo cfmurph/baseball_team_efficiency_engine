@@ -51,7 +51,7 @@ src/baseball_analytics/
   metrics.py                    All metric functions (Pythag, Gini, WAR efficiency, contract labels)
   war.py                        rWAR overlay + Lahman approx (wOBA / FIP) + BaseRuns
   schema.py                     DuckDB DDL for all fact/dim tables
-  mlb_stats.py                  MLB Stats API client + raw landing
+  mlb_stats.py                  MLB Stats API client (python-mlb-statsapi) + raw landing
   sportsdataio.py               SportsDataIO client + Phase 0 spine
   validation.py                 Data quality checks + ValidationReport
 models/
