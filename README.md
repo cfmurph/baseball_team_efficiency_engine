@@ -274,7 +274,7 @@ python3 -m pytest -m e2e -v
 python3 -m pytest tests/ -v
 ```
 
-PRs to `master` run `.github/workflows/ci.yml` as **Unit tests**, **Integration tests**, **E2E tests**, plus **BenchOrStart Next.js**. That replaces the old `ci-smoke.yml` job. Smoke coverage is preserved:
+PRs to `master` run `.github/workflows/ci.yml` as **Unit tests**, **Integration tests**, **E2E tests**, plus **BenchOrStart Next.js**, and a report-only **Coverage** job (job summary + artifact; no `--cov-fail-under`, no Codecov, not required by the smoke alias). That replaces the old `ci-smoke.yml` job. Smoke coverage is preserved:
 
 - **E2E** — AppTest every sidebar page (empty `artifacts/` is fine) + golden WAR (Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023, `war_source=real`). Refresh notes: [docs/war_sources.md](docs/war_sources.md#golden-fixtures-ci).
 - **Integration** — nightly `PIPELINE_STEPS` keeps `pull_war` immediately after `pull_sources`, `pull_mlb_stats` after `pull_war` (soft-fail), and `pull_sportsdataio` after Stats API (soft-fail without `SPORTSDATAIO_API_KEY`). Warehouse / storage / fantasy emitter / Stats API / SportsDataIO ingest / thin read API (`/v1/health`, `/v1/cards`, `/v1/seasons`, `/v1/players`, `/v1/players/{id}`) use fixtures or `file://` only.
