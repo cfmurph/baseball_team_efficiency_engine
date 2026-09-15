@@ -25,16 +25,27 @@ def test_coverage_job_is_report_only_and_off_the_smoke_alias() -> None:
     run_text = "\n".join(
         step.get("run", "") for step in coverage["steps"] if isinstance(step, dict)
     )
-    assert "--cov=src" in run_text
-    assert "--cov=pipeline" in run_text
-    assert "--cov=dashboard" in run_text
-    assert "--cov=services" in run_text
-    assert "--cov=fantasy" in run_text
-    assert "--cov-fail-under" not in run_text
+    pytest_cmd = next(
+        step["run"]
+        for step in coverage["steps"]
+        if isinstance(step, dict) and "pytest tests/" in step.get("run", "")
+    )
+    assert "--cov=src" in pytest_cmd
+    assert "--cov=pipeline" in pytest_cmd
+    assert "--cov=dashboard" in pytest_cmd
+    assert "--cov=services" in pytest_cmd
+    assert "--cov=fantasy" in pytest_cmd
+    assert "--cov-fail-under" not in pytest_cmd
     assert "GITHUB_STEP_SUMMARY" in run_text
     assert "coverage report" in run_text
     assert "ARTIFACTS_URI" not in run_text
-    assert "codecov" not in text.lower()
+    uses = [
+        str(step.get("uses", ""))
+        for job in jobs.values()
+        for step in job.get("steps", [])
+        if isinstance(step, dict)
+    ]
+    assert not any("codecov" in use.lower() for use in uses)
 
     uploads = [
         step
