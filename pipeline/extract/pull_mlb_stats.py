@@ -87,6 +87,10 @@ def main(
             log.warning("Could not write extract report: %s", write_exc)
         typer.echo(f"MLB Stats API extract soft-failed; warehouse will use Lahman-only. ({exc})")
         raise typer.Exit(code=0) from None
+    finally:
+        closer = getattr(client, "close", None)
+        if callable(closer):
+            closer()
 
     failed_eps = [item.endpoint for item in report.endpoints if not item.ok]
     landed = [item.relative_key for item in report.endpoints if item.ok]

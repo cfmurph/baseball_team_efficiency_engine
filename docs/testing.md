@@ -11,7 +11,7 @@ Every test has exactly one of `unit`, `integration`, or `e2e`.
 | Integration | `integration` | Warehouse / metrics / storage / fantasy emitter / MLB Stats API / SportsDataIO ingest / thin read API with fixtures or `file://` backends. Nightly `PIPELINE_STEPS` contract (`pull_war` after `pull_sources`, `pull_mlb_stats` after `pull_war`, `pull_sportsdataio` after Stats API). |
 | E2E | `e2e` | Streamlit AppTest (all GM nav pages + BenchOrStart boot), golden rWAR spot checks, and fantasy `cards.jsonl` path under `current/` and `runs/{run_id}/`. |
 
-No layer talks to live Baseball-Reference, MLB Stats API, SportsDataIO, or object storage. E2E uses committed fixtures and in-process AppTest only.
+No layer talks to live Baseball-Reference, MLB Stats API, SportsDataIO, or object storage. E2E uses committed fixtures and in-process AppTest only. Stats API unit tests mock `mlbstatsapi.Mlb` or inject a `fetcher`; they do not construct a live HTTP client against statsapi.mlb.com.
 
 ## Run locally
 
