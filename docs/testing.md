@@ -11,7 +11,7 @@ Every test has exactly one of `unit`, `integration`, or `e2e`.
 | Integration | `integration` | Warehouse / metrics / storage / fantasy emitter / MLB Stats API / SportsDataIO ingest / thin read API with fixtures or `file://` backends. Nightly `PIPELINE_STEPS` contract (`pull_war` after `pull_sources`, `pull_mlb_stats` after `pull_war`, `pull_sportsdataio` after Stats API). |
 | E2E | `e2e` | Streamlit AppTest (all GM nav pages + BenchOrStart boot), golden rWAR spot checks, and fantasy `cards.jsonl` path under `current/` and `runs/{run_id}/`. |
 
-No layer talks to live Baseball-Reference, MLB Stats API, SportsDataIO, or object storage. E2E uses committed fixtures and in-process AppTest only.
+No layer talks to live Baseball-Reference, MLB Stats API, SportsDataIO, or object storage. E2E uses committed fixtures and in-process AppTest only. Stats API unit tests mock `mlbstatsapi.Mlb` or inject a `fetcher`; they do not construct a live HTTP client against statsapi.mlb.com.
 
 ## Run locally
 
@@ -29,9 +29,20 @@ python3 -m pytest tests/ -v
 
 `--strict-markers` is on by default (`pytest.ini`). Unknown markers fail collection.
 
+## Coverage
+
+Report-only. Same packages as the CI **Coverage** job:
+
+```bash
+python3 -m pytest tests/ \
+  --cov=src --cov=pipeline --cov=dashboard --cov=services --cov=fantasy
+```
+
+There is no `--cov-fail-under` gate and no Codecov upload. Local outputs (`.coverage`, `coverage.xml`, `htmlcov/`) are gitignored.
+
 ## What CI enforces
 
-PRs to `master` run `.github/workflows/ci.yml` as **four separate checks**:
+PRs to `master` run `.github/workflows/ci.yml` as **four separate checks** plus an informational **Coverage** job:
 
 | Check name | Command | Supersedes from `ci-smoke.yml` |
 |---|---|---|
@@ -39,8 +50,9 @@ PRs to `master` run `.github/workflows/ci.yml` as **four separate checks**:
 | **Integration tests** | `pytest -m integration` | Nightly pipeline contract (`tests/test_run_nightly.py`) + SportsDataIO ingest (`tests/test_sportsdataio.py`) + read API (`tests/test_api.py`, including `/v1/players`) |
 | **E2E tests** | `pytest -m e2e` | AppTest (`tests/test_dashboard_apptest.py`) + golden WAR (`tests/test_golden_war.py`) |
 | **BenchOrStart Next.js** | `npm install && npm test && npm run build` | Next.js job from the old `ci-smoke.yml` |
+| **Coverage** (informational) | `pytest tests/ --cov=src --cov=pipeline --cov=dashboard --cov=services --cov=fantasy` | None. Completes the #149 job that never landed. Writes the term table to the job summary and uploads `coverage.xml` + `htmlcov` (7-day retention). |
 
-The old single job **Dashboard + pipeline + golden WAR** is a thin alias in `ci.yml` that depends on the three pyramid jobs (the master ruleset still requires that exact name). Its coverage is split:
+The old single job **Dashboard + pipeline + golden WAR** is a thin alias in `ci.yml` that depends on the three pyramid jobs (the master ruleset still requires that exact name). Do not add Coverage to `smoke_alias.needs`. Its coverage is split:
 
 - AppTest all sidebar pages → **E2E tests**
 - Golden WAR fixtures (Judge 2022, Trout 2012, deGrom 2018, Ohtani 2023) → **E2E tests**

@@ -17,6 +17,7 @@ from src.baseball_analytics.mlb_stats import (
     MlbStatsClient,
     MlbStatsError,
     RAW_REMOTE_PREFIX,
+    client_from_settings,
     discover_as_of_dates,
     join_mlb_player_ids,
     join_mlb_team_ids,
@@ -453,6 +454,118 @@ def test_parse_player_stats_drops_missing_ids_and_sentinels() -> None:
 
 
 @pytest.mark.unit
+def test_parse_snake_case_library_dumps() -> None:
+    teams = parse_teams(
+        {
+            "teams": [
+                {
+                    "id": 147,
+                    "name": "New York Yankees",
+                    "abbreviation": "NYY",
+                    "team_name": "Yankees",
+                    "location_name": "New York",
+                    "active": True,
+                    "league": {"id": 103, "name": "American League"},
+                    "division": {"id": 201, "name": "American League East"},
+                    "sport": {"id": 1},
+                }
+            ]
+        }
+    )
+    assert teams.iloc[0]["mlb_abbr"] == "NYY"
+    assert teams.iloc[0]["mlb_team_name"] == "Yankees"
+    standings = parse_standings(
+        {
+            "records": [
+                {
+                    "team_records": [
+                        {
+                            "team": {"id": 147, "name": "Yankees"},
+                            "season": "2024",
+                            "wins": 94,
+                            "losses": 68,
+                            "games_played": 162,
+                            "runs_scored": 815,
+                            "runs_allowed": 668,
+                            "run_differential": 147,
+                            "winning_percentage": 0.58,
+                            "division_rank": "1",
+                            "league_rank": "1",
+                        }
+                    ]
+                }
+            ]
+        }
+    )
+    assert standings.iloc[0]["wins"] == 94
+    assert standings.iloc[0]["winning_pct"] == pytest.approx(0.58)
+    hitting = parse_player_stats(
+        {
+            "stats": [
+                {
+                    "splits": [
+                        {
+                            "season": "2024",
+                            "player": {"id": 592450, "full_name": "Aaron Judge"},
+                            "team": {"id": 147, "name": "Yankees"},
+                            "stat": {
+                                "games_played": 158,
+                                "plate_appearances": 704,
+                                "at_bats": 559,
+                                "hits": 180,
+                                "home_runs": 58,
+                                "base_on_balls": 133,
+                                "strike_outs": 171,
+                                "avg": 0.322,
+                                "obp": 0.458,
+                                "slg": 0.701,
+                                "ops": 1.159,
+                            },
+                        }
+                    ]
+                }
+            ]
+        },
+        "hitting",
+    )
+    judge = hitting.set_index("mlb_player_id").loc[592450]
+    assert judge["hr"] == 58
+    assert judge["player_name"] == "Aaron Judge"
+
+
+@pytest.mark.unit
+def test_parse_player_stats_does_not_land_drs_oaa_uzr() -> None:
+    hitting = parse_player_stats(
+        {
+            "stats": [
+                {
+                    "splits": [
+                        {
+                            "season": "2024",
+                            "player": {"id": 1, "full_name": "X"},
+                            "team": {"id": 147},
+                            "stat": {
+                                "games_played": 10,
+                                "home_runs": 2,
+                                "drs": 12,
+                                "oaa": 5,
+                                "uzr": 3,
+                                "outs_above_average": 4,
+                            },
+                        }
+                    ]
+                }
+            ]
+        },
+        "hitting",
+    )
+    assert list(hitting["mlb_player_id"]) == [1]
+    assert hitting.iloc[0]["hr"] == 2
+    for banned in ("drs", "oaa", "uzr", "outs_above_average", "war"):
+        assert banned not in hitting.columns
+
+
+@pytest.mark.unit
 def test_merge_player_seasons_labels_pitcher_batter_and_two_way() -> None:
     hitting = pd.DataFrame(
         {
@@ -487,53 +600,191 @@ def test_merge_player_seasons_labels_pitcher_batter_and_two_way() -> None:
     assert set(batter_only["player_type"]) == {"batter"}
 
 
-@pytest.mark.unit
-def test_client_retries_429_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("src.baseball_analytics.mlb_stats._backoff", lambda *_a, **_k: None)
-    busy = MagicMock()
-    busy.status_code = 429
-    busy.text = "slow down"
-    busy.url = "https://statsapi.mlb.com/api/v1/teams"
-    ok = MagicMock()
-    ok.status_code = 200
-    ok.json.return_value = {"teams": []}
-    ok.text = "ok"
-    ok.url = "https://statsapi.mlb.com/api/v1/teams"
-    session = MagicMock()
-    session.get.side_effect = [busy, ok]
-    client = MlbStatsClient(session=session, min_interval=0, max_retries=1)
-    assert client.teams() == {"teams": []}
-    assert session.get.call_count == 2
+class _Dump:
+    """Stand-in for a Pydantic model so tests never construct live Mlb HTTP."""
+
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+        self.id = payload.get("id")
+
+    def model_dump(self, **_kwargs) -> dict:
+        return dict(self._payload)
 
 
 @pytest.mark.unit
-def test_client_400_does_not_retry() -> None:
-    bad = MagicMock()
-    bad.status_code = 400
-    bad.text = "bad request"
-    bad.url = "https://statsapi.mlb.com/api/v1/teams"
-    session = MagicMock()
-    session.get.return_value = bad
-    client = MlbStatsClient(session=session, min_interval=0, max_retries=3)
+def test_client_uses_library_get_stats_and_dumps_snake_case() -> None:
+    mlb = MagicMock()
+    mlb.get_stats.return_value = {
+        "hitting": {
+            "season": _Dump(
+                {
+                    "splits": [
+                        {
+                            "season": "2024",
+                            "player": {"id": 592450, "full_name": "Aaron Judge"},
+                            "team": {"id": 147, "name": "Yankees"},
+                            "stat": {"games_played": 158, "home_runs": 58, "plate_appearances": 704},
+                        }
+                    ]
+                }
+            )
+        }
+    }
+    client = MlbStatsClient(mlb=mlb, min_interval=0)
+    payload = client.player_stats(2024, "hitting")
+    mlb.get_stats.assert_called_once()
+    kwargs = mlb.get_stats.call_args.kwargs
+    assert kwargs["season"] == 2024
+    assert kwargs["playerPool"] == "all"
+    hitting = parse_player_stats(payload, "hitting")
+    assert int(hitting.iloc[0]["mlb_player_id"]) == 592450
+    assert hitting.iloc[0]["hr"] == 58
+    assert hitting.iloc[0]["player_name"] == "Aaron Judge"
+
+
+@pytest.mark.unit
+def test_client_uses_library_get_team_stats_and_schedule() -> None:
+    mlb = MagicMock()
+    mlb.get_teams.return_value = [_Dump({"id": 147, "abbreviation": "NYY", "name": "Yankees"})]
+    mlb.get_team_stats.return_value = {
+        "hitting": {
+            "season": _Dump(
+                {
+                    "splits": [
+                        {
+                            "season": "2024",
+                            "team": {"id": 147, "name": "Yankees"},
+                            "stat": {"home_runs": 237, "games_played": 162},
+                        }
+                    ]
+                }
+            )
+        }
+    }
+    mlb.get_schedule.return_value = _Dump(
+        {
+            "dates": [
+                {
+                    "date": "2024-08-23",
+                    "games": [
+                        {
+                            "game_pk": 745460,
+                            "season": "2024",
+                            "official_date": "2024-08-23",
+                            "status": {"detailed_state": "Final"},
+                            "venue": {"name": "PNC Park"},
+                            "teams": {
+                                "away": {"team": {"id": 113}, "score": 5, "league_record": {"wins": 62, "losses": 67}},
+                                "home": {"team": {"id": 134}, "score": 6, "league_record": {"wins": 61, "losses": 67}},
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+    )
+    client = MlbStatsClient(mlb=mlb, min_interval=0)
+    teams = parse_teams(client.teams())
+    hitting = parse_team_stats(client.team_stats(2024, "hitting"), "hitting")
+    games = parse_schedule(client.schedule(season=2024))
+    mlb.get_teams.assert_called()
+    mlb.get_team_stats.assert_called_once()
+    mlb.get_schedule.assert_called_once()
+    assert list(teams["mlb_team_id"]) == [147]
+    assert hitting.iloc[0]["batting_hr"] == 237
+    assert int(games.iloc[0]["game_pk"]) == 745460
+    assert int(games.iloc[0]["home_score"]) == 6
+
+
+@pytest.mark.unit
+def test_client_maps_mlb_http_error() -> None:
+    from mlbstatsapi import MlbHttpError
+
+    mlb = MagicMock()
+    mlb.get_teams.side_effect = MlbHttpError(
+        400,
+        "bad request",
+        url="https://statsapi.mlb.com/api/v1/teams",
+    )
+    client = MlbStatsClient(mlb=mlb, min_interval=0)
     with pytest.raises(MlbStatsError) as excinfo:
         client.teams()
-    assert session.get.call_count == 1
     assert excinfo.value.status_code == 400
+    mlb.get_teams.assert_called_once()
 
 
 @pytest.mark.unit
-def test_client_503_exhausts_retries(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("src.baseball_analytics.mlb_stats._backoff", lambda *_a, **_k: None)
-    busy = MagicMock()
-    busy.status_code = 503
-    busy.text = "unavailable"
-    busy.url = "https://statsapi.mlb.com/api/v1/teams"
-    session = MagicMock()
-    session.get.return_value = busy
-    client = MlbStatsClient(session=session, min_interval=0, max_retries=2)
-    with pytest.raises(MlbStatsError, match="failed after retries"):
-        client.teams()
-    assert session.get.call_count == 3
+def test_client_maps_mlb_timeout() -> None:
+    from mlbstatsapi import MlbTimeoutError
+
+    mlb = MagicMock()
+    mlb.get_stats.side_effect = MlbTimeoutError("Request failed")
+    client = MlbStatsClient(mlb=mlb, min_interval=0)
+    with pytest.raises(MlbStatsError, match="timeout"):
+        client.player_stats(2024, "hitting")
+
+
+@pytest.mark.unit
+def test_fetcher_path_does_not_construct_mlb(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_args, **_kwargs):
+        raise AssertionError("Mlb must not be constructed when fetcher is set")
+
+    monkeypatch.setattr("src.baseball_analytics.mlb_stats.Mlb", boom)
+    client = MlbStatsClient(fetcher=lambda _path, _params: {"teams": []}, min_interval=0)
+    assert client.teams() == {"teams": []}
+
+
+@pytest.mark.unit
+def test_team_stats_skips_one_failed_team() -> None:
+    from mlbstatsapi import MlbHttpError
+
+    mlb = MagicMock()
+    mlb.get_teams.return_value = [
+        _Dump({"id": 147, "name": "Yankees"}),
+        _Dump({"id": 133, "name": "Athletics"}),
+    ]
+
+    def team_stats(team_id, stats, groups, **_kwargs):
+        if team_id == 147:
+            raise MlbHttpError(503, "unavailable", url="/teams/147/stats")
+        return {
+            "hitting": {
+                "season": _Dump(
+                    {
+                        "splits": [
+                            {
+                                "season": "2024",
+                                "team": {"id": 133, "name": "Athletics"},
+                                "stat": {"home_runs": 180, "games_played": 162},
+                            }
+                        ]
+                    }
+                )
+            }
+        }
+
+    mlb.get_team_stats.side_effect = team_stats
+    client = MlbStatsClient(mlb=mlb, min_interval=0)
+    hitting = parse_team_stats(client.team_stats(2024, "hitting"), "hitting")
+    assert list(hitting["mlb_team_id"]) == [133]
+    assert hitting.iloc[0]["batting_hr"] == 180
+
+
+@pytest.mark.unit
+def test_client_from_settings_uses_library_host_and_strict_http(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    constructed: dict = {}
+
+    def fake_mlb(**kwargs):
+        constructed.update(kwargs)
+        return MagicMock()
+
+    monkeypatch.setattr("src.baseball_analytics.mlb_stats.Mlb", fake_mlb)
+    client = client_from_settings({"mlb_stats": {"base_url": "https://statsapi.mlb.com"}})
+    assert constructed["hostname"] == "statsapi.mlb.com"
+    assert constructed["strict_http"] is True
+    client.close()
 
 
 @pytest.mark.integration

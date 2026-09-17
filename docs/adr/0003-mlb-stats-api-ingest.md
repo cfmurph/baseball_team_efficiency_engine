@@ -26,6 +26,8 @@ on the same artifacts.
   blips. Warehouse must still build on the Lahman-only path.
 - Rate-limit politely (default 0.35s); write `extract_report.json` under the
   same raw prefix.
+- HTTP client is [`python-mlb-statsapi`](https://github.com/zero-sum-seattle/python-mlb-statsapi)
+  (`Mlb`). SportsDataIO remains the Phase 0 live path and is not replaced.
 
 ## Non-goals
 

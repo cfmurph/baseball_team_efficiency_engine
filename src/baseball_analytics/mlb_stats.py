@@ -3,6 +3,11 @@
 Public majors feeds only (``sportId=1``). No API key. Does **not** ingest or
 overwrite Baseball-Reference rWAR.
 
+HTTP goes through ``python-mlb-statsapi`` (``Mlb``) so timeouts, retries, and
+strict HTTP live in the library. Callers still receive JSON dicts for the
+locked raw landing. Pydantic dumps are snake_case; parsers also accept the
+legacy camelCase Stats API shape already on disk.
+
 Locked raw path (ADR 0003 / #108)::
 
     {ARTIFACTS_URI}/raw/mlb_stats/{endpoint}/{as_of_date}/…json
@@ -19,11 +24,18 @@ import os
 from pathlib import Path
 import time
 from typing import Any
+from urllib.parse import urlparse
 
 import pandas as pd
-import requests
+from mlbstatsapi import (
+    Mlb,
+    MlbDecodeError,
+    MlbHttpError,
+    MlbTimeoutError,
+    MlbTransportError,
+    TheMlbStatsApiException,
+)
 
-from src.baseball_analytics.io import DEFAULT_HEADERS
 from src.baseball_analytics.storage import ArtifactBackend, default_as_of_date, open_backend
 
 log = logging.getLogger(__name__)
@@ -35,7 +47,8 @@ RAW_REMOTE_PREFIX = "raw/mlb_stats"
 RAW_LOCAL_NAME = "mlb_stats"
 DEFAULT_MIN_INTERVAL_S = 0.35
 DEFAULT_MAX_RETRIES = 3
-DEFAULT_TIMEOUT_S = 45
+# Library default is (3.05, 30.0). A scalar here is the read timeout.
+DEFAULT_TIMEOUT_S = 30
 DEFAULT_TEAM_MAP = "data/crosswalks/mlb_team_map.csv"
 PEOPLE_MLB_ID_COLUMNS = ("mlbID", "mlb_id", "key_mlbam", "mlbam")
 
@@ -220,7 +233,12 @@ def resolve_as_of_date(
 
 
 class MlbStatsClient:
-    """Polite Stats API client. Inject ``fetcher`` in tests to avoid the network."""
+    """Stats API client backed by ``mlbstatsapi.Mlb``.
+
+    Inject ``fetcher`` (legacy path/params hook) or ``mlb`` in tests so CI
+    never touches the live network. Timeouts, retries, and strict HTTP come
+    from the library when this client constructs ``Mlb``.
+    """
 
     def __init__(
         self,
@@ -228,58 +246,139 @@ class MlbStatsClient:
         base_url: str = STATS_API_BASE,
         min_interval: float = DEFAULT_MIN_INTERVAL_S,
         max_retries: int = DEFAULT_MAX_RETRIES,
-        timeout: int = DEFAULT_TIMEOUT_S,
+        timeout: int | float | tuple[float, float] = DEFAULT_TIMEOUT_S,
         fetcher: Fetcher | None = None,
-        session: requests.Session | None = None,
+        session: Any | None = None,
+        mlb: Any | None = None,
+        strict_http: bool = True,
     ) -> None:
         self.base_url = str(base_url).rstrip("/")
         self.min_interval = float(min_interval)
         self.max_retries = int(max_retries)
-        self.timeout = int(timeout)
+        self.timeout = timeout
+        self.strict_http = bool(strict_http)
         self._fetcher = fetcher
-        self._session = session or requests.Session()
-        self._session.headers.update(DEFAULT_HEADERS)
-        self._session.headers.setdefault("Accept", "application/json")
+        self._owns_mlb = False
         self._last_request_time = 0.0
+        if mlb is not None:
+            self._mlb = mlb
+        elif fetcher is None:
+            self._mlb = Mlb(
+                hostname=_hostname_from_base(self.base_url),
+                timeout=timeout,
+                session=session,
+                strict_http=self.strict_http,
+            )
+            self._owns_mlb = True
+        else:
+            self._mlb = None
+
+    def close(self) -> None:
+        mlb = self._mlb
+        if self._owns_mlb and mlb is not None:
+            closer = getattr(mlb, "close", None)
+            if callable(closer):
+                closer()
+        self._owns_mlb = False
+
+    def __enter__(self) -> MlbStatsClient:
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        self.close()
 
     def get(self, path: str, params: Mapping[str, Any] | None = None) -> dict[str, Any]:
         query = {key: value for key, value in dict(params or {}).items() if value is not None}
         if self._fetcher is not None:
             return self._fetcher(path, query)
-        return self._http_get(path, query)
+        raise MlbStatsError(
+            "MlbStatsClient.get() is the test fetcher hook; live calls use Mlb helpers"
+        )
 
     def teams(self) -> dict[str, Any]:
-        return self.get("/api/v1/teams", {"sportId": SPORT_ID})
+        if self._fetcher is not None:
+            return self.get("/api/v1/teams", {"sportId": SPORT_ID})
+        teams = self._mlb_call(self._require_mlb().get_teams, sport_id=SPORT_ID)
+        return {"teams": [_model_dump(team) for team in teams or []]}
 
     def standings(self, season: int) -> dict[str, Any]:
-        return self.get(
-            "/api/v1/standings",
-            {"leagueId": LEAGUE_IDS, "season": season, "sportId": SPORT_ID},
+        if self._fetcher is not None:
+            return self.get(
+                "/api/v1/standings",
+                {"leagueId": LEAGUE_IDS, "season": season, "sportId": SPORT_ID},
+            )
+        records = self._mlb_call(
+            self._require_mlb().get_standings,
+            LEAGUE_IDS,
+            str(season),
+            sportId=SPORT_ID,
         )
+        return {"records": [_model_dump(record) for record in records or []]}
 
     def team_stats(self, season: int, group: str) -> dict[str, Any]:
-        return self.get(
-            "/api/v1/teams/stats",
-            {
-                "season": season,
-                "group": group,
-                "stats": "season",
-                "sportIds": SPORT_ID,
-            },
-        )
+        if self._fetcher is not None:
+            return self.get(
+                "/api/v1/teams/stats",
+                {
+                    "season": season,
+                    "group": group,
+                    "stats": "season",
+                    "sportIds": SPORT_ID,
+                },
+            )
+        # get_team_stats is per-team. Merge majors teams into the existing
+        # landed {"stats": [{"splits": [...]}]} spine. One failed team is
+        # skipped; the endpoint fails only when nothing lands.
+        mlb = self._require_mlb()
+        teams = self._mlb_call(mlb.get_teams, sport_id=SPORT_ID)
+        splits: list[dict[str, Any]] = []
+        last_error: MlbStatsError | None = None
+        for team in teams or []:
+            team_id = _model_id(team)
+            if team_id is None:
+                continue
+            try:
+                result = self._mlb_call(
+                    mlb.get_team_stats,
+                    team_id,
+                    ["season"],
+                    [group],
+                    season=season,
+                )
+            except MlbStatsError as exc:
+                last_error = exc
+                log.warning("get_team_stats(%s, %s) failed softly: %s", team_id, group, exc)
+                continue
+            splits.extend(_splits_from_stat_dict(result, group))
+        if not splits and last_error is not None:
+            raise last_error
+        return {"stats": [{"splits": splits}]}
 
     def player_stats(self, season: int, group: str) -> dict[str, Any]:
-        return self.get(
-            "/api/v1/stats",
-            {
-                "stats": "season",
-                "group": group,
-                "season": season,
-                "sportId": SPORT_ID,
-                "playerPool": "all",
-                "limit": 10000,
-            },
+        if self._fetcher is not None:
+            return self.get(
+                "/api/v1/stats",
+                {
+                    "stats": "season",
+                    "group": group,
+                    "season": season,
+                    "sportId": SPORT_ID,
+                    "playerPool": "all",
+                    "limit": 10000,
+                },
+            )
+        # League-wide /stats. get_player_stats is per person and does not
+        # replace this majors pool call.
+        result = self._mlb_call(
+            self._require_mlb().get_stats,
+            ["season"],
+            [group],
+            season=season,
+            sportId=SPORT_ID,
+            playerPool="all",
+            limit=10000,
         )
+        return {"stats": _stat_blocks_from_group(result, group)}
 
     def schedule(self, *, season: int | None = None, date: str | None = None) -> dict[str, Any]:
         params: dict[str, Any] = {"sportId": SPORT_ID, "gameTypes": "R"}
@@ -287,41 +386,43 @@ class MlbStatsClient:
             params["date"] = date
         if season:
             params["season"] = season
-        return self.get("/api/v1/schedule", params)
+        if self._fetcher is not None:
+            return self.get("/api/v1/schedule", params)
+        kwargs: dict[str, Any] = {"sport_id": SPORT_ID, "gameTypes": "R"}
+        if date:
+            kwargs["date"] = date
+        if season:
+            kwargs["season"] = season
+        dumped = _model_dump(self._mlb_call(self._require_mlb().get_schedule, **kwargs))
+        if isinstance(dumped, Mapping):
+            return dict(dumped)
+        return {"dates": []}
 
-    def _http_get(self, path: str, params: Mapping[str, Any]) -> dict[str, Any]:
-        url = f"{self.base_url}{path}"
-        last_error: Exception | None = None
-        for attempt in range(self.max_retries + 1):
-            self._throttle()
-            try:
-                response = self._session.get(url, params=params, timeout=self.timeout)
-            except requests.RequestException as exc:
-                last_error = exc
-                _backoff(attempt)
-                continue
-            if response.status_code in {429, 500, 502, 503, 504}:
-                last_error = MlbStatsError(
-                    f"HTTP {response.status_code} from {response.url}",
-                    status_code=response.status_code,
-                    url=str(response.url),
-                )
-                _backoff(attempt)
-                continue
-            if response.status_code >= 400:
-                raise MlbStatsError(
-                    f"HTTP {response.status_code} from {response.url}: {response.text[:200]}",
-                    status_code=response.status_code,
-                    url=str(response.url),
-                )
-            try:
-                payload = response.json()
-            except ValueError as exc:
-                raise MlbStatsError(f"Invalid JSON from {response.url}") from exc
-            if not isinstance(payload, dict):
-                raise MlbStatsError(f"Expected object JSON from {response.url}")
-            return payload
-        raise MlbStatsError(f"Stats API request failed after retries: {url}: {last_error}")
+    def _require_mlb(self) -> Any:
+        if self._mlb is None:
+            raise MlbStatsError("Mlb client is not configured")
+        return self._mlb
+
+    def _mlb_call(self, method: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+        self._throttle()
+        try:
+            return method(*args, **kwargs)
+        except MlbHttpError as exc:
+            status = getattr(exc, "status_code", None)
+            url = str(getattr(exc, "url", "") or "")
+            raise MlbStatsError(
+                f"HTTP {status} from {url or 'statsapi'}",
+                status_code=status if isinstance(status, int) else None,
+                url=url,
+            ) from exc
+        except MlbTimeoutError as exc:
+            raise MlbStatsError(f"Stats API timeout: {exc}") from exc
+        except MlbTransportError as exc:
+            raise MlbStatsError(f"Stats API transport failed: {exc}") from exc
+        except MlbDecodeError as exc:
+            raise MlbStatsError(f"Invalid JSON from Stats API: {exc}") from exc
+        except TheMlbStatsApiException as exc:
+            raise MlbStatsError(f"Stats API request failed: {exc}") from exc
 
     def _throttle(self) -> None:
         if self.min_interval <= 0:
@@ -448,19 +549,23 @@ def pull_majors_feeds(
 def parse_teams(payload: Mapping[str, Any]) -> pd.DataFrame:
     rows = []
     for team in payload.get("teams") or []:
+        if not isinstance(team, Mapping):
+            continue
         if _nested_id(team.get("sport")) not in {None, SPORT_ID}:
             continue
+        league = team.get("league") if isinstance(team.get("league"), Mapping) else {}
+        division = team.get("division") if isinstance(team.get("division"), Mapping) else {}
         rows.append(
             {
                 "mlb_team_id": _int(team.get("id")),
                 "mlb_abbr": team.get("abbreviation"),
                 "mlb_name": team.get("name"),
-                "mlb_team_name": team.get("teamName"),
-                "mlb_location": team.get("locationName"),
+                "mlb_team_name": _field(team, "teamName", "team_name"),
+                "mlb_location": _field(team, "locationName", "location_name"),
                 "league_id": _nested_id(team.get("league")),
-                "league_name": (team.get("league") or {}).get("name"),
+                "league_name": league.get("name") if league else None,
                 "division_id": _nested_id(team.get("division")),
-                "division_name": (team.get("division") or {}).get("name"),
+                "division_name": division.get("name") if division else None,
                 "active": bool(team.get("active", True)),
             }
         )
@@ -470,8 +575,12 @@ def parse_teams(payload: Mapping[str, Any]) -> pd.DataFrame:
 def parse_standings(payload: Mapping[str, Any]) -> pd.DataFrame:
     rows = []
     for block in payload.get("records") or []:
-        for record in block.get("teamRecords") or []:
-            team = record.get("team") or {}
+        if not isinstance(block, Mapping):
+            continue
+        for record in _field(block, "teamRecords", "team_records") or []:
+            if not isinstance(record, Mapping):
+                continue
+            team = record.get("team") if isinstance(record.get("team"), Mapping) else {}
             rows.append(
                 {
                     "mlb_team_id": _int(team.get("id")),
@@ -479,13 +588,13 @@ def parse_standings(payload: Mapping[str, Any]) -> pd.DataFrame:
                     "season_year": _int(record.get("season")),
                     "wins": _int(record.get("wins")),
                     "losses": _int(record.get("losses")),
-                    "games": _int(record.get("gamesPlayed")),
-                    "runs_scored": _int(record.get("runsScored")),
-                    "runs_allowed": _int(record.get("runsAllowed")),
-                    "run_diff": _int(record.get("runDifferential")),
-                    "winning_pct": _num(record.get("winningPercentage")),
-                    "division_rank": record.get("divisionRank"),
-                    "league_rank": record.get("leagueRank"),
+                    "games": _int(_field(record, "gamesPlayed", "games_played")),
+                    "runs_scored": _int(_field(record, "runsScored", "runs_scored")),
+                    "runs_allowed": _int(_field(record, "runsAllowed", "runs_allowed")),
+                    "run_diff": _int(_field(record, "runDifferential", "run_differential")),
+                    "winning_pct": _num(_field(record, "winningPercentage", "winning_percentage")),
+                    "division_rank": _field(record, "divisionRank", "division_rank"),
+                    "league_rank": _field(record, "leagueRank", "league_rank"),
                 }
             )
     return _drop_null_id(pd.DataFrame(rows), "mlb_team_id")
@@ -494,107 +603,117 @@ def parse_standings(payload: Mapping[str, Any]) -> pd.DataFrame:
 def parse_team_stats(payload: Mapping[str, Any], group: str) -> pd.DataFrame:
     prefix = "batting" if group == "hitting" else "pitching"
     rows = []
-    for block in payload.get("stats") or []:
-        for split in block.get("splits") or []:
-            team = split.get("team") or {}
-            stat = split.get("stat") or {}
-            row = {
-                "mlb_team_id": _int(team.get("id")),
-                "team_name": team.get("name"),
-                "season_year": _int(split.get("season")),
-            }
-            if group == "hitting":
-                row.update(
-                    {
-                        f"{prefix}_games": _int(stat.get("gamesPlayed")),
-                        f"{prefix}_runs": _int(stat.get("runs")),
-                        f"{prefix}_hits": _int(stat.get("hits")),
-                        f"{prefix}_hr": _int(stat.get("homeRuns")),
-                        f"{prefix}_bb": _int(stat.get("baseOnBalls")),
-                        f"{prefix}_so": _int(stat.get("strikeOuts")),
-                        "avg": _num(stat.get("avg")),
-                        "obp": _num(stat.get("obp")),
-                        "slg": _num(stat.get("slg")),
-                        "ops": _num(stat.get("ops")),
-                    }
-                )
-            else:
-                row.update(
-                    {
-                        f"{prefix}_wins": _int(stat.get("wins")),
-                        f"{prefix}_losses": _int(stat.get("losses")),
-                        "ip": _num(stat.get("inningsPitched")),
-                        "era": _num(stat.get("era")),
-                        "whip": _num(stat.get("whip")),
-                        "pitching_so": _int(stat.get("strikeOuts")),
-                        "pitching_bb": _int(stat.get("baseOnBalls")),
-                    }
-                )
-            rows.append(row)
+    for split in _iter_stat_splits(payload):
+        team = split.get("team") if isinstance(split.get("team"), Mapping) else {}
+        stat = split.get("stat") if isinstance(split.get("stat"), Mapping) else {}
+        row = {
+            "mlb_team_id": _int(team.get("id")),
+            "team_name": team.get("name"),
+            "season_year": _int(split.get("season")),
+        }
+        if group == "hitting":
+            row.update(
+                {
+                    f"{prefix}_games": _int(_field(stat, "gamesPlayed", "games_played")),
+                    f"{prefix}_runs": _int(stat.get("runs")),
+                    f"{prefix}_hits": _int(stat.get("hits")),
+                    f"{prefix}_hr": _int(_field(stat, "homeRuns", "home_runs")),
+                    f"{prefix}_bb": _int(_field(stat, "baseOnBalls", "base_on_balls")),
+                    f"{prefix}_so": _int(_field(stat, "strikeOuts", "strike_outs")),
+                    "avg": _num(stat.get("avg")),
+                    "obp": _num(stat.get("obp")),
+                    "slg": _num(stat.get("slg")),
+                    "ops": _num(stat.get("ops")),
+                }
+            )
+        else:
+            row.update(
+                {
+                    f"{prefix}_wins": _int(stat.get("wins")),
+                    f"{prefix}_losses": _int(stat.get("losses")),
+                    "ip": _num(_field(stat, "inningsPitched", "innings_pitched")),
+                    "era": _num(stat.get("era")),
+                    "whip": _num(stat.get("whip")),
+                    "pitching_so": _int(_field(stat, "strikeOuts", "strike_outs")),
+                    "pitching_bb": _int(_field(stat, "baseOnBalls", "base_on_balls")),
+                }
+            )
+        rows.append(row)
     return _drop_null_id(pd.DataFrame(rows), "mlb_team_id")
 
 
 def parse_player_stats(payload: Mapping[str, Any], group: str) -> pd.DataFrame:
     rows = []
-    for block in payload.get("stats") or []:
-        for split in block.get("splits") or []:
-            player = split.get("player") or {}
-            team = split.get("team") or {}
-            stat = split.get("stat") or {}
-            row = {
-                "mlb_player_id": _int(player.get("id")),
-                "player_name": player.get("fullName"),
-                "mlb_team_id": _int(team.get("id")),
-                "team_name": team.get("name"),
-                "season_year": _int(split.get("season")),
-            }
-            if group == "hitting":
-                row.update(
-                    {
-                        "games": _int(stat.get("gamesPlayed")),
-                        "pa": _num(stat.get("plateAppearances")),
-                        "ab": _num(stat.get("atBats")),
-                        "hits": _num(stat.get("hits")),
-                        "hr": _num(stat.get("homeRuns")),
-                        "bb": _num(stat.get("baseOnBalls")),
-                        "so": _num(stat.get("strikeOuts")),
-                        "avg": _num(stat.get("avg")),
-                        "obp": _num(stat.get("obp")),
-                        "slg": _num(stat.get("slg")),
-                        "ops": _num(stat.get("ops")),
-                    }
-                )
-            else:
-                row.update(
-                    {
-                        "pitching_games": _int(stat.get("gamesPlayed")),
-                        "ip": _num(stat.get("inningsPitched")),
-                        "era": _num(stat.get("era")),
-                        "whip": _num(stat.get("whip")),
-                        "pitching_so": _num(stat.get("strikeOuts")),
-                        "pitching_bb": _num(stat.get("baseOnBalls")),
-                    }
-                )
-            rows.append(row)
+    for split in _iter_stat_splits(payload):
+        player = split.get("player") if isinstance(split.get("player"), Mapping) else {}
+        team = split.get("team") if isinstance(split.get("team"), Mapping) else {}
+        stat = split.get("stat") if isinstance(split.get("stat"), Mapping) else {}
+        row = {
+            "mlb_player_id": _int(player.get("id")),
+            "player_name": _field(player, "fullName", "full_name"),
+            "mlb_team_id": _int(team.get("id")),
+            "team_name": team.get("name"),
+            "season_year": _int(split.get("season")),
+        }
+        if group == "hitting":
+            row.update(
+                {
+                    "games": _int(_field(stat, "gamesPlayed", "games_played")),
+                    "pa": _num(_field(stat, "plateAppearances", "plate_appearances")),
+                    "ab": _num(_field(stat, "atBats", "at_bats")),
+                    "hits": _num(stat.get("hits")),
+                    "hr": _num(_field(stat, "homeRuns", "home_runs")),
+                    "bb": _num(_field(stat, "baseOnBalls", "base_on_balls")),
+                    "so": _num(_field(stat, "strikeOuts", "strike_outs")),
+                    "avg": _num(stat.get("avg")),
+                    "obp": _num(stat.get("obp")),
+                    "slg": _num(stat.get("slg")),
+                    "ops": _num(stat.get("ops")),
+                }
+            )
+        else:
+            row.update(
+                {
+                    "pitching_games": _int(_field(stat, "gamesPlayed", "games_played")),
+                    "ip": _num(_field(stat, "inningsPitched", "innings_pitched")),
+                    "era": _num(stat.get("era")),
+                    "whip": _num(stat.get("whip")),
+                    "pitching_so": _num(_field(stat, "strikeOuts", "strike_outs")),
+                    "pitching_bb": _num(_field(stat, "baseOnBalls", "base_on_balls")),
+                }
+            )
+        rows.append(row)
     return _drop_null_id(pd.DataFrame(rows), "mlb_player_id")
 
 
 def parse_schedule(payload: Mapping[str, Any]) -> pd.DataFrame:
     rows = []
     for day in payload.get("dates") or []:
+        if not isinstance(day, Mapping):
+            continue
         for game in day.get("games") or []:
-            home = (game.get("teams") or {}).get("home") or {}
-            away = (game.get("teams") or {}).get("away") or {}
-            status = game.get("status") or {}
-            venue = game.get("venue") or {}
-            home_record = home.get("leagueRecord") or {}
-            away_record = away.get("leagueRecord") or {}
+            if not isinstance(game, Mapping):
+                continue
+            sides = game.get("teams") if isinstance(game.get("teams"), Mapping) else {}
+            home = sides.get("home") if isinstance(sides.get("home"), Mapping) else {}
+            away = sides.get("away") if isinstance(sides.get("away"), Mapping) else {}
+            status = game.get("status") if isinstance(game.get("status"), Mapping) else {}
+            venue = game.get("venue") if isinstance(game.get("venue"), Mapping) else {}
+            home_record = _field(home, "leagueRecord", "league_record") or {}
+            away_record = _field(away, "leagueRecord", "league_record") or {}
+            if not isinstance(home_record, Mapping):
+                home_record = {}
+            if not isinstance(away_record, Mapping):
+                away_record = {}
+            official = _field(game, "officialDate", "official_date")
+            game_date = _field(game, "gameDate", "game_date") or ""
             rows.append(
                 {
-                    "game_pk": _int(game.get("gamePk")),
-                    "game_date": game.get("officialDate") or (game.get("gameDate") or "")[:10],
+                    "game_pk": _int(_field(game, "gamePk", "game_pk")),
+                    "game_date": official or str(game_date)[:10],
                     "season_year": _int(game.get("season")),
-                    "status": status.get("detailedState") or status.get("abstractGameState"),
+                    "status": _field(status, "detailedState", "detailed_state")
+                    or _field(status, "abstractGameState", "abstract_game_state"),
                     "venue_name": venue.get("name"),
                     "home_mlb_team_id": _nested_id(home.get("team")),
                     "away_mlb_team_id": _nested_id(away.get("team")),
@@ -835,10 +954,13 @@ def seasons_from_settings(
 
 def client_from_settings(settings: Mapping[str, Any] | None = None) -> MlbStatsClient:
     configured = (settings or {}).get("mlb_stats") or {}
+    timeout = configured.get("timeout")
     return MlbStatsClient(
         base_url=str(configured.get("base_url") or STATS_API_BASE),
         min_interval=float(configured.get("min_request_interval") or DEFAULT_MIN_INTERVAL_S),
         max_retries=int(configured.get("max_retries") or DEFAULT_MAX_RETRIES),
+        timeout=timeout if timeout is not None else DEFAULT_TIMEOUT_S,
+        strict_http=bool(configured.get("strict_http", True)),
     )
 
 
@@ -1085,6 +1207,82 @@ def _nested_id(value: Any) -> int | None:
     return _int(value)
 
 
+def _field(mapping: Mapping[str, Any] | None, *names: str) -> Any:
+    """Return the first present key so camelCase fixtures and snake_case dumps both parse."""
+    if not isinstance(mapping, Mapping):
+        return None
+    for name in names:
+        if name in mapping:
+            return mapping[name]
+    return None
+
+
+def _iter_stat_splits(payload: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Yield split mappings from legacy ``stats`` blocks or a library group dump."""
+    splits: list[Mapping[str, Any]] = []
+    blocks = payload.get("stats")
+    if isinstance(blocks, Mapping):
+        blocks = [blocks]
+    for block in blocks or []:
+        if not isinstance(block, Mapping):
+            continue
+        for split in block.get("splits") or []:
+            if isinstance(split, Mapping):
+                splits.append(split)
+    return splits
+
+
+def _model_dump(value: Any) -> Any:
+    if value is None:
+        return None
+    dumper = getattr(value, "model_dump", None)
+    if callable(dumper):
+        return dumper(mode="json", exclude_none=True)
+    if isinstance(value, Mapping):
+        return {key: _model_dump(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_model_dump(item) for item in value]
+    return value
+
+
+def _model_id(value: Any) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, Mapping):
+        return _int(value.get("id"))
+    return _int(getattr(value, "id", None))
+
+
+def _stat_blocks_from_group(stat_dict: Mapping[str, Any] | None, group: str) -> list[dict[str, Any]]:
+    if not isinstance(stat_dict, Mapping):
+        return []
+    group_stats = stat_dict.get(group)
+    if not isinstance(group_stats, Mapping):
+        return []
+    blocks: list[dict[str, Any]] = []
+    for stat in group_stats.values():
+        dumped = _model_dump(stat)
+        if isinstance(dumped, Mapping):
+            blocks.append(dict(dumped))
+    return blocks
+
+
+def _splits_from_stat_dict(stat_dict: Mapping[str, Any] | None, group: str) -> list[dict[str, Any]]:
+    splits: list[dict[str, Any]] = []
+    for block in _stat_blocks_from_group(stat_dict, group):
+        for split in block.get("splits") or []:
+            dumped = _model_dump(split)
+            if isinstance(dumped, Mapping):
+                splits.append(dict(dumped))
+    return splits
+
+
+def _hostname_from_base(base_url: str) -> str:
+    parsed = urlparse(base_url if "://" in base_url else f"https://{base_url}")
+    host = parsed.netloc or parsed.path
+    return host.split("/")[0] or "statsapi.mlb.com"
+
+
 def _int(value: Any) -> int | None:
     number = _num(value)
     if number is None:
@@ -1112,7 +1310,3 @@ def _drop_null_id(df: pd.DataFrame, column: str) -> pd.DataFrame:
     if df.empty or column not in df.columns:
         return df
     return df[df[column].notna()].reset_index(drop=True)
-
-
-def _backoff(attempt: int) -> None:
-    time.sleep(min(8.0, 0.5 * (2 ** attempt)))

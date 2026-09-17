@@ -37,6 +37,7 @@ war:
   league_ra9: 4.50
 
 # MLB Stats API (public, no key). Soft-fail extract; Lahman-only warehouse if empty.
+# HTTP client: python-mlb-statsapi (Mlb). Timeouts / retries / strict_http from the library.
 # Raw landing: {ARTIFACTS_URI}/raw/mlb_stats/{endpoint}/{as_of_date}/ or data/raw/mlb_stats/
 mlb_stats:
   base_url: https://statsapi.mlb.com
