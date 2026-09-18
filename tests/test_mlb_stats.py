@@ -947,6 +947,32 @@ def test_team_stats_skips_teams_without_id() -> None:
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    "teams",
+    [
+        [],
+        None,
+        [_Dump({"name": "No Id"})],
+    ],
+)
+def test_team_stats_empty_or_idless_teams_return_empty_splits(teams) -> None:
+    """Raise only when every identified team fails — not when nothing is callable."""
+    mlb = MagicMock()
+    mlb.get_teams.return_value = teams
+    client = MlbStatsClient(mlb=mlb, min_interval=0)
+    assert client.team_stats(2024, "hitting") == {"stats": [{"splits": []}]}
+    mlb.get_team_stats.assert_not_called()
+
+
+@pytest.mark.unit
+def test_player_stats_non_mapping_library_result_is_empty_stats() -> None:
+    mlb = MagicMock()
+    mlb.get_stats.return_value = None
+    client = MlbStatsClient(mlb=mlb, min_interval=0)
+    assert client.player_stats(2024, "hitting") == {"stats": []}
+
+
+@pytest.mark.unit
 def test_team_stats_raises_when_every_team_fails() -> None:
     from mlbstatsapi import MlbHttpError
 

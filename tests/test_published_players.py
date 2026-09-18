@@ -6,6 +6,7 @@ import pytest
 from src.baseball_analytics.published import (
     group_public_players,
     player_season_year,
+    public_fielding_lines,
     public_player_season,
     resolve_published_player,
 )
@@ -167,6 +168,20 @@ def test_public_season_does_not_treat_batting_games_as_fielding() -> None:
     assert season is not None
     assert season["games"] == 120
     assert season["fielding"] == []
+
+
+def test_public_season_omits_fielding_when_only_a_position_is_listed() -> None:
+    """fielding_pos / pos-only JSON must not invent a defensive line."""
+    pos_only = public_player_season({**JUDGE_2026, "fielding_pos": "RF", "position": "OF"})
+    assert pos_only is not None
+    assert pos_only["fielding"] == []
+    assert pos_only["putouts"] is None
+    assert pos_only["fpct"] is None
+
+    assert public_fielding_lines({"fielding_pos": "C"}) == []
+    assert public_fielding_lines({"fielding": [{"pos": "SS"}]}) == []
+    assert public_fielding_lines({"fielding_json": "{not-json", "fielding_pos": "2B"}) == []
+    assert public_fielding_lines({"fielding_json": '{"pos":"RF"}', "fielding_pos": "RF"}) == []
 
 
 def test_resolve_known_player_empty_seasons_when_year_missing() -> None:
