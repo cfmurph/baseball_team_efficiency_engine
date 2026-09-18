@@ -9,6 +9,7 @@ from pipeline.transform.build_metrics import (
     PHASE0_PLAYER_FIELDS,
     attach_published_individual_lines,
     enrich_player_season_phase0,
+    finalize_fielding_publish,
 )
 
 pytestmark = pytest.mark.integration
@@ -175,3 +176,52 @@ def test_attach_published_lines_fills_lahman_counting_and_fielding() -> None:
     soler = out.loc[out["player_id"] == "solerjo01"].iloc[0]
     assert pd.isna(soler.get("putouts")) or soler.get("putouts") in (None, "")
     assert soler.get("fielding_json") in (None, "") or pd.isna(soler.get("fielding_json"))
+
+
+def test_finalize_fielding_publish_suppresses_position_only_and_keeps_real_lines() -> None:
+    """A listed position with no defensive counting is not a published fielding line."""
+    out = finalize_fielding_publish(
+        pd.DataFrame(
+            [
+                {
+                    "player_id": "dhonly01",
+                    "fielding_pos": "DH",
+                    "position": "DH",
+                },
+                {
+                    "player_id": "rffield01",
+                    "fielding_pos": "RF",
+                    "fielding_g": 150,
+                    "putouts": 361,
+                    "assists": 8,
+                    "errors": 4,
+                },
+                {
+                    "player_id": "keepjson01",
+                    "fielding_pos": "C",
+                    "fielding_json": '[{"pos":"C","g":120,"po":800,"a":70,"e":5}]',
+                },
+                {
+                    "player_id": "badjson01",
+                    "fielding_pos": "SS",
+                    "fielding_json": "{not-json",
+                },
+            ]
+        )
+    )
+    by_id = out.set_index("player_id")
+
+    dh = by_id.loc["dhonly01"]
+    assert dh["fielding_json"] in (None, "") or pd.isna(dh["fielding_json"])
+    assert pd.isna(dh["fpct"]) or dh["fpct"] in (None, "")
+
+    rf = by_id.loc["rffield01"]
+    assert "RF" in str(rf["fielding_json"])
+    assert rf["fpct"] == pytest.approx(0.989)
+
+    kept = by_id.loc["keepjson01"]
+    assert '"pos":"C"' in str(kept["fielding_json"])
+    assert '"g":120' in str(kept["fielding_json"])
+
+    bad = by_id.loc["badjson01"]
+    assert bad["fielding_json"] in (None, "") or pd.isna(bad["fielding_json"])

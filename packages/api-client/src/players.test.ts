@@ -222,6 +222,65 @@ test("parses fielding lines when present and omits them when absent", () => {
   assert.deepEqual(emptyFielding?.fielding, []);
 });
 
+test("position-only fielding blobs do not become defensive lines", () => {
+  const listed = parsePlayerDetail({
+    player: {
+      player_id: "dhonly01",
+      name: "Only Position",
+      position: "DH",
+      team: "NYY",
+      seasons: [
+        {
+          season: 2026,
+          player_type: "batter",
+          pa: 210,
+          fielding: [{ pos: "DH" }],
+        },
+      ],
+    },
+  });
+  assert.deepEqual(listed?.fielding, []);
+
+  const columnOnly = parsePlayersList(
+    {
+      players: [
+        {
+          player_id: "posonly01",
+          name: "Pos Only",
+          position: "OF",
+          team: "NYY",
+          season: 2026,
+          pa: 210,
+          fielding_pos: "RF",
+        },
+      ],
+    },
+    2026,
+  );
+  assert.equal(columnOnly.length, 1);
+  assert.deepEqual(columnOnly[0]?.fielding, []);
+  assert.equal(columnOnly[0]?.fielding_line, "");
+
+  const badJson = parsePlayersList(
+    {
+      players: [
+        {
+          player_id: "badjson01",
+          name: "Bad Json",
+          position: "SS",
+          team: "NYY",
+          season: 2026,
+          pa: 210,
+          fielding_pos: "SS",
+          fielding_json: "{not-json",
+        },
+      ],
+    },
+    2026,
+  );
+  assert.deepEqual(badJson[0]?.fielding, []);
+});
+
 test("derived identities need every input and stay off otherwise", () => {
   assert.equal(deriveSingles(140, 22, 1, 40), 77);
   assert.equal(deriveXbh(22, 1, 40), 63);
